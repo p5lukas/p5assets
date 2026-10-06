@@ -20,7 +20,7 @@ Alle bisher gesammelten Punkte sind in Version 2 umgesetzt. Neue Beobachtungen b
 
 ## Detailansicht
 - [ ] Suchtiefe pro Welt einstellbar (wie Kometas `asset_depth`; Standard bleibt wie bisher 3, weil Posterizarr-Ordner z. B. unter `assets/Serien/<Titel>/` liegen). Gibt es denselben Ordnernamen mehrfach, hat der flachste Treffer Vorrang und die Datei-Info weist darauf hin. Ursache der Overlay-Anzeige bei Dark Matter (4K) noch offen: Nutzer prüft Ordner in `posterizarr-4K`
-- [ ] Datei-Info pro Kachel: Auf Hover bzw. per Info-Symbol Dateipfad, Größe, Auflösung und Änderungsdatum des angezeigten Assets zeigen, damit sofort klar ist, welche Datei im Assets-Ordner gemeint ist (Beispiel: Overlays im Bild, obwohl der Nutzer sie im Kometa-Ordner nicht erwartet)
+- [x] Datei-Info pro Kachel: Pfad, Größe und Datum unter jeder belegten Kachel, Button „Original“ öffnet die Datei aus dem Assets-Ordner im Browser (Prüfhilfe, falls Bilder unerwartet aussehen)
 - [ ] Bildquelle sauber trennen: Angezeigt und zum Kopieren genutzt werden immer die im Kometa-Assets-Ordner gefundenen Bilder (ohne Overlays). Plex-Bilder (mit Overlays wie Auflösungs-Badges) nur als Backup-Vorschau, wenn für den Slot kein Kometa-Asset existiert. Solche Plex-Vorschauen deutlich kennzeichnen („Plex-Vorschau, mit Overlay“) und nicht als Quelle für das Kopieren per Drag & Drop zulassen
 - [ ] Vorhandene Bilder innerhalb der Serienansicht auf andere Kacheln ziehen: z. B. das Poster von Staffel 1 auf die leere Kachel Staffel 2 ziehen. Das Bild wird kopiert und Kometa-konform umbenannt (`Season02.jpg`), das Original bleibt erhalten. Auch für die Kachel „Serienposter“ und die „Weiteren Staffeln“ nutzbar. Ist die Zielkachel schon belegt, vorher nachfragen, ob sie überschrieben werden soll
 

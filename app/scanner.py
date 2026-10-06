@@ -33,6 +33,15 @@ def _item_id(world: str, kind: str, folder: str, fallback: str) -> str:
     return f"{world}-{hashlib.sha1(base.encode()).hexdigest()[:10]}"
 
 
+def _slot_info(f: Path, root: Path) -> dict:
+    st = f.stat()
+    try:
+        rel = str(f.relative_to(root))
+    except ValueError:
+        rel = str(f)
+    return {"exists": True, "mtime": int(st.st_mtime), "size": st.st_size, "file": rel, "path": str(f)}
+
+
 def build_slots(item: dict, index: kometa.AssetIndex, ignore_specials: bool) -> None:
     """Compute slot state. Known slots count towards "missing"; further existing seasons are extras."""
     files = index.slots(item["folder"])
@@ -45,11 +54,11 @@ def build_slots(item: dict, index: kometa.AssetIndex, ignore_specials: bool) -> 
     slots: dict = {}
     for key in known:
         f = files.get(key)
-        slots[key] = {"exists": True, "mtime": int(f.stat().st_mtime), "path": str(f)} if f else {"exists": False}
+        slots[key] = _slot_info(f, index.root) if f else {"exists": False}
     if item["type"] == "show":
         for key, f in files.items():
             if key not in slots:
-                slots[key] = {"exists": True, "mtime": int(f.stat().st_mtime), "path": str(f), "extra": True}
+                slots[key] = {**_slot_info(f, index.root), "extra": True}
     item["slots"] = slots
     item["missing"] = sum(1 for k in known if not slots[k]["exists"])
 
