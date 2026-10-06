@@ -317,3 +317,18 @@ a.btn{text-decoration:none}
 .numfld:focus{border-color:var(--accent);outline:none;box-shadow:0 0 10px var(--dim)}
 .tag.ok{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 50%,transparent)}
 .opt input.numfld{width:78px;height:auto;accent-color:var(--accent)}
+
+/* grouped meta tags: Welt · Quellen · Status */
+.metagroups{display:flex;flex-wrap:wrap;gap:8px 10px;margin-top:10px}
+.mg{display:inline-flex;align-items:stretch;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);overflow:hidden}
+.mgl{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:4px 9px;border-right:1px solid var(--line);display:flex;align-items:center;background:var(--panel2)}
+.mgt{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:4px 8px}
+.tag.bad{color:var(--bad);border-color:#ff4d5e88}
+.tag.warn{color:var(--warn);border-color:#ffd24a88}
+.lside .metagroups{margin-bottom:6px}
+
+/* preview: wider detail column, wrap paths at sensible points */
+.lbox{max-width:min(1250px,96vw)}
+.lside{min-width:360px;max-width:560px;flex:1 1 420px}
+.lside dd{word-break:normal;overflow-wrap:anywhere}
+.lside dl{grid-template-columns:minmax(120px,auto) 1fr}

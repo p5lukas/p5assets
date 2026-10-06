@@ -390,9 +390,34 @@ function notPlexLabel(item) {
   if (item.monitored && item.has_files === false) return item.available === false ? "nicht erschienen" : "ohne Datei";
   return "nicht in Plex";
 }
-function arrStatus(item) {
-  if (item.monitored == null) return [];
-  return [item.monitored ? "überwacht" : "nicht überwacht", ...(item.has_files === false ? ["ohne Datei"] : []), ...(item.available === false ? ["noch nicht erschienen"] : [])];
+
+/** Status of a title as tag descriptors; the colour says what it means (ok = green, warn = yellow, bad = red). */
+function statusTags(it) {
+  const t = [];
+  if (!it.in_plex) t.push({ text: "nicht in Plex", cls: "warn" });
+  if (it.monitored != null) {
+    t.push(it.monitored ? { text: "überwacht", cls: "ok" } : { text: "nicht überwacht", cls: "" });
+    if (it.has_files === false) t.push({ text: "ohne Datei", cls: "warn" });
+    if (it.available === false) t.push({ text: "noch nicht erschienen", cls: "warn" });
+  }
+  t.push(it.missing ? { text: `${it.missing} Kachel${it.missing === 1 ? "" : "n"} fehlen`, cls: "bad" } : { text: "vollständig", cls: "ok" });
+  return t;
+}
+const itemWorld = it => cfg().worlds.find(w => w.id === it.world);
+
+/** The same three labelled groups everywhere: Welt · Quellen · Status. */
+function metaGroups(it) {
+  const world = itemWorld(it);
+  const group = (label, tags) => h("div", { class: "mg" }, h("span", { class: "mgl" }, label), h("div", { class: "mgt" }, tags));
+  return h("div", { class: "metagroups" },
+    world && cfg().worlds.length > 1 ? group("Welt", h("span", { class: "tag", style: `color:${worldColor(world)};border-color:${worldColor(world)}` }, world.name)) : null,
+    group("Quellen", it.sources.map(s => h("span", { class: "tag" }, s))),
+    group("Status", statusTags(it).map(t => h("span", { class: "tag " + t.cls }, t.text))));
+}
+/** Plain-text version of the groups for tooltips. */
+function metaText(it) {
+  const world = itemWorld(it);
+  return [world && cfg().worlds.length > 1 ? `Welt: ${world.name}` : null, `Quellen: ${it.sources.join(" · ")}`, `Status: ${statusTags(it).map(t => t.text).join(" · ")}`].filter(Boolean).join("\n");
 }
 
 function card(item) {
@@ -400,7 +425,8 @@ function card(item) {
   const box = posterBox(item, "poster");
   const bad = item.missing;
   box.append(h("span", { class: "badge " + (bad ? "bad" : "ok") }, bad ? `${bad} fehlt` : "✓"));
-  if (!item.in_plex) box.append(h("span", { class: "badge warn b", title: `${item.sources.join(", ")} – ${arrStatus(item).join(", ") || "nicht in Plex"}` }, notPlexLabel(item)));
+  box.title = metaText(item);
+  if (!item.in_plex) box.append(h("span", { class: "badge warn b" }, notPlexLabel(item)));
   el.append(box, h("div", { class: "t", title: item.title }, item.title),
     h("div", { class: "s" }, [item.year, item.type === "show" ? `${item.season_count} Staffeln` : "Film"].filter(Boolean).join(" · ")));
   makeDropTarget(el, files => importFiles(files, item.id));
@@ -426,7 +452,6 @@ async function openItem(id) {
     const keys = ["poster", ...Object.keys(it.slots).filter(k => k !== "poster").sort((a, b) => seasonNum(a) - seasonNum(b))];
     const extra = [];
     if (it.type === "show") for (let n = 0; n <= it.max_season; n++) if (!("season-" + n in it.slots)) extra.push("season-" + n);
-    const world = cfg().worlds.find(w => w.id === it.world);
     fill(drawer,
       h("header", {},
         h("button", { class: "btn ghost", onclick: close }, "✕"),
@@ -434,11 +459,7 @@ async function openItem(id) {
           h("div", { class: "hint", style: "margin:2px 0" }, "Kometa-Ordner: ", h("code", {}, it.folder || "—")),
           (it.mirror_folders || []).length ? h("div", { class: "hint", style: "margin:2px 0" }, "Zusätzlich gespeichert in: ", it.mirror_folders.map(f => h("code", {}, f)),
             h("span", { class: "tag ok", style: "margin-left:8px", title: "Coming-Soon-Platzhalter: Poster werden auch im echten Film-Ordner abgelegt" }, "Coming Soon gespiegelt")) : null,
-          h("div", { class: "tags" },
-            world && cfg().worlds.length > 1 ? h("span", { class: "tag", style: `color:${worldColor(world)};border-color:${worldColor(world)}` }, world.name) : null,
-            it.sources.map(s => h("span", { class: "tag" }, s)),
-            !it.in_plex ? h("span", { class: "tag warn" }, "nicht in Plex") : null,
-            arrStatus(it).map(t => h("span", { class: "tag" + (t === "überwacht" ? " ok" : "") }, t)))),
+          metaGroups(it)),
         it.custom ? h("button", { class: "btn sm danger", title: "Entfernt nur den Eintrag, Dateien bleiben erhalten", onclick: async () => {
           if (!confirm("Eigenen Ordner aus der Liste entfernen? Die Dateien bleiben erhalten.")) return;
           await api("/custom/" + it.id, { method: "DELETE" }); close(); toast("Entfernt", "ok");
@@ -511,7 +532,10 @@ function openPreview(it, key, draw) {
   const rows = [
     ["Titel", it.title + (it.year ? ` (${it.year})` : "")],
     ["Slot", slotLabel(key, it.type)],
-    ["Quelle", sl.file],
+    ["Kometa-Ordner", it.folder || "—"],
+    ...((it.mirror_folders || []).length ? [["Zusätzlich gespeichert in", it.mirror_folders.join(", ")]] : []),
+    ["Datei", sl.file],
+    ...((sl.mirrors || []).length ? [["Kopie in", sl.mirrors.join(", ")]] : []),
     ["Größe", fmtSize(sl.size)],
     ["Geändert", new Date(sl.mtime * 1000).toLocaleString("de-DE")],
     ["Format", (sl.file.split(".").pop() || "").toUpperCase()],
@@ -522,6 +546,8 @@ function openPreview(it, key, draw) {
     h("div", { class: "lbox" }, img,
       h("div", { class: "lside" },
         h("div", { class: "row" }, h("h3", { class: "grow" }, "Vorschau"), h("button", { class: "btn ghost sm", onclick: () => close() }, "✕")),
+        metaGroups(it),
+        (it.mirror_folders || []).length ? h("div", { style: "margin-top:8px" }, h("span", { class: "tag ok", title: "Coming-Soon-Platzhalter: Poster werden auch im echten Film-Ordner abgelegt" }, "Coming Soon gespiegelt")) : null,
         h("dl", {}, rows.map(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]), h("dt", {}, "Auflösung"), res),
         draw ? h("div", { class: "row wrap", style: "margin-top:20px" },
           h("button", { class: "btn sm", onclick: () => { close(); searchOnline(it, key, draw); } }, "Online"),

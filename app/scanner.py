@@ -69,6 +69,11 @@ def build_slots(item: dict, index: kometa.AssetIndex, ignore_specials: bool) -> 
         for key, f in files.items():
             if key not in slots:
                 slots[key] = {**_slot_info(f, index.root), "extra": True}
+    # copies in the mirror folders (Coming-Soon placeholders), shown in the preview
+    for mirror in item.get("mirror_folders") or []:
+        for key, f in index.slots(mirror).items():
+            if key in slots and slots[key].get("exists"):
+                slots[key].setdefault("mirrors", []).append(_rel(f, index.root))
     item["slots"] = slots
     item["dupes"] = [_rel(p, index.root) for p in index.duplicates(item["folder"])] if item["folder"] else []
     item["missing"] = sum(1 for k in known if not slots[k]["exists"])
