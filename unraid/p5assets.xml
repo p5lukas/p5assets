@@ -21,7 +21,7 @@
   <DonateText/>
   <DonateLink/>
   <Requires>Plex Media Server und Kometa. Jeder Assets-Ordner muss derselbe sein wie der Kometa-asset_directory und beschreibbar gemountet werden. Nur den Host-Port ändern, nicht den Container-Port 8080.</Requires>
-  <Config Name="WebUI Port" Target="8080" Default="8080" Mode="tcp" Description="Port der Weboberfläche" Type="Port" Display="always" Required="true" Mask="false">8080</Config>
+  <Config Name="WebUI Port" Target="8080" Default="8484" Mode="tcp" Description="Host-Port der Weboberfläche (Standard 8484). Der Container-Port bleibt 8080." Type="Port" Display="always" Required="true" Mask="false">8484</Config>
   <Config Name="Config" Target="/config" Default="/mnt/user/appdata/p5assets" Mode="rw" Description="Einstellungen (Plex-Token, API-Keys)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/p5assets</Config>
   <Config Name="Assets 1 (z. B. HD)" Target="/assets" Default="/mnt/user/appdata/kometa/config/assets" Mode="rw" Description="Kometa asset_directory der ersten Welt (z. B. HD). Muss derselbe Ordner sein, den Kometa verwendet." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/kometa/config/assets</Config>
   <Config Name="Assets 2 (z. B. 4K, optional)" Target="/assets-4k" Default="" Mode="rw" Description="Optional: asset_directory einer zweiten Welt (z. B. 4K). Leer lassen, wenn du nur eine Welt brauchst." Type="Path" Display="always" Required="false" Mask="false"></Config>

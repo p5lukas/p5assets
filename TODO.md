@@ -28,4 +28,5 @@ Alle bisher gesammelten Punkte sind in Version 2 umgesetzt. Neue Beobachtungen b
 - [x] Template: Hinweis ergänzen, dass nur der Host-Port geändert werden darf
 
 ## Weitere Beobachtungen
+- [x] Standard-Host-Port 8484 (Template, Compose, README)
 (hier sammeln wir, was dir beim Onboarding auffällt)

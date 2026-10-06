@@ -21,7 +21,7 @@ Hintergründe werden bewusst ignoriert.
 ```bash
 docker compose up -d --build
 ```
-Dann http://localhost:8080 öffnen. Die Assets-Ordner müssen dieselben sein, die Kometa als `asset_directory` nutzt,
+Dann http://localhost:8484 öffnen. Die Assets-Ordner müssen dieselben sein, die Kometa als `asset_directory` nutzt,
 und **beschreibbar** gemountet werden. Jeder Ordner muss beim Anlegen des Containers eingebunden sein:
 `/assets` für die erste Welt, `/assets-4k` für eine zweite usw. Im Onboarding wählst du den Pfad pro Welt aus.
 Die Ordnernamen werden aus dem Medienpfad in Plex bzw. Sonarr/Radarr abgeleitet (so sucht Kometa die Assets).
@@ -34,7 +34,7 @@ Die Ordnernamen werden aus dem Medienpfad in Plex bzw. Sonarr/Radarr abgeleitet 
 2. *Docker → Add Container* → Template **p5assets** unter *User templates* wählen.
 3. Pfade setzen: **Config** (z. B. `/mnt/user/appdata/p5assets`), **Assets 1** (dein Kometa-`asset_directory`),
    bei Bedarf **Assets 2** (z. B. 4K). Nicht benötigte Assets-Pfade leer lassen.
-4. Ist Port 8080 belegt, ändere nur den **Host-Port** (z. B. 8484), nicht den Container-Port 8080.
+4. Der Host-Port ist standardmäßig **8484**. Ist er belegt, ändere nur den Host-Port, nicht den Container-Port 8080.
 5. WebUI öffnen und das Onboarding durchlaufen. Als Plex-URL trägst du `http://<Unraid-IP>:32400` ein.
 
 ### Image-Tags
