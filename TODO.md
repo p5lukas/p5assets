@@ -13,6 +13,9 @@ Alle bisher gesammelten Punkte sind in Version 2 umgesetzt. Neue Beobachtungen b
 - [x] Freie Ordnereingabe: Poster für Titel ablegen, die weder in Plex noch in Sonarr/Radarr stehen (Ordnername von Hand, z. B. `Titel (Jahr)`)
 - [x] Detailansicht einer Serie: leere Kacheln für Poster, Season00 bis Season50, auch für Staffeln, die es (noch) nicht gibt. Fehlende Extra-Kacheln zählen nicht als „fehlt“. Vorschlag: bekannte Staffeln zuerst, die übrigen eingeklappt unter „Weitere Staffeln“, damit die Ansicht übersichtlich bleibt. Backend muss dafür Staffel-Slots 0–50 erlauben
 
+## Onboarding / Eingabe
+- [ ] Plex-Adresse in drei Felder aufteilen: Protokoll als Dropdown (http/https), IP-Adresse oder Hostname als Textfeld (manuell, ohne Vorgabe), Port als eigenes Feld mit Beispiel 32400 (Platzhalter). Daraus wird intern die URL zusammengesetzt. Gleiches Muster eventuell auch für Sonarr/Radarr (Standardports 8989/7878)
+
 ## Design
 - [x] Futuristischeres Design im Matrix-Stil: Terminal-/Coding-Look mit grünen Akzenten auf dunklem Hintergrund, passende Monospace-Schrift. Kein Regeneffekt im Hintergrund
 - [x] „Digital Rain“-Effekt nur beim Ersetzen eines Posters: im Poster-Rahmen läuft der Matrix-Regen, und das neue Poster erscheint daraus
