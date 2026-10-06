@@ -86,7 +86,7 @@ eine eigene Farbe und eine eigene Sprach-Prioritätsliste (z. B. Textless → De
 </tr>
 </table>
 
-> Alle Bilder zeigen erfundene Demo-Titel und werden automatisch erzeugt (siehe [`tools/demo`](tools/demo/README.md)).
+> Alle Bilder zeigen erfundene Demo-Titel.
 
 ## Funktionen im Detail
 - Onboarding: Plex-Login (PIN) oder URL + Token, Bibliotheken, Sonarr/Radarr, Welten mit Assets-Ordnern, TMDb/TVDB/fanart.tv
@@ -166,10 +166,6 @@ Solange das Paket privat ist, braucht Unraid einen Login bei ghcr.io:
 Der Build läuft per GitHub Action (`.github/workflows/docker.yml`) bei Push auf `dev` bzw. `main`.
 Dateien werden mit `PUID=99` / `PGID=100` (nobody/users) geschrieben.
 Updates: Container in Unraid mit *Force Update* aktualisieren.
-
-## Entwicklung & Screenshots
-Alle Bilder in `docs/images` lassen sich mit Demo-Daten und Mock-Servern neu erzeugen:
-`python tools/demo/capture.py` (siehe [`tools/demo/README.md`](tools/demo/README.md)).
 
 ## Hinweis
 Es gibt keine eigene Authentifizierung – betreibe p5assets nur im Heimnetz oder hinter einem Reverse Proxy mit Login.
