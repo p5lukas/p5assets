@@ -7,6 +7,8 @@
 ## Onboarding / Einstellungen
 - [ ] Mehrere Assets-Ordner unterstützen (pro Bibliothek oder mehrere `asset_directory`-Pfade wie bei Kometa)
 
+- [ ] „Automatischer Scan“ gehört nicht zu den Poster-Quellen: eigener Platz (z. B. Schritt „Plex/Bibliotheken“ oder allgemeine Einstellungen) mit kurzer Erklärung, was er macht
+
 ## Unraid / Deployment
 - [ ] README: Template-Installation per `wget` statt „Template Repositories“ beschreiben (Option je nach Unraid-Version nicht auffindbar)
 - [ ] README: Hinweis auf GHCR-Paket „public“ und abweichenden Host-Port (z. B. 8484)
