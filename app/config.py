@@ -93,6 +93,8 @@ def normalize(cfg: dict, legacy_path: str | None = None) -> bool:
         depth = w.get("search_depth")
         if not isinstance(depth, int) or not 0 <= depth <= 6:
             w["search_depth"] = 3; changed = True
+        if not isinstance(w.get("mirror_coming_soon"), bool):
+            w["mirror_coming_soon"] = True; changed = True
         known = {l[0] for l in LANGUAGES}
         langs_ok = isinstance(w.get("languages"), list) and all(isinstance(x, str) for x in w["languages"])
         if not langs_ok:

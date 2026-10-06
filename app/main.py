@@ -64,6 +64,7 @@ def _item(item_id: str) -> dict:
 def _public_item(it: dict, full: bool = False) -> dict:
     out = {k: it[k] for k in ("id", "world", "type", "title", "year", "folder", "library_title", "missing",
                               "updated", "in_plex", "sources", "custom", "dupes")}
+    out["mirror_folders"] = it.get("mirror_folders") or []
     out["monitored"] = it.get("monitored")      # None = no Sonarr/Radarr information
     out["has_files"] = it.get("has_files")
     out["available"] = it.get("available")
@@ -130,7 +131,8 @@ async def _store(it: dict, slot: str, data: bytes) -> dict:
     path = await asyncio.to_thread(uploads.write_asset, it, slot, data)
     scanner.refresh_item(it["id"])
     warn = await _plex_push(it, [slot], data)
-    log.info("Gespeichert: %s / %s → %s", it["title"], slot, path)
+    log.info("Gespeichert: %s / %s → %s%s", it["title"], slot, path,
+             f" (+ Spiegel: {', '.join(it['mirror_folders'])})" if it.get("mirror_folders") else "")
     if warn:
         log.warning("Plex-Upload für %s / %s: %s", it["title"], slot, warn)
     return {"ok": True, "path": str(path), "warning": warn, "item": _public_item(_item(it["id"]), True)}
@@ -554,6 +556,9 @@ async def delete_slot(item_id: str, slot: str):
     _slot_check(it, slot)
     path = it["slots"].get(slot, {}).get("path")
     if path and Path(path).is_file():
+        for extra in uploads.mirror_files(it, slot):  # keep the Coming-Soon mirror folder in sync
+            extra.unlink(missing_ok=True)
+            log.info("Gelöscht (Spiegel): %s / %s (%s)", it["title"], slot, extra)
         Path(path).unlink()
         log.info("Gelöscht: %s / %s (%s)", it["title"], slot, path)
     scanner.refresh_item(item_id)

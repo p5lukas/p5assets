@@ -54,7 +54,8 @@ def normalize_image(data: bytes, convert_to_jpg: bool) -> tuple[bytes, str]:
 
 def write_assets(item: dict, slots: list[str], data: bytes) -> list[Path]:
     """Store one image for several slots of a title (poster, Season00 …) in the assets folder of the item's
-    world. Every file is named Kometa-conform; previous files of the same slot are replaced."""
+    world. Every file is named Kometa-conform; previous files of the same slot are replaced. Coming-Soon
+    placeholders (UMTK) are mirrored into the real Radarr/Sonarr folder as well. Returns the primary files."""
     cfg = config.get()
     acfg = cfg["assets"]
     root = Path(item["assets_path"])
@@ -66,25 +67,40 @@ def write_assets(item: dict, slots: list[str], data: bytes) -> list[Path]:
     index = kometa.AssetIndex(root, acfg["asset_folders"], item.get("search_depth", 3))
     from . import scanner  # late import: scanner does not import uploads, keeps the module graph simple
     base = index.base_dir(item["folder"], scanner.preferred_base(item) or root)
-    existing = index.slots(item["folder"])
-    written: list[Path] = []
-    for slot in slots:
-        season = kometa.parse_slot_key(slot)
-        target = kometa.asset_target(base, item["folder"], season, acfg["asset_folders"], ext)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        tmp = target.with_name(f".{target.name}.{uuid.uuid4().hex[:6]}.tmp")
-        tmp.write_bytes(body)
-        tmp.replace(target)
-        # remove the previous file of this slot (other extension / spelling)
-        old = existing.get(slot)
-        if old and old != target and old.exists():
-            old.unlink()
-        for ext2 in kometa.IMAGE_EXTS:
-            other = target.with_suffix(ext2)
-            if other != target and other.exists() and other.stem == target.stem:
-                other.unlink()
-        written.append(target)
+
+    def put(folder: str, folder_base: Path) -> list[Path]:
+        existing = index.slots(folder)
+        out: list[Path] = []
+        for slot in slots:
+            season = kometa.parse_slot_key(slot)
+            target = kometa.asset_target(folder_base, folder, season, acfg["asset_folders"], ext)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            tmp = target.with_name(f".{target.name}.{uuid.uuid4().hex[:6]}.tmp")
+            tmp.write_bytes(body)
+            tmp.replace(target)
+            # remove the previous file of this slot (other extension / spelling)
+            old = existing.get(slot)
+            if old and old != target and old.exists():
+                old.unlink()
+            for ext2 in kometa.IMAGE_EXTS:
+                other = target.with_suffix(ext2)
+                if other != target and other.exists() and other.stem == target.stem:
+                    other.unlink()
+            out.append(target)
+        return out
+
+    written = put(item["folder"], base)
+    for mirror in item.get("mirror_folders") or []:
+        put(mirror, index.base_dir(mirror, base))  # next to the primary folder unless it already exists elsewhere
     return written
+
+
+def mirror_files(item: dict, slot: str) -> list[Path]:
+    """Existing files of a slot in the mirror folders (used to keep deletes in sync)."""
+    cfg = config.get()
+    root = Path(item["assets_path"])
+    index = kometa.AssetIndex(root, cfg["assets"]["asset_folders"], item.get("search_depth", 3))
+    return [p for m in item.get("mirror_folders") or [] if (p := index.slots(m).get(slot))]
 
 
 def write_asset(item: dict, slot: str, data: bytes) -> Path:

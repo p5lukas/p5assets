@@ -432,6 +432,8 @@ async function openItem(id) {
         h("button", { class: "btn ghost", onclick: close }, "✕"),
         h("div", { class: "grow" }, h("h2", {}, it.title, it.year ? ` (${it.year})` : ""),
           h("div", { class: "hint", style: "margin:2px 0" }, "Kometa-Ordner: ", h("code", {}, it.folder || "—")),
+          (it.mirror_folders || []).length ? h("div", { class: "hint", style: "margin:2px 0" }, "Zusätzlich gespeichert in: ", it.mirror_folders.map(f => h("code", {}, f)),
+            h("span", { class: "tag ok", style: "margin-left:8px", title: "Coming-Soon-Platzhalter: Poster werden auch im echten Film-Ordner abgelegt" }, "Coming Soon gespiegelt")) : null,
           h("div", { class: "tags" },
             world && cfg().worlds.length > 1 ? h("span", { class: "tag", style: `color:${worldColor(world)};border-color:${worldColor(world)}` }, world.name) : null,
             it.sources.map(s => h("span", { class: "tag" }, s)),
@@ -1069,6 +1071,8 @@ function wWorlds(nav, c) {
       h("label", { class: "f" }, "Assets-Ordner (im Container)"),
       h("div", { class: "row" }, h("div", { class: "grow" }, path), h("button", { class: "btn", onclick: () => browse(path.value || "/") }, "📂 Durchsuchen")),
       fsBox, st,
+      h("label", { class: "opt", style: "margin-top:14px" }, h("input", { type: "checkbox", checked: w.mirror_coming_soon !== false, onchange: e => { w.mirror_coming_soon = e.target.checked; persist(); } }),
+        h("div", {}, "Coming-Soon-Poster (UMTK) auch im echten Film-Ordner ablegen", h("small", {}, "Gilt nur für Ordner mit {edition-Coming Soon}. Andere Editionen wie {edition-black&white} bleiben getrennt."))),
       h("label", { class: "f" }, "Bevorzugte Sprache der Poster (Reihenfolge = Priorität)"), langList(w, persist));
   };
 

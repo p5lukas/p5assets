@@ -11,6 +11,7 @@ Hintergründe werden bewusst ignoriert.
   Drag & Drop in Bubbles einer Welt zu. Umschalten per Matrix-Animation.
 - **Sonarr & Radarr** (beliebig viele Instanzen): auch Titel und Staffeln, die noch nicht in Plex sind – Poster lassen sich schon im Voraus ablegen
 - **Überwachung sichtbar**: Titel aus Sonarr/Radarr zeigen „überwacht“, „ohne Datei“ oder „nicht erschienen“; Filter „Überwacht“ und „Überwacht, ohne Datei“; pro Instanz lassen sich nicht überwachte Titel ausblenden
+- **UMTK / Coming Soon**: Poster für Plex-Platzhalter mit `{edition-Coming Soon}` werden zusätzlich im echten Radarr-/Sonarr-Ordner abgelegt (pro Welt abschaltbar); andere Editionen bleiben getrennt
 - **Eigene Ordner**: Poster für Titel ablegen, die weder in Plex noch in Sonarr/Radarr stehen
 - Detailansicht mit Kacheln für Poster und **Season00 – Season50**, auch für Staffeln, die es noch nicht gibt
 - Vorhandene Poster per Drag & Drop auf eine andere Kachel **kopieren** (z. B. Staffel 1 → Staffel 2, automatisch umbenannt)

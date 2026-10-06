@@ -160,6 +160,8 @@ def _merge(plex_items: list[dict], arr_items: list[dict]) -> list[dict]:
             target.setdefault("available", a["available"])
             if not target["folder"]:
                 target["folder"] = a["folder"]
+            if a["folder"] and a["folder"] not in target.setdefault("arr_folders", []):
+                target["arr_folders"].append(a["folder"])
             known = {s["number"] for s in target["seasons"]}
             for n in a["seasons"]:
                 if n not in known:
@@ -174,6 +176,7 @@ def _merge(plex_items: list[dict], arr_items: list[dict]) -> list[dict]:
             "seasons": [{"number": n, "title": "", "rating_key": None, "thumb": ""} for n in a["seasons"]],
             "in_plex": False, "sources": [a["source"]], "custom": False,
             "monitored": a["monitored"], "has_files": a["has_files"], "available": a["available"],
+            "arr_folders": [a["folder"]] if a["folder"] else [],
         }
         items.append(new)
         for k in _ids_keys(new):
@@ -199,7 +202,8 @@ def _finish(world: dict, items: list[dict], index: kometa.AssetIndex, ignore_spe
         while iid in seen:
             iid += "x"
         seen.add(iid)
-        it.update(id=iid, world=world["id"], assets_path=world["assets_path"], search_depth=world.get("search_depth", 3), updated=0)
+        it.update(id=iid, world=world["id"], assets_path=world["assets_path"], search_depth=world.get("search_depth", 3), updated=0,
+                  mirror_folders=kometa.coming_soon_mirrors(it["folder"], it.get("arr_folders", [])) if world.get("mirror_coming_soon", True) else [])
         build_slots(it, index, ignore_specials)
     return items
 

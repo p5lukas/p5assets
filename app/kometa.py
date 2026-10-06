@@ -278,3 +278,27 @@ def match_item(title: str, year: int | None, items: list[dict]) -> dict | None:
         if score > best_score:
             best, best_score = it, score
     return best if best_score >= 0.86 else None
+
+
+# ---------------------------------------------------------------- UMTK ---
+# UMTK ("Upcoming Movies & TV for Kometa") creates placeholder titles whose Plex folder carries the suffix
+# "{edition-Coming Soon}". Posters for them are mirrored into the real Radarr/Sonarr folder so they survive the
+# switch to the real file. Other editions ({edition-black&white} …) may have their own posters and are NOT mirrored.
+_COMING_SOON = re.compile(r"\s*\{edition-coming soon\}", re.IGNORECASE)
+
+
+def is_coming_soon(folder: str) -> bool:
+    return bool(folder and _COMING_SOON.search(folder))
+
+
+def coming_soon_mirrors(folder: str, arr_folders: list[str]) -> list[str]:
+    """Folders that should receive a copy of the assets of a Coming-Soon placeholder folder."""
+    if not is_coming_soon(folder):
+        return []
+    base = _COMING_SOON.sub("", folder).strip()
+    real = [f for f in arr_folders if f and not is_coming_soon(f)]
+    out: list[str] = []
+    for cand in real or ([base] if base else []):
+        if cand.casefold() != folder.casefold() and cand not in out:
+            out.append(cand)
+    return out
