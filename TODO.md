@@ -13,6 +13,10 @@ Alle bisher gesammelten Punkte sind in Version 2 umgesetzt. Neue Beobachtungen b
 - [x] Freie Ordnereingabe: Poster für Titel ablegen, die weder in Plex noch in Sonarr/Radarr stehen (Ordnername von Hand, z. B. `Titel (Jahr)`)
 - [x] Detailansicht einer Serie: leere Kacheln für Poster, Season00 bis Season50, auch für Staffeln, die es (noch) nicht gibt. Fehlende Extra-Kacheln zählen nicht als „fehlt“. Vorschlag: bekannte Staffeln zuerst, die übrigen eingeklappt unter „Weitere Staffeln“, damit die Ansicht übersichtlich bleibt. Backend muss dafür Staffel-Slots 0–50 erlauben
 
+## Online-Suche
+- [ ] Ergebnisse der Online-Suche nach Sprachen gruppieren, in der Reihenfolge der Sprachliste der Welt (z. B. erst „Textless“, dann „Deutsch“, dann „English“, zuletzt übrige Sprachen), jede Gruppe mit eigener Überschrift und Anzahl
+- [ ] Oben in der Online-Suche Tabs zum Wechseln zwischen den Anbietern (z. B. „Alle“, „TMDb“, „TVDB“, „fanart.tv“) mit Trefferanzahl je Tab; Anbieter ohne API-Key bzw. mit Fehler deutlich markiert. Sprach-Gruppierung gilt innerhalb jedes Tabs
+
 ## Onboarding / Eingabe
 - [ ] „Bevorzugte Sprache der Poster“ als priorisierte Liste („Preferred Language Order“) statt Einzel-Dropdown, im Terminal-Stil und **pro Welt** (HD und 4K getrennt, im Schritt „Welten“ bzw. an der Welt): nummerierte Zeilen mit Sprachcode und Name (z. B. `xx • Textless (No Text)`, `de • German (Deutsch)`, `en • English`), Ziehgriff zum Umsortieren per Drag & Drop, Pfeile hoch/runter, Entfernen-Kreuz und unten „Add Language“ als Dropdown mit allen verfügbaren Sprachen. Standard: Ohne Text, Deutsch, Englisch. Die Reihenfolge bestimmt das Ranking der Online-Suche (TMDb, TVDB, fanart.tv): Treffer der ersten Sprache stehen oben. „Textless“ entspricht Postern ohne Sprache (TMDb `null`, fanart `00`, TVDB leer). Das bisherige einzelne Sprach-Dropdown unter „Poster-Quellen“ entfällt
 - [ ] Dropdown „Suchtiefe“ bei den Welten entfernen. Die Suchtiefe bleibt intern bei 3 (flachster Ordner hat weiter Vorrang); der Hinweis auf weitere Treffer in der Vorschau kann bleiben. README-Hinweis auf die einstellbare Suchtiefe streichen
