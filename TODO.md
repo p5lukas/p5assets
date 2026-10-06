@@ -1,5 +1,9 @@
 # p5assets – Ideen & Verbesserungen für die nächste Version
 
+## Uploads
+- [ ] Beliebige zusätzliche Staffelposter hochladen können, auch für Staffeln, die Plex noch nicht kennt (z. B. Season05, bevor sie bei Plex landet). Benennung weiterhin automatisch Kometa-konform (`Season05.jpg` im richtigen Medienordner)
+- [ ] Offen: Gilt das auch für ganze Titel, die noch nicht in Plex sind (Poster im Voraus ablegen)?
+
 ## Design
 - [ ] Futuristischeres Design im Matrix-Stil: Terminal-/Coding-Look mit grünen Akzenten auf dunklem Hintergrund, passende Monospace-Schrift. Kein Regeneffekt im Hintergrund
 - [ ] „Digital Rain“-Effekt nur beim Ersetzen eines Posters: im Poster-Rahmen läuft der Matrix-Regen, und das neue Poster erscheint daraus
