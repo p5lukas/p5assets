@@ -1,5 +1,8 @@
 # p5assets – Ideen & Verbesserungen für die nächste Version
 
+## Design
+- [ ] Futuristischeres Design im Matrix-Stil: Terminal-/Coding-Look mit grünen Akzenten auf dunklem Hintergrund, passende Monospace-Schrift, evtl. dezenter „Digital Rain“-Effekt
+
 ## Onboarding / Einstellungen
 - [ ] Mehrere Assets-Ordner unterstützen (pro Bibliothek oder mehrere `asset_directory`-Pfade wie bei Kometa)
 
