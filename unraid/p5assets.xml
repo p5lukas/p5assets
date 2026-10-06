@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>p5assets</Name>
+  <Repository>ghcr.io/p5lukas/p5assets:latest</Repository>
+  <Registry>https://github.com/p5lukas/p5assets/pkgs/container/p5assets</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/p5lukas/p5assets/issues</Support>
+  <Project>https://github.com/p5lukas/p5assets</Project>
+  <Overview>Überwacht deine Plex-Bibliotheken und den Kometa-Assets-Ordner auf fehlende Poster und Staffelcover (poster, Season00, Season01 …). Einzelne Bilder, ganze Ordner oder ZIPs per Drag &amp; Drop hochladen – die Dateien werden automatisch Kometa-konform benannt. Mit Onboarding und optionaler Online-Suche über TMDb, TVDB und fanart.tv.</Overview>
+  <Category>MediaApp:Other Tools:</Category>
+  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/p5lukas/p5assets/main/unraid/p5assets.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/p5lukas/p5assets/main/unraid/icon.svg</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires>Plex Media Server und Kometa (gleicher Assets-Ordner wie Kometa-asset_directory, beschreibbar gemountet)</Requires>
+  <Config Name="WebUI Port" Target="8080" Default="8080" Mode="tcp" Description="Port der Weboberfläche" Type="Port" Display="always" Required="true" Mask="false">8080</Config>
+  <Config Name="Config" Target="/config" Default="/mnt/user/appdata/p5assets" Mode="rw" Description="Einstellungen (Plex-Token, API-Keys)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/p5assets</Config>
+  <Config Name="Kometa Assets" Target="/assets" Default="/mnt/user/appdata/kometa/config/assets" Mode="rw" Description="Kometa asset_directory – muss derselbe Ordner sein, den Kometa verwendet" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/kometa/config/assets</Config>
+  <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="Benutzer-ID (Unraid: 99 = nobody)" Type="Variable" Display="advanced" Required="false" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Gruppen-ID (Unraid: 100 = users)" Type="Variable" Display="advanced" Required="false" Mask="false">100</Config>
+  <Config Name="UMASK" Target="UMASK" Default="002" Mode="" Description="Umask für neue Dateien" Type="Variable" Display="advanced" Required="false" Mask="false">002</Config>
+</Container>
