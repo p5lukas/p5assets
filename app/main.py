@@ -312,11 +312,13 @@ async def status():
 
 
 @app.get("/api/items")
-async def items(world: str = "", q: str = "", filter: str = "all", library: str = "", type: str = "",
-                offset: int = 0, limit: int = Query(120, le=500)):
+async def items(world: str = "", q: str = "", filter: str = "all", library: str = "", source: str = "",
+                type: str = "", offset: int = 0, limit: int = Query(120, le=500)):
     res = [i for i in scanner.STATE["items"] if i["world"] == _world(world)["id"]]
     if library:
         res = [i for i in res if i["library_title"] == library]
+    if source:  # Sonarr/Radarr instance name or "Eigener Ordner"
+        res = [i for i in res if source in i["sources"]]
     if type:
         res = [i for i in res if i["type"] == type]
     if filter == "missing":

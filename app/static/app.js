@@ -66,7 +66,9 @@ async function loadState() {
 async function savePatch(patch) { const r = await api("/config", { json: { patch } }); S.st.config = r; return r; }
 
 async function loadItems(append = false) {
-  const p = new URLSearchParams({ world: S.world, q: S.q, filter: S.filter, library: S.lib, offset: append ? S.items.length : 0, limit: 120 });
+  // S.lib is "lib:<Plex library>" or "src:<Sonarr/Radarr instance | Eigener Ordner>"
+  const p = new URLSearchParams({ world: S.world, q: S.q, filter: S.filter, library: S.lib.startsWith("lib:") ? S.lib.slice(4) : "",
+    source: S.lib.startsWith("src:") ? S.lib.slice(4) : "", offset: append ? S.items.length : 0, limit: 120 });
   const r = await api("/items?" + p);
   S.items = append ? S.items.concat(r.items) : r.items;
   S.total = r.total;
@@ -207,13 +209,21 @@ function renderChips() {
   const setF = f => async () => { S.filter = f; renderChips(); await loadItems(); renderGrid(); };
   const libs = c.libraries.filter(l => l.enabled && l.world === S.world);
   const hasExtra = c.arr.some(a => a.world === S.world) || c.custom.some(x => x.world === S.world);
+  // filter by source: Plex libraries, Sonarr/Radarr instances, own folders (in the "Nicht in Plex" tab only the latter two)
+  const plexOpts = S.filter === "notplex" ? [] : libs.map(l => ({ v: "lib:" + l.title, label: l.title }));
+  const srcOpts = [...c.arr.filter(a => a.world === S.world).map(a => ({ v: "src:" + a.name, label: a.name })),
+    ...(c.custom.some(x => x.world === S.world) ? [{ v: "src:Eigener Ordner", label: "Eigene Ordner" }] : [])];
+  if (S.lib && ![...plexOpts, ...srcOpts].some(o => o.v === S.lib)) S.lib = "";
+  const opt = o => h("option", { value: o.v, selected: S.lib === o.v }, o.label);
   fill(el,
     chip("Alle", S.filter === "all", setF("all"), ws.items),
     chip("Fehlende", S.filter === "missing", setF("missing"), ws.items - ws.complete_items),
     chip("Vollständig", S.filter === "complete", setF("complete"), ws.complete_items),
     hasExtra ? chip("Nicht in Plex", S.filter === "notplex", setF("notplex")) : null,
-    libs.length > 1 ? h("select", { style: "width:auto", onchange: async e => { S.lib = e.target.value; await loadItems(); renderGrid(); } },
-      h("option", { value: "" }, "Alle Bibliotheken"), libs.map(l => h("option", { value: l.title, selected: S.lib === l.title }, l.title))) : null,
+    plexOpts.length + srcOpts.length > 1 ? h("select", { style: "width:auto", title: "Nach Quelle filtern", onchange: async e => { S.lib = e.target.value; await loadItems(); renderGrid(); } },
+      h("option", { value: "" }, "Alle Quellen"),
+      plexOpts.length ? h("optgroup", { label: "Plex-Bibliotheken" }, plexOpts.map(opt)) : null,
+      srcOpts.length ? h("optgroup", { label: "Sonarr / Radarr / Ordner" }, srcOpts.map(opt)) : null) : null,
   );
 }
 
