@@ -53,23 +53,25 @@ def normalize_image(data: bytes, convert_to_jpg: bool) -> tuple[bytes, str]:
 
 
 def write_asset(item: dict, slot: str, data: bytes) -> Path:
-    """Store an image for (item, slot), replacing any existing asset of the slot."""
+    """Store an image for (item, slot) in the assets folder of the item's world, replacing the old one."""
     cfg = config.get()
     acfg = cfg["assets"]
-    root = Path(acfg["path"])
+    root = Path(item["assets_path"])
     if not item.get("folder"):
-        raise ValueError("Für diesen Titel konnte kein Ordnername aus Plex ermittelt werden")
+        raise ValueError("Für diesen Titel ist kein Ordnername bekannt")
+    if not root.is_dir():
+        raise ValueError(f"Assets-Ordner {root} existiert nicht (im Container gemountet?)")
     season = kometa.parse_slot_key(slot)
     body, ext = normalize_image(data, acfg["convert_to_jpg"])
     index = kometa.AssetIndex(root, acfg["asset_folders"], acfg["search_depth"])
     base = index.base_dir(item["folder"], root)
-    old = index.find(item["folder"], season)
+    old = index.slots(item["folder"]).get(slot)
     target = kometa.asset_target(base, item["folder"], season, acfg["asset_folders"], ext)
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp = target.with_name(f".{target.name}.{uuid.uuid4().hex[:6]}.tmp")
     tmp.write_bytes(body)
     tmp.replace(target)
-    # remove leftovers of the same slot with another extension
+    # remove the previous file of this slot (other extension / spelling)
     if old and old != target and old.exists():
         old.unlink()
     for ext2 in kometa.IMAGE_EXTS:

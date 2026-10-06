@@ -20,6 +20,7 @@ import unicodedata
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
+MAX_SEASON = 50  # Staffel-Slots, die immer angeboten werden (auch ohne dass Plex sie kennt)
 UPLOAD_EXTS = IMAGE_EXTS + (".gif", ".bmp", ".tif", ".tiff", ".avif")
 
 
@@ -36,6 +37,17 @@ def parse_slot_key(slot: str) -> int | None:
     if not m:
         raise ValueError(f"Unbekannter Slot: {slot}")
     return int(m.group(1))
+
+
+def slot_allowed(item_type: str, known: set[str], slot: str) -> bool:
+    """A slot is valid if the item knows it, or if it is a show and the season is within 0..MAX_SEASON."""
+    if slot in known:
+        return True
+    try:
+        season = parse_slot_key(slot)
+    except ValueError:
+        return False
+    return item_type == "show" and season is not None and season <= MAX_SEASON
 
 
 def slot_basename(season: int | None) -> str:
@@ -100,6 +112,37 @@ class AssetIndex:
                         stack.append((e, level + 1))
                 elif e.suffix.lower() in IMAGE_EXTS and not self.folders:
                     self.flat.setdefault(e.stem.casefold(), e)
+
+    def slots(self, folder_name: str) -> dict[str, Path]:
+        """All existing assets of one title: {"poster": Path, "season-1": Path, ...}."""
+        out: dict[str, Path] = {}
+        if not folder_name:
+            return out
+        if self.folders:
+            d = self.dirs.get(folder_name.casefold())
+            if not d:
+                return out
+            try:
+                files = [e for e in d.iterdir() if e.is_file() and e.suffix.lower() in IMAGE_EXTS]
+            except OSError:
+                return out
+            for e in sorted(files, key=lambda x: x.name):
+                stem = e.stem.casefold()
+                m = re.fullmatch(r"season\s*(\d{1,4})", stem)
+                if stem == "poster":
+                    out.setdefault("poster", e)
+                elif m:
+                    out.setdefault(slot_key(int(m.group(1))), e)
+            return out
+        base = folder_name.casefold()
+        if base in self.flat:
+            out["poster"] = self.flat[base]
+        for n in range(0, MAX_SEASON + 1):
+            for name in (f"season{n:02d}", f"season{n}"):
+                f = self.flat.get(f"{base}_{name}")
+                if f:
+                    out.setdefault(slot_key(n), f)
+        return out
 
     def find(self, folder_name: str, season: int | None) -> Path | None:
         if not folder_name:

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -12,7 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import config, kometa, plex as plexmod, providers, scanner, uploads
+from . import arr as arrmod, config, kometa, plex as plexmod, providers, scanner, uploads
 from .plex import Plex, PlexError
 
 STATIC = Path(__file__).parent / "static"
@@ -34,6 +35,11 @@ async def plex_error(_: Request, exc: PlexError):
     return JSONResponse({"detail": str(exc)}, status_code=502)
 
 
+@app.exception_handler(arrmod.ArrError)
+async def arr_error(_: Request, exc: arrmod.ArrError):
+    return JSONResponse({"detail": str(exc)}, status_code=502)
+
+
 @app.exception_handler(ValueError)
 async def value_error(_: Request, exc: ValueError):
     return JSONResponse({"detail": str(exc)}, status_code=400)
@@ -49,14 +55,26 @@ def _item(item_id: str) -> dict:
 
 
 def _public_item(it: dict, full: bool = False) -> dict:
-    out = {k: it[k] for k in ("id", "type", "title", "year", "folder", "library", "library_title", "missing", "updated")}
+    out = {k: it[k] for k in ("id", "world", "type", "title", "year", "folder", "library_title", "missing",
+                              "updated", "in_plex", "sources", "custom")}
     out["slots"] = {k: {kk: vv for kk, vv in v.items() if kk != "path"} for k, v in it["slots"].items()}
     out["season_count"] = len(it["seasons"])
     if full:
         out["seasons"] = [{"number": s["number"], "title": s["title"], "slot": kometa.slot_key(s["number"]),
                            "label": kometa.slot_label(s["number"])} for s in it["seasons"]]
         out["ids"] = it["ids"]
+        out["max_season"] = kometa.MAX_SEASON
     return out
+
+
+def _world(world_id: str | None) -> dict:
+    worlds = config.get()["worlds"]
+    if world_id:
+        w = next((w for w in worlds if w["id"] == world_id), None)
+        if not w:
+            raise HTTPException(404, "Welt nicht gefunden")
+        return w
+    return worlds[0]
 
 
 def _plex() -> Plex:
@@ -68,7 +86,7 @@ def _plex() -> Plex:
 
 def _slot_check(it: dict, slot: str) -> int | None:
     season = kometa.parse_slot_key(slot)
-    if slot not in it["slots"]:
+    if not kometa.slot_allowed(it["type"], set(it["slots"]), slot):
         raise HTTPException(404, "Slot existiert nicht für diesen Titel")
     return season
 
@@ -80,7 +98,7 @@ async def _store(it: dict, slot: str, data: bytes) -> dict:
     cfg = config.get()
     if cfg["plex"].get("upload_to_plex"):
         season = kometa.parse_slot_key(slot)
-        rk = it["rating_key"] if season is None else next(
+        rk = it.get("rating_key") if season is None else next(
             (s["rating_key"] for s in it["seasons"] if s["number"] == season), None)
         if rk:
             p = _plex()
@@ -111,6 +129,13 @@ async def set_config(body: ConfigPatch):
     patch = config.strip_masked(body.patch)
     for forbidden in ("client_id", "onboarded"):
         patch.pop(forbidden, None)
+    if "worlds" in patch:
+        worlds = patch["worlds"]
+        if not isinstance(worlds, list) or not worlds:
+            raise HTTPException(400, "Mindestens eine Welt wird benötigt")
+        for w in worlds:
+            w["name"] = (w.get("name") or "").strip()
+            w["assets_path"] = (w.get("assets_path") or "").strip()
     return config.public(config.update(patch))
 
 
@@ -165,7 +190,8 @@ async def plex_connect(body: Connect):
         await p.close()
     existing = {l["key"]: l for l in cfg["libraries"]}
     merged = [{"key": l["key"], "title": l["title"], "type": l["type"],
-               "enabled": existing.get(l["key"], {}).get("enabled", True)} for l in libs]
+               "enabled": existing.get(l["key"], {}).get("enabled", True),
+               "world": existing.get(l["key"], {}).get("world", cfg["worlds"][0]["id"])} for l in libs]
     config.update({"plex": {"url": url, "token": token, "server_name": ident["name"]}})
     cur = config.get()
     cur["libraries"] = merged
@@ -176,20 +202,6 @@ async def plex_connect(body: Connect):
 @app.get("/api/plex/libraries")
 async def plex_libraries():
     cfg = config.get()
-    return cfg["libraries"]
-
-
-class LibToggle(BaseModel):
-    enabled: dict[str, bool]
-
-
-@app.post("/api/plex/libraries")
-async def plex_libraries_set(body: LibToggle):
-    cfg = config.get()
-    for l in cfg["libraries"]:
-        if l["key"] in body.enabled:
-            l["enabled"] = body.enabled[l["key"]]
-    config.save(cfg)
     return cfg["libraries"]
 
 
@@ -221,6 +233,25 @@ async def test_provider(provider: str, body: ApiTest):
     except httpx.HTTPError as e:
         raise HTTPException(502, f"Nicht erreichbar: {e}")
     return {"ok": True}
+
+
+class ArrTest(BaseModel):
+    id: str = ""
+    kind: str
+    url: str
+    api_key: str = ""
+
+
+@app.post("/api/arr/test")
+async def arr_test(body: ArrTest):
+    if body.kind not in ("sonarr", "radarr"):
+        raise HTTPException(400, "Unbekannter Typ")
+    key = body.api_key
+    if key == config.MASK:
+        key = next((a["api_key"] for a in config.get()["arr"] if a.get("id") == body.id), "")
+    if not body.url or not key:
+        raise HTTPException(400, "URL und API-Key werden benötigt")
+    return await arrmod.test(body.kind, body.url.strip(), key)
 
 
 # ------------------------------------------------------ filesystem ---
@@ -269,17 +300,19 @@ async def status():
 
 
 @app.get("/api/items")
-async def items(q: str = "", filter: str = "all", library: str = "", type: str = "",
+async def items(world: str = "", q: str = "", filter: str = "all", library: str = "", type: str = "",
                 offset: int = 0, limit: int = Query(120, le=500)):
-    res = scanner.STATE["items"]
+    res = [i for i in scanner.STATE["items"] if i["world"] == _world(world)["id"]]
     if library:
-        res = [i for i in res if i["library"] == library]
+        res = [i for i in res if i["library_title"] == library]
     if type:
         res = [i for i in res if i["type"] == type]
     if filter == "missing":
         res = [i for i in res if i["missing"]]
     elif filter == "complete":
         res = [i for i in res if not i["missing"]]
+    elif filter == "notplex":
+        res = [i for i in res if not i["in_plex"]]
     if q:
         nq = kometa.normalize(q)
         res = [i for i in res if nq in kometa.normalize(i["title"]) or q.casefold() in i["folder"].casefold()]
@@ -291,17 +324,7 @@ async def item_detail(item_id: str):
     return _public_item(_item(item_id), True)
 
 
-@app.get("/api/thumb/{rating_key}")
-async def thumb(rating_key: str, v: str = ""):
-    it = next((i for i in scanner.STATE["items"] if i["id"] == rating_key), None)
-    path = None
-    if it:
-        path = it["thumb"]
-    else:
-        for i in scanner.STATE["items"]:
-            for s in i["seasons"]:
-                if s["rating_key"] == rating_key:
-                    path = s["thumb"]
+async def _plex_image(path: str) -> Response:
     if not path:
         raise HTTPException(404)
     p = _plex()
@@ -309,14 +332,13 @@ async def thumb(rating_key: str, v: str = ""):
         data = await p.image(path)
     finally:
         await p.close()
-    return Response(data, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=86400"})
+    return Response(data, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=3600"})
 
 
 @app.get("/api/asset/{item_id}/{slot}")
 async def asset(item_id: str, slot: str, v: str = ""):
     it = _item(item_id)
-    _slot_check(it, slot)
-    path = it["slots"][slot].get("path")
+    path = it["slots"].get(slot, {}).get("path")
     if not path or not Path(path).is_file():
         raise HTTPException(404)
     return FileResponse(path, headers={"Cache-Control": "public, max-age=31536000, immutable"})
@@ -325,17 +347,49 @@ async def asset(item_id: str, slot: str, v: str = ""):
 @app.get("/api/season-thumb/{item_id}/{slot}")
 async def season_thumb(item_id: str, slot: str):
     it = _item(item_id)
-    season = _slot_check(it, slot)
+    season = kometa.parse_slot_key(slot)
     thumb_path = it["thumb"] if season is None else next(
         (s["thumb"] for s in it["seasons"] if s["number"] == season), "")
-    if not thumb_path:
-        raise HTTPException(404)
-    p = _plex()
-    try:
-        data = await p.image(thumb_path)
-    finally:
-        await p.close()
-    return Response(data, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=3600"})
+    return await _plex_image(thumb_path)
+
+
+class CustomBody(BaseModel):
+    world: str
+    folder: str
+    type: str = "show"
+    title: str = ""
+
+
+@app.post("/api/custom")
+async def custom_add(body: CustomBody):
+    world = _world(body.world)
+    folder = body.folder.strip().strip("/\\")
+    if not folder or "/" in folder or "\\" in folder or folder in (".", ".."):
+        raise HTTPException(400, "Ungültiger Ordnername")
+    if body.type not in ("show", "movie"):
+        raise HTTPException(400, "Typ muss show oder movie sein")
+    cfg = config.get()
+    entry = next((c for c in cfg["custom"] if c["world"] == world["id"] and c["type"] == body.type
+                  and c["folder"].casefold() == folder.casefold()), None)
+    if not entry:
+        entry = {"id": uuid.uuid4().hex[:8], "world": world["id"], "folder": folder,
+                 "title": body.title.strip() or folder, "type": body.type}
+        cfg["custom"].append(entry)
+        config.save(cfg)
+    item = scanner.add_custom(entry)
+    return {"item": _public_item(item, True)}
+
+
+@app.delete("/api/custom/{item_id}")
+async def custom_delete(item_id: str):
+    it = _item(item_id)
+    if not it.get("custom"):
+        raise HTTPException(400, "Nur eigene Ordner können entfernt werden (Dateien bleiben erhalten)")
+    cfg = config.get()
+    cfg["custom"] = [c for c in cfg["custom"] if c["id"] != it["custom_id"]]
+    config.save(cfg)
+    scanner.remove_item(item_id)
+    return {"ok": True}
 
 
 @app.post("/api/items/{item_id}/{slot}/upload")
@@ -390,7 +444,7 @@ async def proxy_preview(url: str):
 async def delete_slot(item_id: str, slot: str):
     it = _item(item_id)
     _slot_check(it, slot)
-    path = it["slots"][slot].get("path")
+    path = it["slots"].get(slot, {}).get("path")
     if path and Path(path).is_file():
         Path(path).unlink()
     scanner.refresh_item(item_id)
@@ -399,16 +453,16 @@ async def delete_slot(item_id: str, slot: str):
 
 # ----------------------------------------------------------- import ---
 
-def _suggest(entry: dict, fixed: dict | None) -> dict:
+def _suggest(entry: dict, fixed: dict | None, pool: list[dict]) -> dict:
     out = dict(entry)
     out["item_id"] = None
     out["slot"] = None
     if entry["kind"] == "ignore":
         return out
-    item = fixed or kometa.match_item(entry["title"], entry["year"], scanner.STATE["items"])
+    item = fixed or kometa.match_item(entry["title"], entry["year"], pool)
     if item:
         slot = "poster" if entry["kind"] == "poster" else kometa.slot_key(entry["season"])
-        if slot in item["slots"]:
+        if kometa.slot_allowed(item["type"], set(item["slots"]), slot):
             out["item_id"], out["slot"] = item["id"], slot
             out["item_title"] = item["title"]
             out["item_year"] = item["year"]
@@ -421,6 +475,8 @@ async def import_files(request: Request):
     form = await request.form(max_files=5000, max_fields=5000)
     fixed_id = form.get("item_id")
     fixed = _item(str(fixed_id)) if fixed_id else None
+    world = fixed["world"] if fixed else _world(form.get("world") or None)["id"]
+    pool = [i for i in scanner.STATE["items"] if i["world"] == world]
     sid = uploads.new_session()
     entries, errors = [], []
     for f in form.getlist("files"):
@@ -429,22 +485,16 @@ async def import_files(request: Request):
             entries += uploads.stage_file(sid, name, await f.read())
         except ValueError as e:
             errors.append(str(e))
-    if fixed:
-        for e in entries:
-            # a single unnamed picture dropped on an item is its poster
-            if len(entries) == 1 and e["kind"] == "poster":
-                e["title"] = fixed["title"]
-    suggestions = [_suggest(e, fixed) for e in entries]
+    suggestions = [_suggest(e, fixed, pool) for e in entries]
     if fixed:
         # files dropped on a title belong to that title, whatever they are called
         for s in suggestions:
-            if s["kind"] == "ignore":
+            if s["kind"] == "ignore" or s["item_id"]:
                 continue
-            if not s["item_id"]:
-                slot = "poster" if s["kind"] == "poster" else kometa.slot_key(s["season"])
-                if slot in fixed["slots"]:
-                    s["item_id"], s["slot"], s["item_title"], s["item_year"] = fixed["id"], slot, fixed["title"], fixed["year"]
-    return {"session": sid, "entries": suggestions, "errors": errors}
+            slot = "poster" if s["kind"] == "poster" else kometa.slot_key(s["season"])
+            if kometa.slot_allowed(fixed["type"], set(fixed["slots"]), slot):
+                s["item_id"], s["slot"], s["item_title"], s["item_year"] = fixed["id"], slot, fixed["title"], fixed["year"]
+    return {"session": sid, "entries": suggestions, "errors": errors, "world": world}
 
 
 @app.get("/api/import/{sid}/{fid}")
@@ -457,14 +507,19 @@ async def import_preview(sid: str, fid: str):
 
 
 @app.get("/api/slots")
-async def slot_options(q: str = "", limit: int = 30):
+async def slot_options(world: str = "", q: str = "", limit: int = 30):
     """Autocomplete for manual assignment in the import dialog."""
+    wid = _world(world)["id"]
     nq = kometa.normalize(q)
     out = []
     for i in scanner.STATE["items"]:
-        if not nq or nq in kometa.normalize(i["title"]):
+        if i["world"] == wid and (not nq or nq in kometa.normalize(i["title"])):
+            keys = ["poster"]
+            if i["type"] == "show":
+                keys += [kometa.slot_key(n) for n in range(0, kometa.MAX_SEASON + 1)]
+                keys += [k for k in i["slots"] if k not in keys]
             out.append({"id": i["id"], "title": i["title"], "year": i["year"], "type": i["type"],
-                        "slots": [{"slot": k, "label": kometa.slot_label(kometa.parse_slot_key(k))} for k in i["slots"]]})
+                        "slots": [{"slot": k, "label": kometa.slot_label(kometa.parse_slot_key(k))} for k in keys]})
             if len(out) >= limit:
                 break
     return out

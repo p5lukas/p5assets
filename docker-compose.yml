@@ -13,3 +13,5 @@ services:
       - ./config:/config
       # Derselbe Ordner, den Kometa als asset_directory nutzt:
       - /pfad/zu/kometa/config/assets:/assets
+      # Optional: zweite Welt (z. B. 4K) mit eigenem Assets-Ordner
+      # - /pfad/zu/kometa-4k/config/assets:/assets-4k
