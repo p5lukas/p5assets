@@ -124,7 +124,12 @@ async def _arr_items(cfg: dict, world: dict, warnings: list[str]) -> list[dict]:
             continue
         STATE["progress"] = f"{world['name']}: lese {inst['name']} …"
         try:
-            out.extend(await arr.fetch(inst))
+            entries = await arr.fetch(inst)
+            if inst.get("hide_unmonitored"):
+                hidden = sum(1 for e in entries if not e["monitored"])
+                entries = [e for e in entries if e["monitored"]]
+                log.info("%s: %d nicht überwachte Titel ausgeblendet", inst["name"], hidden)
+            out.extend(entries)
         except arr.ArrError as e:
             warnings.append(f"{inst['name']}: {e}")
     return out
@@ -149,6 +154,10 @@ def _merge(plex_items: list[dict], arr_items: list[dict]) -> list[dict]:
         if target:
             if a["source"] not in target["sources"]:
                 target["sources"].append(a["source"])
+            # a title that is already in Plex counts as monitored if any instance monitors it
+            target["monitored"] = bool(target.get("monitored")) or a["monitored"]
+            target.setdefault("has_files", a["has_files"])
+            target.setdefault("available", a["available"])
             if not target["folder"]:
                 target["folder"] = a["folder"]
             known = {s["number"] for s in target["seasons"]}
@@ -164,6 +173,7 @@ def _merge(plex_items: list[dict], arr_items: list[dict]) -> list[dict]:
             "year": a["year"], "folder": a["folder"], "thumb": "", "ids": dict(a["ids"]),
             "seasons": [{"number": n, "title": "", "rating_key": None, "thumb": ""} for n in a["seasons"]],
             "in_plex": False, "sources": [a["source"]], "custom": False,
+            "monitored": a["monitored"], "has_files": a["has_files"], "available": a["available"],
         }
         items.append(new)
         for k in _ids_keys(new):

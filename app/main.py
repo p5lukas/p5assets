@@ -64,6 +64,9 @@ def _item(item_id: str) -> dict:
 def _public_item(it: dict, full: bool = False) -> dict:
     out = {k: it[k] for k in ("id", "world", "type", "title", "year", "folder", "library_title", "missing",
                               "updated", "in_plex", "sources", "custom", "dupes")}
+    out["monitored"] = it.get("monitored")      # None = no Sonarr/Radarr information
+    out["has_files"] = it.get("has_files")
+    out["available"] = it.get("available")
     out["slots"] = {k: {kk: vv for kk, vv in v.items() if kk != "path"} for k, v in it["slots"].items()}
     out["season_count"] = len(it["seasons"])
     if full:
@@ -346,6 +349,10 @@ async def items(world: str = "", q: str = "", filter: str = "all", library: str 
         res = [i for i in res if not i["missing"]]
     elif filter == "notplex":
         res = [i for i in res if not i["in_plex"]]
+    elif filter == "monitored":
+        res = [i for i in res if i.get("monitored")]
+    elif filter == "wanted":  # monitored in Sonarr/Radarr but no file yet ("missing")
+        res = [i for i in res if i.get("monitored") and i.get("has_files") is False]
     if q:
         nq = kometa.normalize(q)
         res = [i for i in res if nq in kometa.normalize(i["title"]) or q.casefold() in i["folder"].casefold()]

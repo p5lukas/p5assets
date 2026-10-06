@@ -341,6 +341,9 @@ function renderChips() {
     chip("Fehlende", S.filter === "missing", setF("missing"), ws.items - ws.complete_items),
     chip("Vollständig", S.filter === "complete", setF("complete"), ws.complete_items),
     hasExtra ? chip("Nicht in Plex", S.filter === "notplex", setF("notplex")) : null,
+    c.arr.some(a => a.world === S.world) ? [
+      h("button", { class: "chip" + (S.filter === "monitored" ? " on" : ""), title: "In Sonarr/Radarr überwacht", onclick: setF("monitored") }, "Überwacht"),
+      h("button", { class: "chip" + (S.filter === "wanted" ? " on" : ""), title: "In Sonarr/Radarr überwacht, aber noch keine Datei (missing)", onclick: setF("wanted") }, "Überwacht, ohne Datei")] : null,
     plexOpts.length + srcOpts.length > 1 ? h("select", { style: "width:auto", title: "Nach Quelle filtern", onchange: async e => { S.lib = e.target.value; await loadItems(); renderGrid(); } },
       h("option", { value: "" }, "Alle Quellen"),
       plexOpts.length ? h("optgroup", { label: "Plex-Bibliotheken" }, plexOpts.map(opt)) : null,
@@ -380,12 +383,24 @@ function posterBox(item, slot, known = true) {
   return wrap;
 }
 
+/** Short label for titles that are not in Plex, based on what Sonarr/Radarr know about them. */
+function notPlexLabel(item) {
+  if (item.custom) return "Ordner";
+  if (item.monitored === false) return "nicht überwacht";
+  if (item.monitored && item.has_files === false) return item.available === false ? "nicht erschienen" : "ohne Datei";
+  return "nicht in Plex";
+}
+function arrStatus(item) {
+  if (item.monitored == null) return [];
+  return [item.monitored ? "überwacht" : "nicht überwacht", ...(item.has_files === false ? ["ohne Datei"] : []), ...(item.available === false ? ["noch nicht erschienen"] : [])];
+}
+
 function card(item) {
   const el = h("div", { class: "card", onclick: () => openItem(item.id) });
   const box = posterBox(item, "poster");
   const bad = item.missing;
   box.append(h("span", { class: "badge " + (bad ? "bad" : "ok") }, bad ? `${bad} fehlt` : "✓"));
-  if (!item.in_plex) box.append(h("span", { class: "badge warn b", title: item.sources.join(", ") }, item.custom ? "Ordner" : "nicht in Plex"));
+  if (!item.in_plex) box.append(h("span", { class: "badge warn b", title: `${item.sources.join(", ")} – ${arrStatus(item).join(", ") || "nicht in Plex"}` }, notPlexLabel(item)));
   el.append(box, h("div", { class: "t", title: item.title }, item.title),
     h("div", { class: "s" }, [item.year, item.type === "show" ? `${item.season_count} Staffeln` : "Film"].filter(Boolean).join(" · ")));
   makeDropTarget(el, files => importFiles(files, item.id));
@@ -420,7 +435,8 @@ async function openItem(id) {
           h("div", { class: "tags" },
             world && cfg().worlds.length > 1 ? h("span", { class: "tag", style: `color:${worldColor(world)};border-color:${worldColor(world)}` }, world.name) : null,
             it.sources.map(s => h("span", { class: "tag" }, s)),
-            !it.in_plex ? h("span", { class: "tag warn" }, "nicht in Plex") : null)),
+            !it.in_plex ? h("span", { class: "tag warn" }, "nicht in Plex") : null,
+            arrStatus(it).map(t => h("span", { class: "tag" + (t === "überwacht" ? " ok" : "") }, t)))),
         it.custom ? h("button", { class: "btn sm danger", title: "Entfernt nur den Eintrag, Dateien bleiben erhalten", onclick: async () => {
           if (!confirm("Eigenen Ordner aus der Liste entfernen? Die Dateien bleiben erhalten.")) return;
           await api("/custom/" + it.id, { method: "DELETE" }); close(); toast("Entfernt", "ok");
@@ -520,10 +536,10 @@ function openPreview(it, key, draw) {
 
 /** Use one existing asset for many tiles of the title at once (e.g. poster -> Season00 … Season50), named Kometa-conform. */
 function openApplyAll(it, key, draw) {
-  const opt = { range: "known", poster: key !== "poster", specials: true, overwrite: false };
+  const opt = { range: "known", poster: key !== "poster", specials: true, overwrite: false, limit: 10 };
   const label = slotLabel(key, it.type);
   const compute = () => {
-    let list = opt.range === "known" ? Object.keys(it.slots) : ["poster", ...Array.from({ length: it.max_season + 1 }, (_, n) => "season-" + n)];
+    let list = opt.range === "known" ? Object.keys(it.slots) : ["poster", ...Array.from({ length: opt.limit + 1 }, (_, n) => "season-" + n)];
     list = list.filter(t => t !== key && (opt.poster || t !== "poster") && (opt.specials || t !== "season-0"));
     const overwritten = list.filter(t => it.slots[t] && it.slots[t].exists);
     const targets = opt.overwrite ? list : list.filter(t => !(it.slots[t] && it.slots[t].exists));
@@ -532,6 +548,7 @@ function openApplyAll(it, key, draw) {
   const summary = h("div", { class: "status", style: "font-size:14px" });
   const go = h("button", { class: "btn primary" }, "Anwenden");
   const refresh = () => {
+    allSub.textContent = `Poster und Season00 – Season${String(opt.limit).padStart(2, "0")}, auch für Staffeln, die es noch nicht gibt`;
     const { targets, overwritten } = compute();
     summary.className = "status" + (targets.length ? " ok" : "");
     summary.textContent = targets.length
@@ -544,13 +561,21 @@ function openApplyAll(it, key, draw) {
   const check = (text, sub, checked, onPick) => h("label", { class: "opt" },
     h("input", { type: "checkbox", checked, onchange: e => { onPick(e.target.checked); refresh(); } }), h("div", {}, text, sub ? h("small", {}, sub) : null));
   const known = Object.keys(it.slots).filter(t => t !== key).length;
+  // "all tiles up to Season [n]": the upper limit is a labelled number field (default 10, max 50)
+  const allSub = h("small", {});
+  const allRadio = h("input", { type: "radio", name: "range", checked: opt.range === "all", onchange: () => { opt.range = "all"; refresh(); } });
+  const limitInput = h("input", { type: "number", class: "numfld", min: 0, max: it.max_season, value: opt.limit, title: `Höchste Staffelnummer (0 – ${it.max_season})`,
+    "aria-label": "Alle Kacheln bis Season",
+    oninput: e => { const v = parseInt(e.target.value, 10); opt.limit = Number.isNaN(v) ? 10 : Math.max(0, Math.min(it.max_season, v)); opt.range = "all"; allRadio.checked = true; refresh(); },
+    onchange: e => { e.target.value = opt.limit; } });
+  const allRow = h("label", { class: "opt" }, allRadio, h("div", {}, "Alle Kacheln bis Season", limitInput, allSub));
   const m = modal(`„${label}“ für ${it.title} auf andere Kacheln anwenden`, h("div", {},
     h("div", { class: "row", style: "margin-bottom:6px" },
       h("img", { src: `/api/asset/${it.id}/${key}?v=${it.slots[key].mtime}`, alt: "", style: "width:64px;border-radius:6px;border:1px solid var(--line)" }),
       h("div", { class: "hint" }, "Das Bild wird kopiert und jede Kopie Kometa-konform benannt (poster, Season00, Season01 …). Das Original bleibt unverändert.")),
     h("label", { class: "f" }, "Welche Kacheln?"),
     radio("range", "known", "Nur vorhandene Kacheln dieser Serie", `${known} weitere Kachel${known === 1 ? "" : "n"} (Poster + bekannte Staffeln laut Plex/Sonarr)`, opt.range === "known", v => { opt.range = v; }),
-    radio("range", "all", `Alle Kacheln bis Season${String(it.max_season).padStart(2, "0")}`, "Poster und Season00 – Season50, auch für Staffeln, die es noch nicht gibt", opt.range === "all", v => { opt.range = v; }),
+    allRow,
     key !== "poster" ? check("Serienposter einbeziehen", null, opt.poster, v => { opt.poster = v; }) : null,
     check("Specials (Season00) einbeziehen", null, opt.specials, v => { opt.specials = v; }),
     h("label", { class: "f" }, "Bereits belegte Kacheln"),
@@ -960,6 +985,8 @@ function wArr(nav, c) {
         h("div", { class: "row" }, h("h3", { class: "grow" }, a.kind === "sonarr" ? "📺 Sonarr" : "🎬 Radarr"),
           h("button", { class: "btn sm danger", onclick: () => { list.splice(i, 1); persist(); draw(); } }, "Entfernen")),
         h("label", { class: "f" }, "Name"), name, h("label", { class: "f" }, "Adresse (Protokoll · IP / Hostname · Port)"), addr.el, h("label", { class: "f" }, "API-Key"), key,
+        h("label", { class: "opt", style: "margin-top:12px" }, h("input", { type: "checkbox", checked: !!a.hide_unmonitored, onchange: e => { a.hide_unmonitored = e.target.checked; persist(); } }),
+          h("div", {}, "Nicht überwachte Titel ausblenden", h("small", {}, "Nur Titel anzeigen, die in " + (a.kind === "sonarr" ? "Sonarr" : "Radarr") + " überwacht werden"))),
         h("div", { class: "row", style: "margin-top:10px" }, h("button", { class: "btn", onclick: async e => {
           const btn = e.currentTarget;
           a.name = name.value; a.url = addr.get(); a.api_key = key.value; await persist();

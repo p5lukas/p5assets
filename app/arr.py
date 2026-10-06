@@ -53,7 +53,7 @@ def _folder(entry: dict) -> str:
 
 
 async def fetch(inst: dict) -> list[dict]:
-    """Normalised entries: {type, title, year, folder, ids, seasons[int], source}."""
+    """Normalised entries: {type, title, year, folder, ids, seasons[int], source, monitored, has_files, available}."""
     url = inst["url"] if "://" in inst["url"] else "http://" + inst["url"]
     out: list[dict] = []
     async with _client(url, inst["api_key"]) as c:
@@ -65,6 +65,9 @@ async def fetch(inst: dict) -> list[dict]:
                                                    ("imdb", s.get("imdbId"))) if v},
                     "seasons": sorted({int(x["seasonNumber"]) for x in s.get("seasons", []) if "seasonNumber" in x}),
                     "source": inst["name"],
+                    "monitored": bool(s.get("monitored", True)),
+                    "has_files": int((s.get("statistics") or {}).get("episodeFileCount") or 0) > 0,
+                    "available": s.get("status") != "upcoming",
                 })
         else:
             for m in await _get(c, "/api/v3/movie"):
@@ -72,5 +75,8 @@ async def fetch(inst: dict) -> list[dict]:
                     "type": "movie", "title": m.get("title", ""), "year": m.get("year"), "folder": _folder(m),
                     "ids": {k: str(v) for k, v in (("tmdb", m.get("tmdbId")), ("imdb", m.get("imdbId"))) if v},
                     "seasons": [], "source": inst["name"],
+                    "monitored": bool(m.get("monitored", True)),
+                    "has_files": bool(m.get("hasFile")),
+                    "available": bool(m.get("isAvailable", True)),
                 })
     return out
