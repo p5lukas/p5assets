@@ -19,6 +19,7 @@ Alle bisher gesammelten Punkte sind in Version 2 umgesetzt. Neue Beobachtungen b
 - [ ] Plex-Adresse in drei Felder aufteilen: Protokoll als Dropdown (http/https), IP-Adresse oder Hostname als Textfeld (manuell, ohne Vorgabe), Port als eigenes Feld mit Beispiel 32400 (Platzhalter). Daraus wird intern die URL zusammengesetzt. Gleiches Muster eventuell auch für Sonarr/Radarr (Standardports 8989/7878)
 
 ## Detailansicht
+- [ ] Datei-Info pro Kachel: Auf Hover bzw. per Info-Symbol Dateipfad, Größe, Auflösung und Änderungsdatum des angezeigten Assets zeigen, damit sofort klar ist, welche Datei im Assets-Ordner gemeint ist (Beispiel: Overlays im Bild, obwohl der Nutzer sie im Kometa-Ordner nicht erwartet)
 - [ ] Bildquelle sauber trennen: Angezeigt und zum Kopieren genutzt werden immer die im Kometa-Assets-Ordner gefundenen Bilder (ohne Overlays). Plex-Bilder (mit Overlays wie Auflösungs-Badges) nur als Backup-Vorschau, wenn für den Slot kein Kometa-Asset existiert. Solche Plex-Vorschauen deutlich kennzeichnen („Plex-Vorschau, mit Overlay“) und nicht als Quelle für das Kopieren per Drag & Drop zulassen
 - [ ] Vorhandene Bilder innerhalb der Serienansicht auf andere Kacheln ziehen: z. B. das Poster von Staffel 1 auf die leere Kachel Staffel 2 ziehen. Das Bild wird kopiert und Kometa-konform umbenannt (`Season02.jpg`), das Original bleibt erhalten. Auch für die Kachel „Serienposter“ und die „Weiteren Staffeln“ nutzbar. Ist die Zielkachel schon belegt, vorher nachfragen, ob sie überschrieben werden soll
 
