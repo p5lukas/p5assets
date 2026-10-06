@@ -6,7 +6,8 @@
 - [ ] Mehrere Sonarr- und Radarr-Instanzen (z. B. HD und 4K), jeweils mit eigenem Namen, URL und API-Key
 - [ ] „Welten“ (z. B. HD und 4K): getrennte Bereiche mit eigener Titelliste und eigenem Dashboard. Ordnernamen sind in HD und 4K gleich, deshalb darf nichts vermischt werden. Zuordnung im Onboarding und in den Einstellungen: Der Nutzer weist Plex-Bibliotheken, Sonarr- und Radarr-Instanzen selbst einer Welt zu (beliebig viele Welten, nicht nur zwei)
 - [ ] Welten-Umschalter in der Kopfleiste mit kurzer Matrix-Animation beim Wechsel (z. B. HD → 4K), jede Welt mit eigener Akzentfarbe/Beschriftung, damit klar ist, wo man gerade ist
-- [ ] Offen: Hat jede Welt einen eigenen Assets-Ordner (HD und 4K getrennt)? Vermutlich ja, dann wird der Assets-Pfad pro Welt gesetzt (ersetzt den Punkt „Mehrere Assets-Ordner“)
+- [x] Geklärt: HD und 4K haben komplett getrennte Assets-Ordner. Der Assets-Pfad wird pro Welt gesetzt (ersetzt den Punkt „Mehrere Assets-Ordner“)
+- [ ] Unraid-Template: mehrere Assets-Pfade vorsehen (z. B. `/assets` für HD, `/assets-4k` für 4K) und in der README erklären, dass jeder Ordner beim Anlegen des Containers gemountet sein muss. Ordner-Browser im Onboarding zeigt die gemounteten Pfade
 - [ ] Freie Ordnereingabe: Poster für Titel ablegen, die weder in Plex noch in Sonarr/Radarr stehen (Ordnername von Hand, z. B. `Titel (Jahr)`)
 - [ ] Detailansicht einer Serie: leere Kacheln für Poster, Season00 bis Season50, auch für Staffeln, die es (noch) nicht gibt. Fehlende Extra-Kacheln zählen nicht als „fehlt“. Vorschlag: bekannte Staffeln zuerst, die übrigen eingeklappt unter „Weitere Staffeln“, damit die Ansicht übersichtlich bleibt. Backend muss dafür Staffel-Slots 0–50 erlauben
 
