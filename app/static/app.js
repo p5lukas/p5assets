@@ -309,13 +309,11 @@ async function openItem(id) {
     if (known) box.append(h("span", { class: "badge " + (exists ? "ok" : "bad") }, exists ? "vorhanden" : "fehlt"));
     else if (exists) box.append(h("span", { class: "badge ok" }, "vorhanden"));
     box.append(h("div", { class: "hover" }, h("div", {}, "⬆ Bild ablegen", h("br"), "oder klicken")));
-    const info = exists ? h("div", { class: "fileinfo", title: `${sl.file}\n${(sl.size / 1024).toFixed(0)} KB · ${new Date(sl.mtime * 1000).toLocaleString("de-DE")}` },
-      sl.file, h("br"), `${(sl.size / 1024).toFixed(0)} KB · ${new Date(sl.mtime * 1000).toLocaleDateString("de-DE")}`) : null;
     const el = h("div", { class: "slot" }, box,
-      h("div", { class: "lab" }, slotLabel(key, it.type)), info,
+      h("div", { class: "lab" }, slotLabel(key, it.type)),
       h("div", { class: "acts" },
         h("button", { class: "btn sm", onclick: () => searchOnline(it, key, draw) }, "🔎 Online"),
-        exists ? h("a", { class: "btn sm", href: `/api/asset/${it.id}/${key}?v=${sl.mtime}`, target: "_blank", rel: "noopener", title: "Datei aus dem Assets-Ordner im Original öffnen", onclick: e => e.stopPropagation() }, "Original") : null,
+        exists ? h("button", { class: "btn sm", title: "Bild vergrößern und Details ansehen", onclick: () => openPreview(it, key) }, "Vorschau") : null,
         exists ? h("button", { class: "btn sm danger", onclick: async () => { if (confirm(`${slotLabel(key, it.type)} wirklich löschen?`)) { const r = await api(`/items/${it.id}/${key}`, { method: "DELETE" }); draw(r.item); } } }, "Löschen") : null));
     box.onclick = () => pickFiles(files => uploadSlot(it, key, files, draw), false);
     makeDropTarget(el, files => uploadSlot(it, key, files, draw));
@@ -323,6 +321,32 @@ async function openItem(id) {
   }
   makeDropTarget(drawer, files => importFiles(files, id, draw));
   draw(item);
+}
+
+/** Enlarged view of an existing asset with its details in a list next to it. */
+function openPreview(it, key) {
+  const sl = it.slots[key];
+  const src = `/api/asset/${it.id}/${key}?v=${sl.mtime}`;
+  const fmtSize = b => b >= 1048576 ? (b / 1048576).toFixed(2) + " MB" : Math.round(b / 1024) + " KB";
+  const res = h("dd", {}, "…");
+  const rows = [
+    ["Titel", it.title + (it.year ? ` (${it.year})` : "")],
+    ["Slot", slotLabel(key, it.type)],
+    ["Quelle", sl.file],
+    ["Größe", fmtSize(sl.size)],
+    ["Geändert", new Date(sl.mtime * 1000).toLocaleString("de-DE")],
+    ["Format", (sl.file.split(".").pop() || "").toUpperCase()],
+  ];
+  const img = h("img", { src, alt: "", onload: e => { res.textContent = `${e.target.naturalWidth} × ${e.target.naturalHeight} px`; } });
+  const wrap = h("div", { class: "modalwrap lightbox", onclick: e => { if (e.target === wrap) close(); } },
+    h("div", { class: "lbox" }, img,
+      h("div", { class: "lside" },
+        h("div", { class: "row" }, h("h3", { class: "grow" }, "Vorschau"), h("button", { class: "btn ghost sm", onclick: () => close() }, "✕")),
+        h("dl", {}, rows.map(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]), h("dt", {}, "Auflösung"), res))));
+  const onKey = e => { if (e.key === "Escape") close(); };
+  function close() { wrap.remove(); document.removeEventListener("keydown", onKey); }
+  document.addEventListener("keydown", onKey);
+  document.body.append(wrap);
 }
 
 async function uploadSlot(it, slot, files, draw) {
