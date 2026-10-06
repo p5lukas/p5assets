@@ -547,8 +547,9 @@ function wApis(nav, cfg) {
     key.onchange = persist; if (pin) pin.onchange = persist;
     return h("div", { class: "apirow" }, h("h3", {}, name), h("div", { class: "hint" }, h("a", { href: url, target: "_blank", rel: "noopener" }, "Key anfordern ↗")),
       h("div", { class: "row" }, h("div", { class: "grow" }, key, pin), h("button", { class: "btn", onclick: async e => {
+        const btn = e.currentTarget;
         await persist();
-        try { await busy(e.currentTarget, () => api("/test/" + id, { json: { key: key.value, pin: pin ? pin.value : "" } })); setStatus(st, true, "Funktioniert"); }
+        try { await busy(btn, () => api("/test/" + id, { json: { key: key.value, pin: pin ? pin.value : "" } })); setStatus(st, true, "Funktioniert"); }
         catch (err) { setStatus(st, false, err.message); }
       } }, "Testen")), st);
   };
