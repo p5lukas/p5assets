@@ -33,13 +33,16 @@ def _item_id(world: str, kind: str, folder: str, fallback: str) -> str:
     return f"{world}-{hashlib.sha1(base.encode()).hexdigest()[:10]}"
 
 
+def _rel(p: Path, root: Path) -> str:
+    try:
+        return str(p.relative_to(root))
+    except ValueError:
+        return str(p)
+
+
 def _slot_info(f: Path, root: Path) -> dict:
     st = f.stat()
-    try:
-        rel = str(f.relative_to(root))
-    except ValueError:
-        rel = str(f)
-    return {"exists": True, "mtime": int(st.st_mtime), "size": st.st_size, "file": rel, "path": str(f)}
+    return {"exists": True, "mtime": int(st.st_mtime), "size": st.st_size, "file": _rel(f, root), "path": str(f)}
 
 
 def build_slots(item: dict, index: kometa.AssetIndex, ignore_specials: bool) -> None:
@@ -54,12 +57,18 @@ def build_slots(item: dict, index: kometa.AssetIndex, ignore_specials: bool) -> 
     slots: dict = {}
     for key in known:
         f = files.get(key)
-        slots[key] = _slot_info(f, index.root) if f else {"exists": False}
+        if f:
+            slots[key] = _slot_info(f, index.root)
+        else:
+            season = None if key == "poster" else int(key.split("-")[1])
+            thumb = item["thumb"] if season is None else next((x["thumb"] for x in item["seasons"] if x["number"] == season), "")
+            slots[key] = {"exists": False, "plex_thumb": bool(thumb)}
     if item["type"] == "show":
         for key, f in files.items():
             if key not in slots:
                 slots[key] = {**_slot_info(f, index.root), "extra": True}
     item["slots"] = slots
+    item["dupes"] = [_rel(p, index.root) for p in index.duplicates(item["folder"])] if item["folder"] else []
     item["missing"] = sum(1 for k in known if not slots[k]["exists"])
 
 
@@ -178,7 +187,7 @@ def _finish(world: dict, items: list[dict], index: kometa.AssetIndex, ignore_spe
         while iid in seen:
             iid += "x"
         seen.add(iid)
-        it.update(id=iid, world=world["id"], assets_path=world["assets_path"], updated=0)
+        it.update(id=iid, world=world["id"], assets_path=world["assets_path"], search_depth=world.get("search_depth", 3), updated=0)
         build_slots(it, index, ignore_specials)
     return items
 
@@ -202,7 +211,7 @@ async def scan() -> None:
                     STATE["progress"] = f"{world['name']}: lese Assets-Ordner …"
                     index = await asyncio.to_thread(
                         kometa.AssetIndex, Path(world["assets_path"]), cfg["assets"]["asset_folders"],
-                        cfg["assets"]["search_depth"])
+                        world.get("search_depth", 3))
                     plex_items = await _plex_items(cfg, world, plex, warnings) if plex else []
                     arr_items = await _arr_items(cfg, world, warnings)
                     items = _merge(plex_items, arr_items)
@@ -228,7 +237,7 @@ def refresh_item(item_id: str) -> None:
     item = next((i for i in STATE["items"] if i["id"] == item_id), None)
     if not item:
         return
-    index = kometa.AssetIndex(Path(item["assets_path"]), cfg["assets"]["asset_folders"], cfg["assets"]["search_depth"])
+    index = kometa.AssetIndex(Path(item["assets_path"]), cfg["assets"]["asset_folders"], item.get("search_depth", 3))
     build_slots(item, index, cfg["assets"]["ignore_specials"])
 
 
@@ -240,8 +249,9 @@ def add_custom(entry: dict) -> dict:
         if it["world"] == world["id"] and it["type"] == entry["type"] and it["folder"].casefold() == entry["folder"].casefold():
             return it
     item = custom_item(entry)
-    index = kometa.AssetIndex(Path(world["assets_path"]), cfg["assets"]["asset_folders"], cfg["assets"]["search_depth"])
-    item.update(id=f"{world['id']}-c{entry['id']}", world=world["id"], assets_path=world["assets_path"], updated=0)
+    index = kometa.AssetIndex(Path(world["assets_path"]), cfg["assets"]["asset_folders"], world.get("search_depth", 3))
+    item.update(id=f"{world['id']}-c{entry['id']}", world=world["id"], assets_path=world["assets_path"],
+                search_depth=world.get("search_depth", 3), updated=0)
     build_slots(item, index, cfg["assets"]["ignore_specials"])
     STATE["items"].append(item)
     STATE["items"].sort(key=lambda i: i["title"].casefold())

@@ -63,7 +63,7 @@ def write_asset(item: dict, slot: str, data: bytes) -> Path:
         raise ValueError(f"Assets-Ordner {root} existiert nicht (im Container gemountet?)")
     season = kometa.parse_slot_key(slot)
     body, ext = normalize_image(data, acfg["convert_to_jpg"])
-    index = kometa.AssetIndex(root, acfg["asset_folders"], acfg["search_depth"])
+    index = kometa.AssetIndex(root, acfg["asset_folders"], item.get("search_depth", 3))
     base = index.base_dir(item["folder"], root)
     old = index.slots(item["folder"]).get(slot)
     target = kometa.asset_target(base, item["folder"], season, acfg["asset_folders"], ext)

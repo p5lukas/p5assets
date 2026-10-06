@@ -29,7 +29,6 @@ DEFAULTS: dict = {
         "asset_folders": True,
         "convert_to_jpg": False,
         "ignore_specials": False,
-        "search_depth": 3,
     },
     "apis": {"tmdb": "", "tvdb": "", "tvdb_pin": "", "fanart": "", "language": "de"},
     "scan_interval_minutes": 60,
@@ -70,7 +69,8 @@ def load() -> dict:
         return _config
 
 
-WORLD_COLORS = ["#00ff66", "#22d3ee", "#f472b6", "#fbbf24", "#a78bfa", "#fb7185"]
+# Farbton (HSL-Hue) pro Welt: Welt 1 standardmäßig grün, weitere automatisch andere Farben
+WORLD_HUES = [140, 205, 355, 30, 270, 320, 170, 55]
 
 
 def normalize(cfg: dict, legacy_path: str | None = None) -> bool:
@@ -85,8 +85,12 @@ def normalize(cfg: dict, legacy_path: str | None = None) -> bool:
             w["id"] = uuid.uuid4().hex[:8]; changed = True
         if not w.get("name"):
             w["name"] = f"Welt {i + 1}"; changed = True
-        if not w.get("color"):
-            w["color"] = WORLD_COLORS[i % len(WORLD_COLORS)]; changed = True
+        if not isinstance(w.get("hue"), int):
+            w["hue"] = WORLD_HUES[i % len(WORLD_HUES)]; changed = True
+        w.pop("color", None)
+        depth = w.get("search_depth")
+        if not isinstance(depth, int) or not 0 <= depth <= 6:
+            w["search_depth"] = 3; changed = True
         w.setdefault("assets_path", "")
     ids = {w["id"] for w in cfg["worlds"]}
     first = cfg["worlds"][0]["id"]

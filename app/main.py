@@ -56,7 +56,7 @@ def _item(item_id: str) -> dict:
 
 def _public_item(it: dict, full: bool = False) -> dict:
     out = {k: it[k] for k in ("id", "world", "type", "title", "year", "folder", "library_title", "missing",
-                              "updated", "in_plex", "sources", "custom")}
+                              "updated", "in_plex", "sources", "custom", "dupes")}
     out["slots"] = {k: {kk: vv for kk, vv in v.items() if kk != "path"} for k, v in it["slots"].items()}
     out["season_count"] = len(it["seasons"])
     if full:
@@ -191,7 +191,8 @@ async def plex_connect(body: Connect):
     existing = {l["key"]: l for l in cfg["libraries"]}
     merged = [{"key": l["key"], "title": l["title"], "type": l["type"],
                "enabled": existing.get(l["key"], {}).get("enabled", True),
-               "world": existing.get(l["key"], {}).get("world", cfg["worlds"][0]["id"])} for l in libs]
+               "world": existing.get(l["key"], {}).get("world", cfg["worlds"][0]["id"]),
+               "world_set": existing.get(l["key"], {}).get("world_set", False)} for l in libs]
     config.update({"plex": {"url": url, "token": token, "server_name": ident["name"]}})
     cur = config.get()
     cur["libraries"] = merged
@@ -398,6 +399,23 @@ async def upload_slot(item_id: str, slot: str, file: UploadFile = File(...)):
     _slot_check(it, slot)
     data = await file.read()
     return await _store(it, slot, data)
+
+
+class CopyBody(BaseModel):
+    source: str
+
+
+@app.post("/api/items/{item_id}/{slot}/copy")
+async def copy_slot(item_id: str, slot: str, body: CopyBody):
+    """Copy an existing Kometa asset of this title onto another slot (renamed Kometa-conform)."""
+    it = _item(item_id)
+    _slot_check(it, slot)
+    if body.source == slot:
+        raise HTTPException(400, "Quelle und Ziel sind identisch")
+    src = it["slots"].get(body.source, {}).get("path")
+    if not src or not Path(src).is_file():
+        raise HTTPException(404, "Das Quellbild wurde im Assets-Ordner nicht gefunden")
+    return await _store(it, slot, Path(src).read_bytes())
 
 
 class UrlBody(BaseModel):

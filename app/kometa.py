@@ -15,6 +15,7 @@ The name has to match the folder the media lives in on disk.
 from __future__ import annotations
 
 import difflib
+from collections import deque
 import re
 import unicodedata
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -89,16 +90,18 @@ class AssetIndex:
         self.depth = max(0, depth)
         self.dirs: dict[str, Path] = {}      # folder name (casefold) -> dir
         self.flat: dict[str, Path] = {}      # file stem (casefold) -> file
+        self.dupes: dict[str, list[Path]] = {}  # same folder name found deeper
         self._build()
 
     def _build(self) -> None:
+        """Breadth-first scan: the shallowest folder with a given name wins, further ones are kept as duplicates."""
         if not self.root.is_dir():
             return
-        stack: list[tuple[Path, int]] = [(self.root, 0)]
-        while stack:
-            current, level = stack.pop()
+        queue: deque[tuple[Path, int]] = deque([(self.root, 0)])
+        while queue:
+            current, level = queue.popleft()
             try:
-                entries = list(current.iterdir())
+                entries = sorted(current.iterdir(), key=lambda x: x.name.casefold())
             except OSError:
                 continue
             for e in entries:
@@ -107,11 +110,18 @@ class AssetIndex:
                     continue
                 if e.is_dir():
                     if self.folders:
-                        self.dirs.setdefault(name.casefold(), e)
+                        key = name.casefold()
+                        if key in self.dirs:
+                            self.dupes.setdefault(key, []).append(e)
+                        else:
+                            self.dirs[key] = e
                     if level < self.depth:
-                        stack.append((e, level + 1))
+                        queue.append((e, level + 1))
                 elif e.suffix.lower() in IMAGE_EXTS and not self.folders:
                     self.flat.setdefault(e.stem.casefold(), e)
+
+    def duplicates(self, folder_name: str) -> list[Path]:
+        return self.dupes.get(folder_name.casefold(), [])
 
     def slots(self, folder_name: str) -> dict[str, Path]:
         """All existing assets of one title: {"poster": Path, "season-1": Path, ...}."""
