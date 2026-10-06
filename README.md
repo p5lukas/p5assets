@@ -32,61 +32,22 @@ Ein schlanker Docker-Container im Matrix-Look. Er vergleicht deine Bibliotheken 
 - 🌐 **Online-Suche** – TMDb, TVDB und fanart.tv, gruppiert nach deiner Sprach-Priorität.
 - 🧠 **Intelligente Zuordnung** – Titel, Jahr und Staffel werden aus Datei- und Ordnernamen erkannt.
 
-## Matrix-Animationen
-
-Beim Ersetzen eines Posters regnet der Code nur dort, wo sich etwas ändert – kein Dauer-Hintergrund. Beim Wechsel der Welt
-läuft ein Matrix-Übergang durch die ganze Oberfläche.
+## So sieht es aus
 
 <table>
 <tr>
-<td width="50%"><img src="docs/images/matrix-replace.gif" alt="Poster ersetzen"><br><sub>Poster ersetzen: Matrix-Regen, dann das neue Bild</sub></td>
-<td width="50%"><img src="docs/images/world-switch.gif" alt="Welt wechseln"><br><sub>Welt wechseln: HD ↔ 4K mit eigener Farbwelt</sub></td>
+<td width="50%"><img src="docs/images/matrix-replace.gif" alt="Poster ersetzen"><br><sub>Poster ersetzen: Matrix-Regen nur dort, wo sich etwas ändert</sub></td>
+<td width="50%"><img src="docs/images/world-switch.gif" alt="Welt wechseln"><br><sub>Welt wechseln: HD ↔ 4K mit eigener Farbe</sub></td>
+</tr>
+<tr>
+<td><img src="docs/images/import-zip.gif" alt="Import per ZIP"><br><sub>ZIP oder Ordner ins Fenster ziehen: automatische Zuordnung</sub></td>
+<td><img src="docs/images/detail.png" alt="Detailansicht"><br><sub>Detailansicht für Poster und Staffeln</sub></td>
+</tr>
+<tr>
+<td><img src="docs/images/online-search.png" alt="Online-Suche"><br><sub>Online-Suche nach Sprachen gruppiert</sub></td>
+<td><img src="docs/images/logs.png" alt="Logs"><br><sub>Log-Seite mit Suche und Filter</sub></td>
 </tr>
 </table>
-
-## Ein ZIP, 8 Poster, null Handarbeit
-
-Ziehe ein ZIP, einen Ordner oder viele Dateien ins Fenster. p5assets erkennt Titel, Jahr und Staffel
-(`Show (2020) - Season 2.jpg`, `Show/S01.png`, `poster.jpg` …), ordnet sie zu und zeigt vor dem Speichern eine
-Prüfliste.
-
-<p align="center"><img src="docs/images/import-zip.gif" alt="Import per ZIP" width="760"></p>
-
-<p align="center"><img src="docs/images/import-review.png" alt="Prüfdialog" width="760"></p>
-
-## Detailansicht, Vorschau und Online-Suche
-
-Kacheln für Poster und **Season00 – Season50**, auch für Staffeln, die es noch nicht gibt. Hover-Overlay mit Aktionen,
-Vorhandenes per Drag & Drop auf eine andere Kachel kopieren (automatisch umbenannt).
-
-<table>
-<tr>
-<td width="50%"><img src="docs/images/detail.png" alt="Detail"><br><sub>Detailansicht mit Overlay-Aktionen</sub></td>
-<td width="50%"><img src="docs/images/online-search.png" alt="Online-Suche"><br><sub>Online-Suche nach Sprachen gruppiert</sub></td>
-</tr>
-<tr>
-<td><img src="docs/images/preview.png" alt="Vorschau"><br><sub>Vorschau mit Quelle, Größe, Datum, Auflösung</sub></td>
-<td><img src="docs/images/apply-all.png" alt="Auf alle"><br><sub>„Auf alle …“: ein Bild für viele Staffeln</sub></td>
-</tr>
-</table>
-
-## Welten: HD, 4K und mehr
-
-Jede Welt hat einen eigenen Assets-Ordner, eigene Bibliotheken und Sonarr-/Radarr-Instanzen (per Bubble-Zuordnung),
-eine eigene Farbe und eine eigene Sprach-Prioritätsliste (z. B. Textless → Deutsch → English).
-
-<table>
-<tr>
-<td width="50%"><img src="docs/images/dashboard-4k.png" alt="4K-Welt"><br><sub>Die 4K-Welt in eigener Farbe</sub></td>
-<td width="50%"><img src="docs/images/onboarding-worlds.png" alt="Welten einrichten"><br><sub>Welten im Onboarding</sub></td>
-</tr>
-<tr>
-<td><img src="docs/images/onboarding-assign.png" alt="Zuordnung"><br><sub>Bibliotheken & Instanzen per Bubble zuordnen</sub></td>
-<td><img src="docs/images/logs.png" alt="Logs"><br><sub>Log-Seite mit Suche und Level-Filter</sub></td>
-</tr>
-</table>
-
-> Alle Bilder zeigen erfundene Demo-Titel.
 
 ## Funktionen im Detail
 - Onboarding: Plex-Login (PIN) oder URL + Token, Bibliotheken, Sonarr/Radarr, Welten mit Assets-Ordnern, TMDb/TVDB/fanart.tv
