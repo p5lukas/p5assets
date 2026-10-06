@@ -3,3 +3,5 @@ __pycache__/
 config/
 .venv/
 .git
+docs/
+tools/

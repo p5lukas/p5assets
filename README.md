@@ -1,10 +1,94 @@
+<div align="center">
+
+<img src="unraid/icon.png" width="96" alt="p5assets">
+
 # p5assets
 
-Schlanke Weboberfläche im Matrix-Look, die deine **Plex-Bibliotheken** (optional auch **Sonarr/Radarr**) mit dem
-**Kometa-Assets-Ordner** vergleicht und fehlende **Poster** und **Staffelcover** (Season00, Season01 …) findet.
-Hintergründe werden bewusst ignoriert.
+**Fehlende Poster und Staffelcover für Plex, Sonarr, Radarr und Kometa – finden, ersetzen, fertig.**
 
-## Features
+Ein schlanker Docker-Container im Matrix-Look. Er vergleicht deine Bibliotheken mit dem
+[Kometa](https://kometa.wiki)-Assets-Ordner, zeigt dir, was fehlt, und legt neue Bilder automatisch Kometa-konform ab.
+
+![Docker](https://img.shields.io/badge/Docker-ghcr.io%2Fp5lukas%2Fp5assets-00ff5a?logo=docker&logoColor=white&labelColor=0a1a0f)
+![Unraid](https://img.shields.io/badge/Unraid-Template-00ff5a?labelColor=0a1a0f)
+![Status](https://img.shields.io/badge/Status-Beta%20(%3Adev)-ffcc00?labelColor=0a1a0f)
+
+<img src="docs/images/dashboard.png" alt="Dashboard" width="900">
+
+</div>
+
+> *English in short:* p5assets is a self-hosted web UI that scans Plex (plus optional Sonarr/Radarr) for missing
+> posters and season posters, lets you replace them by drag & drop (single files, folders, ZIPs) and writes them with
+> Kometa-compatible names (`poster.jpg`, `Season01.jpg`, …). It supports multiple "worlds" (e.g. HD and 4K), per-world
+> language priorities, TMDb/TVDB/fanart.tv search and UMTK "Coming Soon" mirroring. Docker image:
+> `ghcr.io/p5lukas/p5assets:dev`, default port 8484.
+
+## Auf einen Blick
+
+- 🔎 **Findet Lücken** – Plex, Sonarr und Radarr werden zusammengeführt (über TMDb/TVDB/IMDb-IDs), fehlende Poster und Staffeln sofort sichtbar.
+- 🖼️ **Ersetzen per Drag & Drop** – einzelnes Bild, mehrere Dateien, ganze Ordner oder ZIPs.
+- 🏷️ **Kometa-konforme Benennung** – automatisch: `<Medienordner>/poster.jpg`, `Season00.jpg` … `Season50.jpg`.
+- 🌍 **Welten** – z. B. HD und 4K mit eigenem Assets-Ordner, eigener Farbe, eigener Sprachliste.
+- 🌐 **Online-Suche** – TMDb, TVDB und fanart.tv, gruppiert nach deiner Sprach-Priorität.
+- 🧠 **Intelligente Zuordnung** – Titel, Jahr und Staffel werden aus Datei- und Ordnernamen erkannt.
+
+## Matrix-Animationen
+
+Beim Ersetzen eines Posters regnet der Code nur dort, wo sich etwas ändert – kein Dauer-Hintergrund. Beim Wechsel der Welt
+läuft ein Matrix-Übergang durch die ganze Oberfläche.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/matrix-replace.gif" alt="Poster ersetzen"><br><sub>Poster ersetzen: Matrix-Regen, dann das neue Bild</sub></td>
+<td width="50%"><img src="docs/images/world-switch.gif" alt="Welt wechseln"><br><sub>Welt wechseln: HD ↔ 4K mit eigener Farbwelt</sub></td>
+</tr>
+</table>
+
+## Ein ZIP, 8 Poster, null Handarbeit
+
+Ziehe ein ZIP, einen Ordner oder viele Dateien ins Fenster. p5assets erkennt Titel, Jahr und Staffel
+(`Show (2020) - Season 2.jpg`, `Show/S01.png`, `poster.jpg` …), ordnet sie zu und zeigt vor dem Speichern eine
+Prüfliste.
+
+<p align="center"><img src="docs/images/import-zip.gif" alt="Import per ZIP" width="760"></p>
+
+<p align="center"><img src="docs/images/import-review.png" alt="Prüfdialog" width="760"></p>
+
+## Detailansicht, Vorschau und Online-Suche
+
+Kacheln für Poster und **Season00 – Season50**, auch für Staffeln, die es noch nicht gibt. Hover-Overlay mit Aktionen,
+Vorhandenes per Drag & Drop auf eine andere Kachel kopieren (automatisch umbenannt).
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/detail.png" alt="Detail"><br><sub>Detailansicht mit Overlay-Aktionen</sub></td>
+<td width="50%"><img src="docs/images/online-search.png" alt="Online-Suche"><br><sub>Online-Suche nach Sprachen gruppiert</sub></td>
+</tr>
+<tr>
+<td><img src="docs/images/preview.png" alt="Vorschau"><br><sub>Vorschau mit Quelle, Größe, Datum, Auflösung</sub></td>
+<td><img src="docs/images/apply-all.png" alt="Auf alle"><br><sub>„Auf alle …“: ein Bild für viele Staffeln</sub></td>
+</tr>
+</table>
+
+## Welten: HD, 4K und mehr
+
+Jede Welt hat einen eigenen Assets-Ordner, eigene Bibliotheken und Sonarr-/Radarr-Instanzen (per Bubble-Zuordnung),
+eine eigene Farbe und eine eigene Sprach-Prioritätsliste (z. B. Textless → Deutsch → English).
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/dashboard-4k.png" alt="4K-Welt"><br><sub>Die 4K-Welt in eigener Farbe</sub></td>
+<td width="50%"><img src="docs/images/onboarding-worlds.png" alt="Welten einrichten"><br><sub>Welten im Onboarding</sub></td>
+</tr>
+<tr>
+<td><img src="docs/images/onboarding-assign.png" alt="Zuordnung"><br><sub>Bibliotheken & Instanzen per Bubble zuordnen</sub></td>
+<td><img src="docs/images/logs.png" alt="Logs"><br><sub>Log-Seite mit Suche und Level-Filter</sub></td>
+</tr>
+</table>
+
+> Alle Bilder zeigen erfundene Demo-Titel und werden automatisch erzeugt (siehe [`tools/demo`](tools/demo/README.md)).
+
+## Funktionen im Detail
 - Onboarding: Plex-Login (PIN) oder URL + Token, Bibliotheken, Sonarr/Radarr, Welten mit Assets-Ordnern, TMDb/TVDB/fanart.tv
 - **Welten** (z. B. HD und 4K): getrennte Bereiche mit eigenem Assets-Ordner, eigener Titelliste, eigenem Dashboard und
   **eigener Farbe** (die ganze Oberfläche färbt sich um). Bibliotheken und Sonarr-/Radarr-Instanzen ordnest du per
@@ -26,14 +110,24 @@ Hintergründe werden bewusst ignoriert.
 - Fußzeile mit Version, Branch, Commit und GitHub-Link
 - Dashboard mit Abdeckung in %, Filter „Fehlende“, Suche, automatischer Hintergrund-Scan
 
-## Start (Docker Compose)
-```bash
-docker compose up -d --build
+## Schnellstart (Docker Compose)
+```yaml
+services:
+  p5assets:
+    image: ghcr.io/p5lukas/p5assets:dev
+    ports: ["8484:8080"]
+    environment: { PUID: 99, PGID: 100, UMASK: "002", TZ: Europe/Berlin }
+    volumes:
+      - ./config:/config
+      - /pfad/zu/kometa/assets:/assets          # Welt 1 (z. B. HD) – muss dein Kometa asset_directory sein
+      - /pfad/zu/kometa/assets-4k:/assets-4k    # optional: Welt 2 (4K)
+    restart: unless-stopped
 ```
-Dann http://localhost:8484 öffnen. Die Assets-Ordner müssen dieselben sein, die Kometa als `asset_directory` nutzt,
-und **beschreibbar** gemountet werden. Jeder Ordner muss beim Anlegen des Containers eingebunden sein:
-`/assets` für die erste Welt, `/assets-4k` für eine zweite usw. Im Onboarding wählst du den Pfad pro Welt aus.
-Die Ordnernamen werden aus dem Medienpfad in Plex bzw. Sonarr/Radarr abgeleitet (so sucht Kometa die Assets).
+Dann http://localhost:8484 öffnen und das Onboarding durchlaufen (Plex, Welten, Sonarr/Radarr, API-Keys).
+Die Assets-Ordner müssen **beschreibbar** gemountet sein. Ordnernamen werden aus dem Medienpfad in Plex bzw.
+Sonarr/Radarr abgeleitet – so sucht Kometa die Assets.
+
+Aus dem Quellcode: `docker compose up -d --build`.
 
 ## Unraid
 1. Template **und Icon** auf den Server bringen. Am einfachsten per Netzwerkfreigabe (funktioniert auch bei privatem Repo):
@@ -73,6 +167,10 @@ Der Build läuft per GitHub Action (`.github/workflows/docker.yml`) bei Push auf
 Dateien werden mit `PUID=99` / `PGID=100` (nobody/users) geschrieben.
 Updates: Container in Unraid mit *Force Update* aktualisieren.
 
+## Entwicklung & Screenshots
+Alle Bilder in `docs/images` lassen sich mit Demo-Daten und Mock-Servern neu erzeugen:
+`python tools/demo/capture.py` (siehe [`tools/demo/README.md`](tools/demo/README.md)).
+
 ## Hinweis
 Es gibt keine eigene Authentifizierung – betreibe p5assets nur im Heimnetz oder hinter einem Reverse Proxy mit Login.
-Plex-Token und API-Keys liegen in `/config/config.json`.
+Plex-Token und API-Keys liegen in `/config/config.json` und werden nie ins Log geschrieben.
