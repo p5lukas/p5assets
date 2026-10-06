@@ -20,6 +20,8 @@ Hintergründe werden bewusst ignoriert.
 - Neue Titelordner landen dort, wo die anderen Titel schon liegen (z. B. `assets/4K-Serien/…` statt direkt in `assets/`): erkannt über die Bibliothek, einen gleich benannten Ordner, die Sonarr-/Radarr-Instanz oder den Typ
 - Kometa-konforme Benennung: `<Medienordner>/poster.jpg`, `Season00.jpg`, `Season01.jpg` … (oder flach mit `asset_folders: false`)
 - Online-Suche nach Postern (TMDb, TVDB, fanart.tv) mit Tabs je Anbieter, gruppiert nach deiner **Sprach-Prioritätsliste pro Welt** (z. B. Textless → Deutsch → English); Übernahme per Klick
+- **Log-Seite** (Listen-Symbol in der Kopfzeile): Live-Log mit Suche, Level-Filter, Download und Leeren; geschrieben nach `/config/logs/p5assets.log`, Tokens und API-Keys werden nie protokolliert
+- Fußzeile mit Version, Branch, Commit und GitHub-Link
 - Dashboard mit Abdeckung in %, Filter „Fehlende“, Suche, automatischer Hintergrund-Scan
 
 ## Start (Docker Compose)
@@ -47,7 +49,7 @@ Die Ordnernamen werden aus dem Medienpfad in Plex bzw. Sonarr/Radarr abgeleitet 
 |---|---|---|
 | `:dev` | Branch `dev` | Neues testen |
 | `:latest` | Branch `main` | stabil |
-| `:1.2.3` | Git-Tag `v1.2.3` | feste Version |
+| `:0.2.0` | Git-Tag `v0.2.0` | feste Version (Versionen zählen wir ab `0.1.0`, `1.0.0` erst bei stabilem Stand) |
 | `:sha-…` | jeder Build | Fehlersuche |
 
 Solange p5assets in der Entwicklung ist, nutzen Template und Compose-Datei `:dev`. Sobald alles stabil läuft,

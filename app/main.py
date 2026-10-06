@@ -13,15 +13,19 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import arr as arrmod, config, kometa, languages as langmod, plex as plexmod, providers, scanner, uploads
+from . import arr as arrmod, config, kometa, languages as langmod, logs, version, plex as plexmod, providers, scanner, uploads
 from .plex import Plex, PlexError
 
 STATIC = Path(__file__).parent / "static"
+log = logs.get("app")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logs.setup()
     config.load()
+    v = version.info()
+    log.info("p5assets %s gestartet (Branch %s, Commit %s)", v["version"], v["branch"] or "-", v["commit_short"] or "-")
     task = asyncio.create_task(scanner.loop())
     yield
     task.cancel()
@@ -32,16 +36,19 @@ app = FastAPI(title="p5assets", lifespan=lifespan)
 
 @app.exception_handler(PlexError)
 async def plex_error(_: Request, exc: PlexError):
+    log.warning("Plex: %s", exc)
     return JSONResponse({"detail": str(exc)}, status_code=502)
 
 
 @app.exception_handler(arrmod.ArrError)
 async def arr_error(_: Request, exc: arrmod.ArrError):
+    log.warning("Sonarr/Radarr: %s", exc)
     return JSONResponse({"detail": str(exc)}, status_code=502)
 
 
 @app.exception_handler(ValueError)
 async def value_error(_: Request, exc: ValueError):
+    log.warning("Ungültige Anfrage: %s", exc)
     return JSONResponse({"detail": str(exc)}, status_code=400)
 
 
@@ -120,6 +127,9 @@ async def _store(it: dict, slot: str, data: bytes) -> dict:
     path = await asyncio.to_thread(uploads.write_asset, it, slot, data)
     scanner.refresh_item(it["id"])
     warn = await _plex_push(it, [slot], data)
+    log.info("Gespeichert: %s / %s → %s", it["title"], slot, path)
+    if warn:
+        log.warning("Plex-Upload für %s / %s: %s", it["title"], slot, warn)
     return {"ok": True, "path": str(path), "warning": warn, "item": _public_item(_item(it["id"]), True)}
 
 
@@ -147,12 +157,14 @@ async def set_config(body: ConfigPatch):
         for w in worlds:
             w["name"] = (w.get("name") or "").strip()
             w["assets_path"] = (w.get("assets_path") or "").strip()
+    log.info("Einstellungen geändert: %s", ", ".join(sorted(patch)) or "-")
     return config.public(config.update(patch))
 
 
 @app.post("/api/onboarding/finish")
 async def finish_onboarding():
     config.update({"onboarded": True})
+    log.info("Onboarding abgeschlossen")
     asyncio.create_task(scanner.scan())
     return {"ok": True}
 
@@ -208,6 +220,7 @@ async def plex_connect(body: Connect):
     cur = config.get()
     cur["libraries"] = merged
     config.save(cur)
+    log.info("Plex verbunden: %s (%s), %d Bibliotheken", ident["name"], url, len(merged))
     return {"server": ident, "url": url, "libraries": merged}
 
 
@@ -241,9 +254,12 @@ async def test_provider(provider: str, body: ApiTest):
         else:
             raise HTTPException(404, "Unbekannter Anbieter")
     except httpx.HTTPStatusError as e:
+        log.warning("API-Test %s: ungültiger Key (HTTP %s)", provider, e.response.status_code)
         raise HTTPException(400, f"Ungültiger Key (HTTP {e.response.status_code})")
     except httpx.HTTPError as e:
+        log.warning("API-Test %s: nicht erreichbar (%s)", provider, e)
         raise HTTPException(502, f"Nicht erreichbar: {e}")
+    log.info("API-Test %s: OK", provider)
     return {"ok": True}
 
 
@@ -263,7 +279,9 @@ async def arr_test(body: ArrTest):
         key = next((a["api_key"] for a in config.get()["arr"] if a.get("id") == body.id), "")
     if not body.url or not key:
         raise HTTPException(400, "URL und API-Key werden benötigt")
-    return await arrmod.test(body.kind, body.url.strip(), key)
+    res = await arrmod.test(body.kind, body.url.strip(), key)
+    log.info("%s-Test (%s): OK, Version %s", body.kind.capitalize(), body.url.strip(), res.get("version", "?"))
+    return res
 
 
 # ------------------------------------------------------ filesystem ---
@@ -303,6 +321,7 @@ async def path_check(body: PathCheck):
 async def start_scan():
     if not scanner.STATE["running"]:
         asyncio.create_task(scanner.scan())
+        await asyncio.sleep(0.05)  # let the scan start so the answer already says "running"
     return scanner.summary()
 
 
@@ -391,6 +410,7 @@ async def custom_add(body: CustomBody):
         cfg["custom"].append(entry)
         config.save(cfg)
     item = scanner.add_custom(entry)
+    log.info("Eigener Ordner angelegt: %s (%s, Welt %s)", folder, body.type, world["name"])
     return {"item": _public_item(item, True)}
 
 
@@ -403,6 +423,7 @@ async def custom_delete(item_id: str):
     cfg["custom"] = [c for c in cfg["custom"] if c["id"] != it["custom_id"]]
     config.save(cfg)
     scanner.remove_item(item_id)
+    log.info("Eigener Ordner entfernt: %s (Dateien bleiben erhalten)", it["folder"])
     return {"ok": True}
 
 
@@ -428,6 +449,7 @@ async def copy_slot(item_id: str, slot: str, body: CopyBody):
     src = it["slots"].get(body.source, {}).get("path")
     if not src or not Path(src).is_file():
         raise HTTPException(404, "Das Quellbild wurde im Assets-Ordner nicht gefunden")
+    log.info("Kopieren: %s / %s → %s", it["title"], body.source, slot)
     return await _store(it, slot, Path(src).read_bytes())
 
 
@@ -460,6 +482,7 @@ async def copy_all(item_id: str, body: CopyAllBody):
         return {"ok": True, "written": [], "skipped": skipped, "warning": None, "item": _public_item(it, True)}
     data = Path(src).read_bytes()
     await asyncio.to_thread(uploads.write_assets, it, targets, data)
+    log.info("Auf alle: %s / %s → %d Kacheln (%d übersprungen)", it["title"], body.source, len(targets), len(skipped))
     scanner.refresh_item(it["id"])
     warn = await _plex_push(it, targets, data)
     return {"ok": True, "written": targets, "skipped": skipped, "warning": warn, "item": _public_item(_item(it["id"]), True)}
@@ -497,8 +520,14 @@ async def search_posters(item_id: str, slot: str):
     if not (apis["tmdb"] or apis["tvdb"] or apis["fanart"]):
         raise HTTPException(400, "Keine API-Keys hinterlegt (Einstellungen → Quellen)")
     world = next((w for w in config.get()["worlds"] if w["id"] == it["world"]), None)
-    return await providers.search(apis, it["type"], it["ids"], it["title"], it["year"], season,
-                                  (world or {}).get("languages"))
+    res = await providers.search(apis, it["type"], it["ids"], it["title"], it["year"], season,
+                                 (world or {}).get("languages"))
+    log.info("Online-Suche %s / %s: %d Poster (%s)", it["title"], slot, len(res["images"]),
+             ", ".join(f"{p['name']}: {p['count'] if p['state'] == 'ok' else p['state']}" for p in res["providers"]))
+    for p in res["providers"]:
+        if p["state"] == "error":
+            log.warning("Online-Suche %s: %s", p["name"], p["error"])
+    return res
 
 
 @app.get("/api/languages")
@@ -519,6 +548,7 @@ async def delete_slot(item_id: str, slot: str):
     path = it["slots"].get(slot, {}).get("path")
     if path and Path(path).is_file():
         Path(path).unlink()
+        log.info("Gelöscht: %s / %s (%s)", it["title"], slot, path)
     scanner.refresh_item(item_id)
     return {"ok": True, "item": _public_item(_item(item_id), True)}
 
@@ -620,6 +650,9 @@ async def import_apply(sid: str, body: ApplyBody):
         except (ValueError, HTTPException, FileNotFoundError) as e:
             failed.append({"file": a.file, "error": getattr(e, "detail", None) or str(e)})
     uploads.drop_session(sid)
+    log.info("Import: %d Dateien übernommen, %d fehlgeschlagen", len(done), len(failed))
+    for f in failed:
+        log.warning("Import fehlgeschlagen: %s", f["error"])
     return {"done": done, "failed": failed, "summary": scanner.summary()}
 
 
@@ -630,6 +663,36 @@ async def import_cancel(sid: str):
 
 
 # ---------------------------------------------------------- static ---
+
+@app.get("/api/version")
+async def version_info():
+    return version.info()
+
+
+@app.get("/api/logs")
+async def log_files():
+    return logs.files()
+
+
+@app.get("/api/logs/read")
+async def log_read(file: str = logs.LOG_NAME, tail: int = Query(1000, ge=1, le=20000), offset: int | None = None):
+    return logs.read(file, tail, offset)
+
+
+@app.get("/api/logs/download")
+async def log_download(file: str = logs.LOG_NAME):
+    p = logs.path_of(file)
+    if not p.is_file():
+        raise HTTPException(404, "Logdatei nicht gefunden")
+    return FileResponse(p, media_type="text/plain", filename=file)
+
+
+@app.delete("/api/logs")
+async def log_clear(file: str = logs.LOG_NAME):
+    logs.clear(file)
+    log.info("Logdatei geleert: %s", file)
+    return {"ok": True}
+
 
 @app.get("/")
 async def index():

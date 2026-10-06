@@ -7,7 +7,7 @@ from collections import Counter
 import time
 from pathlib import Path
 
-from . import arr, config, kometa, providers
+from . import arr, config, kometa, logs, providers
 from .plex import Plex, PlexError
 
 STATE: dict = {
@@ -19,6 +19,7 @@ STATE: dict = {
     "progress": "",
 }
 _lock = asyncio.Lock()
+log = logs.get("scan")
 
 
 def _movie_folder(md: dict) -> str:
@@ -199,6 +200,8 @@ async def scan() -> None:
     async with _lock:
         cfg = config.get()
         STATE.update(running=True, error=None, warnings=[], progress="Starte Scan …")
+        t0 = time.time()
+        log.info("Scan gestartet (%d Welt(en))", len(cfg["worlds"]))
         try:
             warnings: list[str] = []
             plex: Plex | None = None
@@ -220,13 +223,23 @@ async def scan() -> None:
                     for entry in cfg["custom"]:
                         if entry["world"] == world["id"] and (entry["type"], entry["folder"].casefold()) not in have:
                             items.append(custom_item(entry))
-                    all_items.extend(_finish(world, items, index, cfg["assets"]["ignore_specials"]))
+                    done = _finish(world, items, index, cfg["assets"]["ignore_specials"])
+                    all_items.extend(done)
+                    log.info("Welt „%s“: %d Titel (%d aus Plex, %d nur Sonarr/Radarr/Ordner), %d Slots fehlen, Assets-Ordner %s",
+                             world["name"], len(done), sum(1 for i in done if i["in_plex"]), sum(1 for i in done if not i["in_plex"]),
+                             sum(i["missing"] for i in done), world["assets_path"])
+                    if not Path(world["assets_path"]).is_dir():
+                        warnings.append(f"{world['name']}: Assets-Ordner {world['assets_path']} nicht gefunden")
             finally:
                 if plex:
                     await plex.close()
             all_items.sort(key=lambda i: i["title"].casefold())
             STATE.update(items=all_items, scanned_at=int(time.time()), progress="", warnings=warnings)
+            for w in warnings:
+                log.warning("Scan: %s", w)
+            log.info("Scan fertig: %d Titel in %.1f s", len(all_items), time.time() - t0)
         except Exception as e:  # noqa: BLE001
+            log.error("Scan fehlgeschlagen: %s", e, exc_info=not isinstance(e, PlexError))
             STATE.update(error=str(e) or e.__class__.__name__, progress="")
         finally:
             STATE["running"] = False

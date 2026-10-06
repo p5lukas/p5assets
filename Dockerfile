@@ -7,6 +7,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends gosu \
 WORKDIR /srv
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+# Build-Infos für die Fußzeile (vom GitHub-Workflow übergeben)
+ARG P5_BRANCH=""
+ARG P5_COMMIT=""
+ARG P5_TAG=""
+ARG P5_REPO="https://github.com/p5lukas/p5assets"
+ENV P5_BRANCH=$P5_BRANCH P5_COMMIT=$P5_COMMIT P5_TAG=$P5_TAG P5_REPO=$P5_REPO
 COPY app ./app
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

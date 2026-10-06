@@ -40,6 +40,11 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
+          build-args: |
+            P5_BRANCH=${{ github.ref_type == 'branch' && github.ref_name || '' }}
+            P5_TAG=${{ github.ref_type == 'tag' && github.ref_name || '' }}
+            P5_COMMIT=${{ github.sha }}
+            P5_REPO=https://github.com/${{ github.repository }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha

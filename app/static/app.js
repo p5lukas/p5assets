@@ -44,6 +44,30 @@ const uid = p => p + Math.random().toString(36).slice(2, 8);
 const seasonNum = k => k === "poster" ? -1 : parseInt(k.split("-")[1], 10);
 const slotLabel = (k, type) => k === "poster" ? (type === "movie" ? "Poster" : "Serienposter") : seasonNum(k) === 0 ? "Specials" : "Staffel " + seasonNum(k);
 
+/* ---------------------------------------------------------------- icons --- */
+const ICONS = {
+  upload: [{ d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" }, { d: "M17 8l-5-5-5 5" }, { d: "M12 3v12" }],
+  folderplus: [{ d: "M12 10v6" }, { d: "M9 13h6" }, { d: "M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" }],
+  // two arrows chasing each other in a circle (rotates while a scan is running)
+  sync: [{ d: "M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" }, { d: "M21 3v5h-5" }, { d: "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" }, { d: "M8 16H3v5" }],
+  list: [{ d: "M8 6h13" }, { d: "M8 12h13" }, { d: "M8 18h13" }, { d: "M3 6h.01" }, { d: "M3 12h.01" }, { d: "M3 18h.01" }],
+  gear: [{ d: "M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" }, { c: [12, 12, 3] }],
+  back: [{ d: "M19 12H5" }, { d: "M12 19l-7-7 7-7" }],
+  file: [{ d: "M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" }, { d: "M14 2v6h6" }, { d: "M8 13h8" }, { d: "M8 17h6" }],
+  download: [{ d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" }, { d: "M7 10l5 5 5-5" }, { d: "M12 15V3" }],
+  trash: [{ d: "M3 6h18" }, { d: "M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" }, { d: "M10 11v6" }, { d: "M14 11v6" }, { d: "M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" }],
+};
+function icon(name, size = 18) {
+  const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg");
+  for (const [k, v] of Object.entries({ viewBox: "0 0 24 24", width: size, height: size, fill: "none", stroke: "currentColor", "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true" })) svg.setAttribute(k, v);
+  for (const p of ICONS[name]) {
+    const el = document.createElementNS(ns, p.c ? "circle" : "path");
+    if (p.c) { el.setAttribute("cx", p.c[0]); el.setAttribute("cy", p.c[1]); el.setAttribute("r", p.c[2]); } else el.setAttribute("d", p.d);
+    svg.append(el);
+  }
+  return svg;
+}
+
 /* ------------------------------------------------------------ state --- */
 const S = { st: null, langs: [], items: [], total: 0, filter: "all", q: "", lib: "", world: "", poll: null, step: "", reached: 0, rain: new Set(), view: "" };
 const cfg = () => S.st.config;
@@ -134,12 +158,107 @@ function worldTransition(world, mid) {
   setTimeout(() => fx.remove(), 1200);
 }
 
+/* --------------------------------------------------------------- footer --- */
+async function loadVersion() {
+  try {
+    const v = await api("/version"), foot = $("#foot");
+    const link = (text, href) => href ? h("a", { href, target: "_blank", rel: "noopener" }, text) : h("span", {}, text);
+    fill(foot, h("span", {}, "p5assets ", h("b", {}, v.version)),
+      v.branch ? link(`Branch: ${v.branch}`, v.branch_url) : null,
+      v.commit_short ? link(`Commit ${v.commit_short}`, v.commit_url) : null,
+      link("GitHub ↗", v.repo));
+  } catch { /* footer is optional */ }
+}
+
 /* ------------------------------------------------------------ routing --- */
 async function boot() {
+  loadVersion();
   try { await loadState(); S.langs = await api("/languages"); } catch (e) { app.append(h("div", { class: "empty" }, "Backend nicht erreichbar: " + e.message)); return; }
   if (!S.st.onboarded) return wizard();
   dashboard();
 }
+
+/* =============================================================== logs === */
+async function logsPage() {
+  S.view = "logs";
+  clearInterval(S.logTimer);
+  const st = { file: "p5assets.log", entries: [], offset: 0, level: "ALL", q: "", auto: true, live: true, full: false, files: await api("/logs") };
+  const LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR"];
+  const fmtSize = b => b >= 1048576 ? (b / 1048576).toFixed(2) + " MB" : (b / 1024).toFixed(2) + " KB";
+  const view = h("div", { class: "logview" }), count = h("span", { class: "hint" }), title = h("div"), liveBadge = h("button", { class: "livebadge" });
+  const chips = h("div", { class: "lvlchips" }), fileSel = h("select"), q = h("input", { type: "search", placeholder: "Zum Filtern tippen …", value: "" });
+  const toggle = h("input", { type: "checkbox", checked: true, onchange: e => { st.auto = e.target.checked; if (st.auto) view.scrollTop = view.scrollHeight; } });
+
+  const visible = () => st.entries.filter(e => (st.level === "ALL" || e.level === st.level) && (!st.q || `${e.ts} ${e.level} ${e.src} ${e.msg}`.toLowerCase().includes(st.q.toLowerCase())));
+  function renderLines() {
+    const list = visible(), shown = list.slice(-5000);
+    fill(view, shown.length ? shown.map(e => h("div", { class: "ll lv-" + e.level },
+      e.ts ? h("span", { class: "ts" }, `[${e.ts}]`) : null, " ", h("span", { class: "lvl" }, `[${e.level}]`), " ",
+      e.src ? [h("span", { class: "src" }, e.src), h("span", { class: "sep" }, " | ")] : null, h("span", { class: "msg" }, e.msg)))
+      : h("div", { class: "empty", style: "padding:30px" }, st.entries.length ? "Keine Einträge für diesen Filter." : "Noch keine Einträge."));
+    count.textContent = `${list.length} entries${list.length > shown.length ? ` (letzte ${shown.length} angezeigt)` : ""}`;
+    if (st.auto) view.scrollTop = view.scrollHeight;
+  }
+  function renderHead() {
+    const f = st.files.find(x => x.name === st.file) || { size: 0 };
+    fill(title, h("div", { class: "row" }, icon("file", 20), h("div", {}, h("b", {}, st.file), h("div", { class: "hint", style: "margin:0" }, st.full ? "Showing all entries" : "Showing last 1000 entries"))));
+    fill(fileSel, st.files.map(x => h("option", { value: x.name, selected: x.name === st.file }, `${x.name}  (${fmtSize(x.size)})`)));
+    const isLive = st.live && st.file === "p5assets.log";
+    liveBadge.className = "livebadge" + (isLive ? " on" : "");
+    fill(liveBadge, h("i"), isLive ? "Live" : "Pausiert");
+    const counts = Object.fromEntries(LEVELS.map(l => [l, st.entries.filter(e => e.level === l).length]));
+    fill(chips, h("button", { class: "lvl-chip all" + (st.level === "ALL" ? " on" : ""), onclick: () => { st.level = "ALL"; renderHead(); renderLines(); } }, "All Levels", h("small", {}, st.entries.length)),
+      LEVELS.map(l => h("button", { class: `lvl-chip lv-${l}` + (st.level === l ? " on" : ""), onclick: () => { st.level = l; renderHead(); renderLines(); } }, `[${l}]`, h("small", {}, counts[l]))));
+  }
+  async function load(full = false) {
+    st.full = full;
+    const r = await api(`/logs/read?file=${encodeURIComponent(st.file)}&tail=${full ? 20000 : 1000}`);
+    st.entries = r.entries; st.offset = r.offset; st.files = await api("/logs"); renderHead(); renderLines();
+  }
+  async function tick() {
+    if (S.view !== "logs") return clearInterval(S.logTimer);
+    if (!st.live || st.file !== "p5assets.log") return;
+    try {
+      const r = await api(`/logs/read?file=${encodeURIComponent(st.file)}&offset=${st.offset}`);
+      if (r.reset) { st.entries = r.entries; } else if (r.entries.length) { st.entries = st.entries.concat(r.entries).slice(-20000); }
+      st.offset = r.offset;
+      if (r.reset || r.entries.length) { renderHead(); renderLines(); }
+    } catch { /* ignore a failed poll */ }
+  }
+  fileSel.onchange = async e => { st.file = e.target.value; await load(false); };
+  q.oninput = debounce(e => { st.q = q.value; renderLines(); }, 150);
+  liveBadge.onclick = () => { st.live = !st.live; renderHead(); };
+
+  fill(app,
+    h("header", { class: "top" }, h("div", { class: "in" },
+      h("div", { class: "logo" }, h("img", { class: "logoimg", src: "/static/icon.png", alt: "" }), h("span", {}, "logs", h("u", {}, "_"))),
+      h("div", { class: "spacer" }),
+      h("button", { class: "btn tb", onclick: () => { clearInterval(S.logTimer); dashboard(); } }, icon("back"), h("span", { class: "lbl" }, "Zurück zum Dashboard")),
+      h("button", { class: "btn tb icon", title: "Einstellungen", onclick: () => { clearInterval(S.logTimer); wizard(true); } }, icon("gear", 20)))),
+    h("main", {},
+      h("div", { class: "logcard" },
+        h("div", { class: "row wrap", style: "align-items:flex-end" },
+          h("div", { style: "min-width:260px;flex:1;max-width:440px" }, h("label", { class: "f", style: "margin-top:0" }, "Logdatei wählen"), fileSel),
+          h("div", { class: "spacer" }),
+          h("label", { class: "switch", title: "Automatisch ans Ende scrollen" }, h("span", {}, "Auto-scroll"), toggle, h("i")),
+          h("button", { class: "btn", onclick: () => load(st.full) }, icon("sync", 16), "Refresh"),
+          h("button", { class: "btn", onclick: () => load(true) }, icon("file", 16), "Load full log file"),
+          h("a", { class: "btn", href: "#", onclick: e => { e.currentTarget.href = `/api/logs/download?file=${encodeURIComponent(st.file)}`; } }, icon("download", 16), "Download"),
+          h("button", { class: "btn danger", onclick: async () => {
+            if (!confirm(`„${st.file}“ wirklich leeren? Das kann nicht rückgängig gemacht werden.`)) return;
+            await api(`/logs?file=${encodeURIComponent(st.file)}`, { method: "DELETE" }); await load(false); toast("Log geleert", "ok");
+          } }, icon("trash", 16), "Clear")),
+        h("div", { class: "row wrap", style: "align-items:flex-end;margin-top:16px;border-top:1px solid var(--line);padding-top:14px" },
+          h("div", { class: "grow", style: "min-width:240px" }, h("label", { class: "f", style: "margin-top:0" }, "Logs durchsuchen"), q),
+          h("div", {}, h("label", { class: "f", style: "margin-top:0" }, "Nach Level filtern"), chips))),
+      h("div", { class: "logcard", style: "padding:0;margin-top:18px" },
+        h("div", { class: "row loghead" }, title, h("div", { class: "spacer" }), count, liveBadge),
+        h("div", { class: "loghint" }, h("b", {}, "Tipp: "), "Mit der Suche und den Level-Chips grenzt du die Anzeige ein. Warnungen und Fehler sind farbig markiert. Tokens und API-Keys werden nie ins Log geschrieben."),
+        view)));
+  await load(false);
+  S.logTimer = setInterval(tick, 2000);
+}
+
 
 /* ========================================================== dashboard === */
 function dashboard() {
@@ -153,10 +272,12 @@ function dashboard() {
         h("button", { class: w.id === S.world ? "on" : "", style: `--c:${worldColor(w)}`, onclick: () => switchWorld(w.id) }, h("i"), w.name))) : null,
       h("div", { class: "search" }, h("input", { type: "search", placeholder: "Titel suchen …", id: "q", value: S.q, oninput: debounce(async e => { S.q = e.target.value; await loadItems(); renderGrid(); }, 200) })),
       h("div", { class: "spacer" }),
-      h("button", { class: "btn", onclick: () => pickFiles() }, "⬆ Hochladen"),
-      h("button", { class: "btn", title: "Poster für einen Ordner ablegen, der nicht in Plex/Sonarr/Radarr steht", onclick: openCustom }, "＋ Ordner"),
-      h("button", { class: "btn", id: "scanbtn", onclick: doScan }, "↻ Scannen"),
-      h("button", { class: "btn gear", title: "Einstellungen", onclick: () => wizard(true) }, "⚙"),
+      h("button", { class: "btn tb", title: "Bilder, Ordner oder ZIPs hochladen – p5assets ordnet sie automatisch den Titeln zu", onclick: () => pickFiles() }, icon("upload"), h("span", { class: "lbl" }, "Bilder hochladen")),
+      h("button", { class: "btn tb", title: "Einen Titel von Hand anlegen, der weder in Plex noch in Sonarr/Radarr steht", onclick: openCustom }, icon("folderplus"), h("span", { class: "lbl" }, "Titel anlegen")),
+      h("span", { class: "vsep" }),
+      h("button", { class: "btn tb", id: "scanbtn", title: "Plex, Sonarr/Radarr und die Assets-Ordner neu einlesen", onclick: doScan }, icon("sync"), h("span", { class: "lbl" }, "Scannen")),
+      h("button", { class: "btn tb icon", title: "Logs", onclick: logsPage }, icon("list", 20)),
+      h("button", { class: "btn tb icon", title: "Einstellungen", onclick: () => wizard(true) }, icon("gear", 20)),
     )),
     h("main", {}, h("div", { id: "hero" }), h("div", { id: "chips" }), h("div", { id: "grid" })),
   );
@@ -185,7 +306,7 @@ function updateHero() {
   const hero = $("#hero"); if (!hero) return;
   const s = S.st.summary, ws = worldStats();
   const pct = ws.slots ? Math.round(((ws.slots - ws.missing) / ws.slots) * 100) : 0;
-  const sb = $("#scanbtn"); if (sb) sb.disabled = s.running;
+  const sb = $("#scanbtn"); if (sb) { sb.disabled = s.running; sb.classList.toggle("spinning", !!s.running); }
   fill(hero, h("div", { class: "hero" },
     h("div", { class: "ring", style: `--p:${pct}` }, h("b", {}, pct + "%")),
     h("div", {},
@@ -264,7 +385,7 @@ function card(item) {
   const box = posterBox(item, "poster");
   const bad = item.missing;
   box.append(h("span", { class: "badge " + (bad ? "bad" : "ok") }, bad ? `${bad} fehlt` : "✓"));
-  if (!item.in_plex) box.append(h("span", { class: "badge warn r", title: item.sources.join(", ") }, item.custom ? "Ordner" : "nicht in Plex"));
+  if (!item.in_plex) box.append(h("span", { class: "badge warn b", title: item.sources.join(", ") }, item.custom ? "Ordner" : "nicht in Plex"));
   el.append(box, h("div", { class: "t", title: item.title }, item.title),
     h("div", { class: "s" }, [item.year, item.type === "show" ? `${item.season_count} Staffeln` : "Film"].filter(Boolean).join(" · ")));
   makeDropTarget(el, files => importFiles(files, item.id));
@@ -320,19 +441,23 @@ async function openItem(id) {
     const box = posterBox(it, key, known);
     if (known) box.append(h("span", { class: "badge " + (exists ? "ok" : "bad") }, exists ? "vorhanden" : "fehlt"));
     else if (exists) box.append(h("span", { class: "badge ok" }, "vorhanden"));
-    box.append(h("div", { class: "hover" }, h("div", {}, "⬆ Bild ablegen", h("br"), "oder klicken")));
-    const el = h("div", { class: "slot" }, box,
-      h("div", { class: "lab" }, slotLabel(key, it.type)),
-      h("div", { class: "acts" },
-        h("button", { class: "btn sm", onclick: () => searchOnline(it, key, draw) }, "🔎 Online"),
-        exists ? h("button", { class: "btn sm", title: "Bild vergrößern und Details ansehen", onclick: () => openPreview(it, key) }, "Vorschau") : null,
-        exists && it.type === "show" ? h("button", { class: "btn sm", title: "Dieses Bild für weitere Kacheln dieser Serie verwenden", onclick: () => openApplyAll(it, key, draw) }, "Auf alle …") : null,
-        exists ? h("button", { class: "btn sm danger", onclick: async () => { if (confirm(`${slotLabel(key, it.type)} wirklich löschen?`)) { const r = await api(`/items/${it.id}/${key}`, { method: "DELETE" }); draw(r.item); } } }, "Löschen") : null));
-    box.onclick = () => pickFiles(files => uploadSlot(it, key, files, draw), false);
+    const pick = () => pickFiles(files => uploadSlot(it, key, files, draw), false);
+    const del = async () => { if (confirm(`${slotLabel(key, it.type)} wirklich löschen?`)) { const r = await api(`/items/${it.id}/${key}`, { method: "DELETE" }); draw(r.item); } };
+    const ob = (label, fn, cls = "") => h("button", { class: "ov-btn " + cls, onclick: e => { e.stopPropagation(); box.classList.remove("show"); fn(); } }, label);
+    box.append(h("div", { class: "hover" },
+      h("div", { class: "ovbtns" }, exists
+        ? [ob("Ersetzen", pick), ob("Vorschau", () => openPreview(it, key, draw)), ob("Online", () => searchOnline(it, key, draw)),
+           it.type === "show" ? ob("Auf alle …", () => openApplyAll(it, key, draw)) : null, ob("Löschen", del, "danger")]
+        : [ob("Datei wählen", pick), ob("Online", () => searchOnline(it, key, draw))]),
+      h("div", { class: "ovhint" }, "oder Bild hierher ziehen")));
+    const el = h("div", { class: "slot" }, box, h("div", { class: "lab" }, slotLabel(key, it.type)));
+    // click on the picture itself: preview (existing) / file dialog (empty); touch screens have no hover, so a tap shows the buttons first
+    box.onclick = () => { if (matchMedia("(hover: none)").matches) box.classList.toggle("show"); else if (exists) openPreview(it, key, draw); else pick(); };
     makeDropTarget(el, files => uploadSlot(it, key, files, draw));
     // Kometa assets can be dragged onto other tiles of this title: the file is copied and renamed Kometa-conform
     if (exists) {
-      box.draggable = true;
+      // draggable everywhere on the poster, also over the overlay buttons (buttons are draggable too, the event bubbles up)
+      box.draggable = true; box.querySelectorAll(".ov-btn").forEach(b => { b.draggable = true; });
       box.addEventListener("dragstart", e => { e.dataTransfer.setData("application/x-p5-slot", JSON.stringify({ item: it.id, slot: key })); e.dataTransfer.effectAllowed = "copy"; });
     }
     const isSlotDrag = e => [...(e.dataTransfer?.types || [])].includes("application/x-p5-slot");
@@ -360,7 +485,7 @@ async function openItem(id) {
 }
 
 /** Enlarged view of an existing asset with its details in a list next to it. */
-function openPreview(it, key) {
+function openPreview(it, key, draw) {
   const sl = it.slots[key];
   const src = `/api/asset/${it.id}/${key}?v=${sl.mtime}`;
   const fmtSize = b => b >= 1048576 ? (b / 1048576).toFixed(2) + " MB" : Math.round(b / 1024) + " KB";
@@ -379,7 +504,14 @@ function openPreview(it, key) {
     h("div", { class: "lbox" }, img,
       h("div", { class: "lside" },
         h("div", { class: "row" }, h("h3", { class: "grow" }, "Vorschau"), h("button", { class: "btn ghost sm", onclick: () => close() }, "✕")),
-        h("dl", {}, rows.map(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]), h("dt", {}, "Auflösung"), res))));
+        h("dl", {}, rows.map(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]), h("dt", {}, "Auflösung"), res),
+        draw ? h("div", { class: "row wrap", style: "margin-top:20px" },
+          h("button", { class: "btn sm", onclick: () => { close(); searchOnline(it, key, draw); } }, "Online"),
+          it.type === "show" ? h("button", { class: "btn sm", onclick: () => { close(); openApplyAll(it, key, draw); } }, "Auf alle …") : null,
+          h("button", { class: "btn sm danger", onclick: async () => {
+            if (!confirm(`${slotLabel(key, it.type)} wirklich löschen?`)) return;
+            close(); const r = await api(`/items/${it.id}/${key}`, { method: "DELETE" }); draw(r.item);
+          } }, "Löschen")) : null)));
   const onKey = e => { if (e.key === "Escape") close(); };
   function close() { wrap.remove(); document.removeEventListener("keydown", onKey); }
   document.addEventListener("keydown", onKey);
