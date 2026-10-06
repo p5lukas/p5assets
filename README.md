@@ -17,6 +17,7 @@ Hintergründe werden bewusst ignoriert.
 - **Vorschau** vergrößert ein Asset und zeigt Quelle, Größe, Datum und Auflösung; Plex-Bilder (mit Overlays) erscheinen nur als gekennzeichnete Vorschau
 - Ersetzen per Drag & Drop: einzelnes Bild auf eine Kachel, **mehrere Bilder, ganze Ordner oder ZIPs** irgendwo ins Fenster
 - Automatische Zuordnung über Datei-/Ordnernamen (`Show (2020) - Season 2.jpg`, `Show/S01.png`, `poster.jpg` …)
+- Neue Titelordner landen dort, wo die anderen Titel schon liegen (z. B. `assets/4K-Serien/…` statt direkt in `assets/`): erkannt über die Bibliothek, einen gleich benannten Ordner, die Sonarr-/Radarr-Instanz oder den Typ
 - Kometa-konforme Benennung: `<Medienordner>/poster.jpg`, `Season00.jpg`, `Season01.jpg` … (oder flach mit `asset_folders: false`)
 - Online-Suche nach Postern (TMDb, TVDB, fanart.tv) mit Tabs je Anbieter, gruppiert nach deiner **Sprach-Prioritätsliste pro Welt** (z. B. Textless → Deutsch → English); Übernahme per Klick
 - Dashboard mit Abdeckung in %, Filter „Fehlende“, Suche, automatischer Hintergrund-Scan

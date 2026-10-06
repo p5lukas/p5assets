@@ -64,7 +64,8 @@ def write_assets(item: dict, slots: list[str], data: bytes) -> list[Path]:
         raise ValueError(f"Assets-Ordner {root} existiert nicht (im Container gemountet?)")
     body, ext = normalize_image(data, acfg["convert_to_jpg"])
     index = kometa.AssetIndex(root, acfg["asset_folders"], item.get("search_depth", 3))
-    base = index.base_dir(item["folder"], root)
+    from . import scanner  # late import: scanner does not import uploads, keeps the module graph simple
+    base = index.base_dir(item["folder"], scanner.preferred_base(item) or root)
     existing = index.slots(item["folder"])
     written: list[Path] = []
     for slot in slots:

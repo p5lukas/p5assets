@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+from collections import Counter
 import time
 from pathlib import Path
 
@@ -229,6 +230,51 @@ async def scan() -> None:
             STATE.update(error=str(e) or e.__class__.__name__, progress="")
         finally:
             STATE["running"] = False
+
+
+def _parent_of(it: dict, root: Path) -> Path | None:
+    """Directory that holds the title folder of an item that already has assets (flat mode: the file's folder)."""
+    for key in ["poster", *it["slots"]]:
+        sl = it["slots"].get(key)
+        if sl and sl.get("exists"):
+            f = Path(sl["path"])
+            parent = f.parent.parent if config.get()["assets"]["asset_folders"] else f.parent
+            try:
+                parent.relative_to(root)
+            except ValueError:
+                return None
+            return parent
+    return None
+
+
+def preferred_base(item: dict) -> Path | None:
+    """Where a NEW title folder belongs, so it lands next to the folders the user already has – e.g. in
+    ``assets/4K-Serien`` instead of directly in ``assets``. Order: same Plex library, a folder named like the
+    library, same Sonarr/Radarr instance, same type; otherwise None (= assets root)."""
+    root = Path(item["assets_path"])
+    others = [i for i in STATE["items"] if i["world"] == item["world"] and i["id"] != item["id"]]
+
+    def most_common(items: list[dict]) -> Path | None:
+        c = Counter(p for p in (_parent_of(i, root) for i in items) if p is not None)
+        return c.most_common(1)[0][0] if c else None
+
+    lib = item.get("library_title")
+    if lib:
+        hit = most_common([i for i in others if i.get("library_title") == lib])
+        if hit:
+            return hit
+        try:  # an existing folder named like the library
+            for d in root.iterdir():
+                if d.is_dir() and d.name.casefold() == lib.casefold():
+                    return d
+        except OSError:
+            pass
+    arr_sources = {x for x in item.get("sources", []) if x not in ("Plex", "Eigener Ordner")}
+    if arr_sources:
+        hit = most_common([i for i in others if arr_sources & set(i.get("sources", []))])
+        if hit:
+            return hit
+    return most_common([i for i in others if i["type"] == item["type"]])
 
 
 def refresh_item(item_id: str) -> None:
