@@ -45,7 +45,7 @@ const seasonNum = k => k === "poster" ? -1 : parseInt(k.split("-")[1], 10);
 const slotLabel = (k, type) => k === "poster" ? (type === "movie" ? "Poster" : "Serienposter") : seasonNum(k) === 0 ? "Specials" : "Staffel " + seasonNum(k);
 
 /* ------------------------------------------------------------ state --- */
-const S = { st: null, items: [], total: 0, filter: "missing", q: "", lib: "", world: "", poll: null, step: "", reached: 0, rain: new Set(), view: "" };
+const S = { st: null, langs: [], items: [], total: 0, filter: "all", q: "", lib: "", world: "", poll: null, step: "", reached: 0, rain: new Set(), view: "" };
 const cfg = () => S.st.config;
 const curWorld = () => cfg().worlds.find(w => w.id === S.world) || cfg().worlds[0];
 const worldStats = () => (S.st.summary.worlds || {})[S.world] || { items: 0, slots: 0, missing: 0, complete_items: 0 };
@@ -134,7 +134,7 @@ function worldTransition(world, mid) {
 
 /* ------------------------------------------------------------ routing --- */
 async function boot() {
-  try { await loadState(); } catch (e) { app.append(h("div", { class: "empty" }, "Backend nicht erreichbar: " + e.message)); return; }
+  try { await loadState(); S.langs = await api("/languages"); } catch (e) { app.append(h("div", { class: "empty" }, "Backend nicht erreichbar: " + e.message)); return; }
   if (!S.st.onboarded) return wizard();
   dashboard();
 }
@@ -146,7 +146,7 @@ function dashboard() {
   const ws = cfg().worlds;
   fill(app,
     h("header", { class: "top" }, h("div", { class: "in" },
-      h("div", { class: "logo" }, h("i", {}, "p5"), h("span", {}, "assets", h("u", {}, "_"))),
+      h("div", { class: "logo" }, h("img", { class: "logoimg", src: "/static/icon.png", alt: "" }), h("span", {}, "assets", h("u", {}, "_"))),
       ws.length > 1 ? h("div", { class: "worlds", title: "Welt wechseln" }, ws.map(w =>
         h("button", { class: w.id === S.world ? "on" : "", style: `--c:${worldColor(w)}`, onclick: () => switchWorld(w.id) }, h("i"), w.name))) : null,
       h("div", { class: "search" }, h("input", { type: "search", placeholder: "Titel suchen …", id: "q", value: S.q, oninput: debounce(async e => { S.q = e.target.value; await loadItems(); renderGrid(); }, 200) })),
@@ -168,7 +168,7 @@ function switchWorld(id) {
   if (id === S.world) return;
   const w = cfg().worlds.find(x => x.id === id);
   worldTransition(w, async () => {
-    S.world = id; S.filter = "missing"; S.q = ""; S.lib = "";
+    S.world = id; S.filter = "all"; S.q = ""; S.lib = "";
     try { localStorage.setItem("p5world", id); } catch { /* ignore */ }
     setAccent(); dashboard();
   });
@@ -208,8 +208,8 @@ function renderChips() {
   const libs = c.libraries.filter(l => l.enabled && l.world === S.world);
   const hasExtra = c.arr.some(a => a.world === S.world) || c.custom.some(x => x.world === S.world);
   fill(el,
-    chip("Fehlende", S.filter === "missing", setF("missing"), ws.items - ws.complete_items),
     chip("Alle", S.filter === "all", setF("all"), ws.items),
+    chip("Fehlende", S.filter === "missing", setF("missing"), ws.items - ws.complete_items),
     chip("Vollständig", S.filter === "complete", setF("complete"), ws.complete_items),
     hasExtra ? chip("Nicht in Plex", S.filter === "notplex", setF("notplex")) : null,
     libs.length > 1 ? h("select", { style: "width:auto", onchange: async e => { S.lib = e.target.value; await loadItems(); renderGrid(); } },
@@ -378,9 +378,7 @@ function openPreview(it, key) {
 
 /** Use one existing asset for many tiles of the title at once (e.g. poster -> Season00 … Season50), named Kometa-conform. */
 function openApplyAll(it, key, draw) {
-  const knownEmpty = Object.keys(it.slots).filter(t => t !== key && !it.slots[t].exists).length;
-  // no empty known tiles (e.g. a title without seasons yet): preselect the full Season00 – Season50 range
-  const opt = { range: knownEmpty ? "known" : "all", poster: key !== "poster", specials: true, overwrite: false };
+  const opt = { range: "known", poster: key !== "poster", specials: true, overwrite: false };
   const label = slotLabel(key, it.type);
   const compute = () => {
     let list = opt.range === "known" ? Object.keys(it.slots) : ["poster", ...Array.from({ length: it.max_season + 1 }, (_, n) => "season-" + n)];
@@ -457,19 +455,42 @@ function modal(title, body, footer) {
 async function searchOnline(it, slot, draw) {
   const body = h("div", {}, h("div", { class: "empty" }, h("span", { class: "spin" }), " Suche bei TMDb, TVDB und fanart.tv …"));
   const m = modal(`${it.title} – ${slotLabel(slot, it.type)}`, body);
+  const byCode = Object.fromEntries(S.langs.map(l => [l.code, l]));
+  const langTitle = code => { const l = byCode[code]; const name = !l ? code : code === "xx" ? "Textless (No Text)" : l.native && l.native !== l.name ? `${l.name} (${l.native})` : l.name; return `${code} • ${name}`; };
   try {
     const r = await api(`/items/${it.id}/${slot}/search`);
-    fill(body,
-      Object.entries(r.errors || {}).map(([k, v]) => h("div", { class: "status bad" }, `⚠ ${k}: ${v}`)),
-      r.images.length ? h("div", { class: "picks" }, r.images.map(img => {
-        const p = h("div", { class: "pick", title: "Übernehmen", onclick: async () => {
-          p.classList.add("busy");
-          try { const res = await api(`/items/${it.id}/${slot}/url`, { json: { url: img.url } }); toast("Übernommen ✓", "ok"); m.close(); S.rain.add(it.id + "|" + slot); draw(res.item); }
-          catch (e) { p.classList.remove("busy"); toast(e.message, "bad"); }
-        } }, h("img", { loading: "lazy", src: "/api/proxy?url=" + encodeURIComponent(img.preview || img.url) }),
-          h("span", {}, img.source, img.lang ? h("b", {}, img.lang) : ""));
-        return p;
-      })) : h("div", { class: "empty" }, "Keine Poster gefunden."));
+    let tab = "Alle";
+    const tabs = h("div", { class: "tabs" }), content = h("div");
+    const pick = img => {
+      const p = h("div", { class: "pick", title: "Übernehmen", onclick: async () => {
+        p.classList.add("busy");
+        try { const res = await api(`/items/${it.id}/${slot}/url`, { json: { url: img.url } }); toast("Übernommen ✓", "ok"); m.close(); S.rain.add(it.id + "|" + slot); draw(res.item); }
+        catch (e) { p.classList.remove("busy"); toast(e.message, "bad"); }
+      } }, h("img", { loading: "lazy", src: "/api/proxy?url=" + encodeURIComponent(img.preview || img.url) }),
+        h("span", {}, img.source, img.width ? h("b", {}, `${img.width}×${img.height}`) : ""));
+      return p;
+    };
+    function render() {
+      fill(tabs, [{ name: "Alle", state: "ok", count: r.images.length }, ...r.providers].map(pv => h("button", {
+        class: "tab" + (tab === pv.name ? " on" : "") + (pv.state !== "ok" ? " off" : ""), disabled: pv.state === "nokey",
+        title: pv.state === "nokey" ? "Kein API-Key hinterlegt (Einstellungen → Quellen)" : pv.state === "error" ? pv.error : "",
+        onclick: () => { tab = pv.name; render(); } },
+        pv.name, h("small", {}, pv.state === "nokey" ? "kein Key" : pv.state === "error" ? "Fehler" : pv.count))));
+      const prov = r.providers.find(p => p.name === tab);
+      const list = tab === "Alle" ? r.images : r.images.filter(i => i.source === tab);
+      const groups = r.languages.map(l => ({ code: l.code, imgs: list.filter(i => i.lang === l.code) }));
+      const others = {};
+      list.filter(i => !r.languages.some(l => l.code === i.lang)).forEach(i => (others[i.lang] ||= []).push(i));
+      Object.keys(others).sort((a, b) => others[b].length - others[a].length).forEach(code => groups.push({ code, imgs: others[code], other: true }));
+      fill(content,
+        prov && prov.state === "error" ? h("div", { class: "status bad" }, `⚠ ${prov.name}: ${prov.error}`) : null,
+        tab === "Alle" ? r.providers.filter(p => p.state === "error").map(p => h("div", { class: "status bad" }, `⚠ ${p.name}: ${p.error}`)) : null,
+        groups.filter(g => g.imgs.length).map((g, n) => h("div", { class: "langgroup" },
+          h("h4", {}, g.other ? "Weitere Sprache · " : `${n + 1}. `, langTitle(g.code), h("small", {}, ` ${g.imgs.length}`)),
+          h("div", { class: "picks" }, g.imgs.map(pick)))),
+        list.length ? null : h("div", { class: "empty" }, "Keine Poster gefunden."));
+    }
+    fill(body, tabs, content); render();
   } catch (e) { fill(body, h("div", { class: "status bad" }, e.message)); }
 }
 
@@ -678,7 +699,7 @@ function drawWiz() {
   // labelled step navigation: in settings every step is reachable, during onboarding only the ones visited so far
   const shown = list.map((name, i) => ({ name, i })).filter(s => !(S.wizSettings && (s.name === "welcome" || s.name === "done")));
   fill(app, h("div", { class: "wiz" },
-    h("div", { class: "logo" }, h("i", {}, "p5"), h("span", {}, "assets", h("u", {}, "_"))),
+    h("div", { class: "logo" }, h("img", { class: "logoimg", src: "/static/icon.png", alt: "" }), h("span", {}, "assets", h("u", {}, "_"))),
     h("nav", { class: "stepnav" }, shown.map((s, n) => {
       const reachable = S.wizSettings || s.i <= (S.reached || 0);
       return h("button", { class: (s.name === S.step ? "on " : "") + (s.i < idx ? "done" : ""), disabled: !reachable, title: reachable ? `Zu „${STEP_LABELS[s.name]}“ springen` : "Erst die vorherigen Schritte abschließen",
@@ -813,20 +834,46 @@ function wArr(nav, c) {
     nav());
 }
 
+/** Priority list of poster languages for one world: drag to reorder, arrows, remove, add from a dropdown. */
+function langList(w, persist) {
+  const byCode = Object.fromEntries(S.langs.map(l => [l.code, l]));
+  const fmt = code => { const l = byCode[code]; if (!l) return code; return code === "xx" ? "Textless (No Text)" : l.native && l.native !== l.name ? `${l.name} (${l.native})` : l.name; };
+  const box = h("div", { class: "langlist" });
+  let dragFrom = null;
+  const move = (from, to) => { if (to < 0 || to >= w.languages.length || from === to) return; const [x] = w.languages.splice(from, 1); w.languages.splice(to, 0, x); persist(); draw(); };
+  function draw() {
+    const add = h("select", { onchange: e => { if (e.target.value) { w.languages.push(e.target.value); persist(); draw(); } } },
+      h("option", { value: "" }, "＋ Add Language"), S.langs.filter(l => !w.languages.includes(l.code)).map(l => h("option", { value: l.code }, `${l.code} • ${fmt(l.code)}`)));
+    fill(box, w.languages.map((code, i) => {
+      const row = h("div", { class: "langrow", draggable: true,
+        ondragstart: e => { dragFrom = i; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", code); row.classList.add("dragging"); },
+        ondragend: () => row.classList.remove("dragging"),
+        ondragover: e => { if (dragFrom !== null) { e.preventDefault(); row.classList.add("over"); } },
+        ondragleave: () => row.classList.remove("over"),
+        ondrop: e => { e.preventDefault(); row.classList.remove("over"); if (dragFrom !== null) { const f = dragFrom; dragFrom = null; move(f, i); } } },
+        h("span", { class: "grip", title: "Ziehen zum Sortieren" }, "⠿"), h("span", { class: "num" }, i + 1),
+        h("span", { class: "lname" }, h("b", {}, code), " • ", fmt(code)),
+        h("button", { class: "btn sm ghost", title: "Nach oben", disabled: i === 0, onclick: () => move(i, i - 1) }, "▲"),
+        h("button", { class: "btn sm ghost", title: "Nach unten", disabled: i === w.languages.length - 1, onclick: () => move(i, i + 1) }, "▼"),
+        h("button", { class: "btn sm ghost danger", title: "Entfernen", onclick: () => { w.languages.splice(i, 1); persist(); draw(); } }, "✕"));
+      return row;
+    }), w.languages.length ? null : h("div", { class: "hint" }, "Keine Sprache gewählt – die Online-Suche zeigt dann alles ungeordnet."), add);
+  }
+  draw();
+  return box;
+}
+
 function wWorlds(nav, c) {
   const worlds = c.worlds.map(w => ({ ...w }));
   const persist = () => savePatch({ worlds });
   const checks = [];
   const mkOpt = (key, title, sub) => h("label", { class: "opt" }, h("input", { type: "checkbox", checked: c.assets[key], onchange: e => savePatch({ assets: { [key]: e.target.checked } }) }), h("div", {}, title, h("small", {}, sub)));
-  const depthLabels = ["0 – nur oberste Ebene (Kometa asset_depth: 0)", "1 – z. B. assets/Serien/<Titel>", "2", "3 (Standard)", "4", "5", "6"];
 
   const worldCard = (w, i) => {
     const name = h("input", { type: "text", value: w.name, onchange: async e => { w.name = e.target.value; await persist(); drawWiz(); } });
     const path = h("input", { type: "text", value: w.assets_path, onchange: e => { w.assets_path = e.target.value; persist(); check(); } });
     const hue = h("select", { onchange: async e => { w.hue = +e.target.value; await persist(); drawWiz(); } },
       HUES.map(([v, label]) => h("option", { value: v, selected: w.hue === v }, label)));
-    const depth = h("select", { onchange: e => { w.search_depth = +e.target.value; persist(); } },
-      depthLabels.map((label, v) => h("option", { value: v, selected: (w.search_depth ?? 3) === v }, label)));
     const st = statusEl(), fsBox = h("div");
     const check = async () => {
       const r = await api("/path/check", { json: { path: path.value } });
@@ -853,7 +900,7 @@ function wWorlds(nav, c) {
       h("label", { class: "f" }, "Assets-Ordner (im Container)"),
       h("div", { class: "row" }, h("div", { class: "grow" }, path), h("button", { class: "btn", onclick: () => browse(path.value || "/") }, "📂 Durchsuchen")),
       fsBox, st,
-      h("label", { class: "f" }, "Suchtiefe (wie Kometa asset_depth)"), depth);
+      h("label", { class: "f" }, "Bevorzugte Sprache der Poster (Reihenfolge = Priorität)"), langList(w, persist));
   };
 
   const next = async () => {
@@ -952,20 +999,18 @@ function wApis(nav, c) {
         catch (err) { setStatus(st, false, err.message); }
       } }, "Testen")), st);
   };
-  const lang = h("select", { onchange: e => savePatch({ apis: { language: e.target.value } }) },
-    [["de", "Deutsch"], ["en", "English"], ["fr", "Français"], ["es", "Español"], ["it", "Italiano"], ["nl", "Nederlands"]].map(([v, l]) => h("option", { value: v, selected: a.language === v }, l)));
   return h("div", {}, h("h1", {}, "Poster-Quellen"), h("p", { class: "lead" }, "Optional: Mit API-Keys kann p5assets fehlende Poster direkt online suchen. Du kannst diesen Schritt überspringen."),
     row("tmdb", "TMDb", "https://www.themoviedb.org/settings/api"),
     row("tvdb", "TheTVDB", "https://thetvdb.com/dashboard/account/apikey", true),
     row("fanart", "fanart.tv", "https://fanart.tv/get-an-api-key/"),
-    h("label", { class: "f" }, "Bevorzugte Sprache der Poster"), lang,
+    h("p", { class: "hint" }, "Die bevorzugte Sprache der Poster stellst du pro Welt unter „Welten“ ein."),
     nav(null, "Weiter"));
 }
 
 function wDone() {
   return h("div", { style: "text-align:center" }, h("div", { class: "big" }, "🚀"), h("h1", {}, "Alles bereit!"),
     h("p", { class: "lead" }, "p5assets scannt jetzt deine Bibliotheken und zeigt dir, was fehlt."),
-    h("button", { class: "btn primary", onclick: async () => { await api("/onboarding/finish", { method: "POST" }); await loadState(); S.filter = "missing"; dashboard(); } }, "Scan starten"),
+    h("button", { class: "btn primary", onclick: async () => { await api("/onboarding/finish", { method: "POST" }); await loadState(); S.filter = "all"; dashboard(); } }, "Scan starten"),
     h("div", { style: "margin-top:16px" }, h("button", { class: "btn ghost", onclick: stepPrev }, "Zurück")));
 }
 

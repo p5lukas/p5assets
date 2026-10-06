@@ -8,7 +8,7 @@ Hintergründe werden bewusst ignoriert.
 - Onboarding: Plex-Login (PIN) oder URL + Token, Bibliotheken, Sonarr/Radarr, Welten mit Assets-Ordnern, TMDb/TVDB/fanart.tv
 - **Welten** (z. B. HD und 4K): getrennte Bereiche mit eigenem Assets-Ordner, eigener Titelliste, eigenem Dashboard und
   **eigener Farbe** (die ganze Oberfläche färbt sich um). Bibliotheken und Sonarr-/Radarr-Instanzen ordnest du per
-  Drag & Drop in Bubbles einer Welt zu. Umschalten per Matrix-Animation. Die Suchtiefe (wie Kometa `asset_depth`) ist pro Welt einstellbar.
+  Drag & Drop in Bubbles einer Welt zu. Umschalten per Matrix-Animation.
 - **Sonarr & Radarr** (beliebig viele Instanzen): auch Titel und Staffeln, die noch nicht in Plex sind – Poster lassen sich schon im Voraus ablegen
 - **Eigene Ordner**: Poster für Titel ablegen, die weder in Plex noch in Sonarr/Radarr stehen
 - Detailansicht mit Kacheln für Poster und **Season00 – Season50**, auch für Staffeln, die es noch nicht gibt
@@ -18,7 +18,7 @@ Hintergründe werden bewusst ignoriert.
 - Ersetzen per Drag & Drop: einzelnes Bild auf eine Kachel, **mehrere Bilder, ganze Ordner oder ZIPs** irgendwo ins Fenster
 - Automatische Zuordnung über Datei-/Ordnernamen (`Show (2020) - Season 2.jpg`, `Show/S01.png`, `poster.jpg` …)
 - Kometa-konforme Benennung: `<Medienordner>/poster.jpg`, `Season00.jpg`, `Season01.jpg` … (oder flach mit `asset_folders: false`)
-- Online-Suche nach Postern (TMDb, TVDB, fanart.tv) und Übernahme per Klick
+- Online-Suche nach Postern (TMDb, TVDB, fanart.tv) mit Tabs je Anbieter, gruppiert nach deiner **Sprach-Prioritätsliste pro Welt** (z. B. Textless → Deutsch → English); Übernahme per Klick
 - Dashboard mit Abdeckung in %, Filter „Fehlende“, Suche, automatischer Hintergrund-Scan
 
 ## Start (Docker Compose)

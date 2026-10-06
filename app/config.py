@@ -8,6 +8,8 @@ import threading
 import uuid
 from pathlib import Path
 
+from .languages import DEFAULT_ORDER, LANGUAGES
+
 CONFIG_DIR = Path(os.environ.get("P5_CONFIG_DIR", "/config"))
 CONFIG_FILE = CONFIG_DIR / "config.json"
 CACHE_DIR = CONFIG_DIR / "cache"
@@ -91,6 +93,14 @@ def normalize(cfg: dict, legacy_path: str | None = None) -> bool:
         depth = w.get("search_depth")
         if not isinstance(depth, int) or not 0 <= depth <= 6:
             w["search_depth"] = 3; changed = True
+        known = {l[0] for l in LANGUAGES}
+        langs_ok = isinstance(w.get("languages"), list) and all(isinstance(x, str) for x in w["languages"])
+        if not langs_ok:
+            w["languages"] = list(DEFAULT_ORDER); changed = True
+        else:
+            cleaned = [x for x in dict.fromkeys(w["languages"]) if x in known]
+            if cleaned != w["languages"]:
+                w["languages"] = cleaned; changed = True
         w.setdefault("assets_path", "")
     ids = {w["id"] for w in cfg["worlds"]}
     first = cfg["worlds"][0]["id"]

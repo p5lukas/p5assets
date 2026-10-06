@@ -238,3 +238,27 @@ details.more-seasons .slots{padding:6px 0 20px}
 .badge.b{top:auto;bottom:8px}
 .poster[draggable=true]{cursor:grab}
 .slot.copyover .poster{outline:2px dashed var(--accent);outline-offset:2px;box-shadow:0 0 28px var(--glow)}
+
+/* logo, online search tabs/groups, language list */
+.logoimg{width:34px;height:34px;border-radius:8px;box-shadow:0 0 14px var(--dim);filter:hue-rotate(calc(var(--h) * 1deg - 140deg))}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;position:sticky;top:-20px;background:var(--panel);padding:6px 0;z-index:2}
+.tab{background:transparent;border:1px solid var(--line);border-radius:var(--r);padding:6px 12px;font-size:13px;color:var(--muted);display:inline-flex;gap:8px;align-items:center}
+.tab small{opacity:.8}
+.tab:not(:disabled):hover{border-color:var(--accent);color:var(--accent)}
+.tab.on{border-color:var(--accent);color:var(--accent);background:var(--dim);text-shadow:0 0 10px var(--glow)}
+.tab.off{color:var(--faint)}
+.tab:disabled{opacity:.45;cursor:not-allowed}
+.langgroup{margin:6px 0 22px}
+.langgroup h4{margin:0 0 10px;font-size:13px;color:var(--accent);letter-spacing:.04em;border-bottom:1px solid var(--line);padding-bottom:6px}
+.langgroup h4 small{color:var(--muted)}
+.pick span b{font-weight:400;opacity:.8}
+.langlist{display:grid;gap:8px}
+.langrow{display:flex;align-items:center;gap:12px;background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:8px 10px;transition:.12s}
+.langrow:hover{border-color:var(--accent)}
+.langrow.dragging{opacity:.4}
+.langrow.over{outline:2px solid var(--accent);box-shadow:0 0 18px var(--dim)}
+.langrow .grip{cursor:grab;color:var(--muted);font-size:18px;line-height:1;user-select:none}
+.langrow .num{width:20px;text-align:right;color:var(--muted)}
+.langrow .lname{flex:1}
+.langrow .lname b{color:var(--accent)}
+.langrow .btn.sm{padding:3px 8px}

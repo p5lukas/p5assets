@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import arr as arrmod, config, kometa, plex as plexmod, providers, scanner, uploads
+from . import arr as arrmod, config, kometa, languages as langmod, plex as plexmod, providers, scanner, uploads
 from .plex import Plex, PlexError
 
 STATIC = Path(__file__).parent / "static"
@@ -494,7 +494,14 @@ async def search_posters(item_id: str, slot: str):
     apis = config.get()["apis"]
     if not (apis["tmdb"] or apis["tvdb"] or apis["fanart"]):
         raise HTTPException(400, "Keine API-Keys hinterlegt (Einstellungen → Quellen)")
-    return await providers.search(apis, it["type"], it["ids"], it["title"], it["year"], season)
+    world = next((w for w in config.get()["worlds"] if w["id"] == it["world"]), None)
+    return await providers.search(apis, it["type"], it["ids"], it["title"], it["year"], season,
+                                  (world or {}).get("languages"))
+
+
+@app.get("/api/languages")
+async def language_catalogue():
+    return langmod.catalogue()
 
 
 @app.get("/api/proxy")
@@ -625,6 +632,11 @@ async def import_cancel(sid: str):
 @app.get("/")
 async def index():
     return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/favicon.ico")
+async def favicon():
+    return FileResponse(STATIC / "icon.png", media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
 
 
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
