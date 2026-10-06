@@ -30,7 +30,7 @@ Die Ordnernamen werden aus dem Medienpfad in Plex bzw. Sonarr/Radarr abgeleitet 
 1. Template **und Icon** auf den Server bringen. Am einfachsten per Netzwerkfreigabe (funktioniert auch bei privatem Repo):
    `unraid/p5assets.xml` → `\\<Unraid-IP>\flash\config\plugins\dockerMan\templates-user\my-p5assets.xml`
    (Alternativ bei öffentlichem Repo per Terminal:
-   `wget -O /boot/config/plugins/dockerMan/templates-user/my-p5assets.xml https://raw.githubusercontent.com/p5lukas/p5assets/main/unraid/p5assets.xml`)
+   `wget -O /boot/config/plugins/dockerMan/templates-user/my-p5assets.xml https://raw.githubusercontent.com/p5lukas/p5assets/dev/unraid/p5assets.xml`)
 2. *Docker → Add Container* → Template **p5assets** unter *User templates* wählen.
 3. Pfade setzen: **Config** (z. B. `/mnt/user/appdata/p5assets`), **Assets 1** (dein Kometa-`asset_directory`),
    bei Bedarf **Assets 2** (z. B. 4K). Nicht benötigte Assets-Pfade leer lassen.
@@ -45,8 +45,9 @@ Die Ordnernamen werden aus dem Medienpfad in Plex bzw. Sonarr/Radarr abgeleitet 
 | `:1.2.3` | Git-Tag `v1.2.3` | feste Version |
 | `:sha-…` | jeder Build | Fehlersuche |
 
-Das Template nutzt `:latest`. Zum Testen im Container-Formular das Feld *Repository* auf
-`ghcr.io/p5lukas/p5assets:dev` ändern.
+Solange p5assets in der Entwicklung ist, nutzen Template und Compose-Datei `:dev`. Sobald alles stabil läuft,
+wird auf `:latest` (Branch `main`) umgestellt: im Container-Formular das Feld *Repository* auf
+`ghcr.io/p5lukas/p5assets:latest` ändern.
 
 ### Privates GHCR-Paket in Unraid
 Solange das Paket privat ist, braucht Unraid einen Login bei ghcr.io:

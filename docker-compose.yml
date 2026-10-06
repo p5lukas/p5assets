@@ -1,6 +1,6 @@
 services:
   p5assets:
-    image: ghcr.io/p5lukas/p5assets:latest
+    image: ghcr.io/p5lukas/p5assets:dev
     # oder lokal bauen: build: .
     container_name: p5assets
     restart: unless-stopped

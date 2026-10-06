@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>p5assets</Name>
-  <Repository>ghcr.io/p5lukas/p5assets:latest</Repository>
+  <Repository>ghcr.io/p5lukas/p5assets:dev</Repository>
   <Registry>https://github.com/p5lukas/p5assets/pkgs/container/p5assets</Registry>
   <Network>bridge</Network>
   <MyIP/>
@@ -12,8 +12,8 @@
   <Overview>Überwacht deine Plex-Bibliotheken (und optional Sonarr/Radarr) sowie die Kometa-Assets-Ordner auf fehlende Poster und Staffelcover (poster, Season00, Season01 …). Mehrere Welten (z. B. HD und 4K) mit eigenen Assets-Ordnern. Einzelne Bilder, ganze Ordner oder ZIPs per Drag &amp; Drop hochladen – die Dateien werden automatisch Kometa-konform benannt. Mit Onboarding und optionaler Online-Suche über TMDb, TVDB und fanart.tv.</Overview>
   <Category>MediaApp:Other Tools:</Category>
   <WebUI>http://[IP]:[PORT:8080]/</WebUI>
-  <TemplateURL>https://raw.githubusercontent.com/p5lukas/p5assets/main/unraid/p5assets.xml</TemplateURL>
-  <Icon>https://raw.githubusercontent.com/p5lukas/p5assets/main/unraid/icon.png</Icon>
+  <TemplateURL>https://raw.githubusercontent.com/p5lukas/p5assets/dev/unraid/p5assets.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/p5lukas/p5assets/dev/unraid/icon.png</Icon>
   <ExtraParams/>
   <PostArgs/>
   <CPUset/>
