@@ -13,6 +13,7 @@ Hintergründe werden bewusst ignoriert.
 - **Eigene Ordner**: Poster für Titel ablegen, die weder in Plex noch in Sonarr/Radarr stehen
 - Detailansicht mit Kacheln für Poster und **Season00 – Season50**, auch für Staffeln, die es noch nicht gibt
 - Vorhandene Poster per Drag & Drop auf eine andere Kachel **kopieren** (z. B. Staffel 1 → Staffel 2, automatisch umbenannt)
+- **„Auf alle …“**: ein vorhandenes Bild für mehrere oder alle Kacheln einer Serie setzen (z. B. `poster.jpg` → Season00 – Season50, oder Season01 → alle anderen Kacheln), alles Kometa-konform benannt
 - **Vorschau** vergrößert ein Asset und zeigt Quelle, Größe, Datum und Auflösung; Plex-Bilder (mit Overlays) erscheinen nur als gekennzeichnete Vorschau
 - Ersetzen per Drag & Drop: einzelnes Bild auf eine Kachel, **mehrere Bilder, ganze Ordner oder ZIPs** irgendwo ins Fenster
 - Automatische Zuordnung über Datei-/Ordnernamen (`Show (2020) - Season 2.jpg`, `Show/S01.png`, `poster.jpg` …)

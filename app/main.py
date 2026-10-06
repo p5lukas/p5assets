@@ -91,24 +91,35 @@ def _slot_check(it: dict, slot: str) -> int | None:
     return season
 
 
-async def _store(it: dict, slot: str, data: bytes) -> dict:
-    path = await asyncio.to_thread(uploads.write_asset, it, slot, data)
-    scanner.refresh_item(it["id"])
-    warn = None
-    cfg = config.get()
-    if cfg["plex"].get("upload_to_plex"):
+async def _plex_push(it: dict, slots: list[str], data: bytes) -> str | None:
+    """Optionally also set the poster(s) in Plex. Returns a warning text on problems."""
+    if not config.get()["plex"].get("upload_to_plex"):
+        return None
+    targets = []
+    for slot in slots:
         season = kometa.parse_slot_key(slot)
         rk = it.get("rating_key") if season is None else next(
             (s["rating_key"] for s in it["seasons"] if s["number"] == season), None)
         if rk:
-            p = _plex()
-            try:
-                body, _ = await asyncio.to_thread(uploads.normalize_image, data, True)
-                await p.upload_poster(rk, body)
-            except PlexError as e:
-                warn = str(e)
-            finally:
-                await p.close()
+            targets.append(rk)
+    if not targets:
+        return None
+    p = _plex()
+    try:
+        body, _ = await asyncio.to_thread(uploads.normalize_image, data, True)
+        for rk in targets:
+            await p.upload_poster(rk, body)
+    except PlexError as e:
+        return str(e)
+    finally:
+        await p.close()
+    return None
+
+
+async def _store(it: dict, slot: str, data: bytes) -> dict:
+    path = await asyncio.to_thread(uploads.write_asset, it, slot, data)
+    scanner.refresh_item(it["id"])
+    warn = await _plex_push(it, [slot], data)
     return {"ok": True, "path": str(path), "warning": warn, "item": _public_item(_item(it["id"]), True)}
 
 
@@ -416,6 +427,40 @@ async def copy_slot(item_id: str, slot: str, body: CopyBody):
     if not src or not Path(src).is_file():
         raise HTTPException(404, "Das Quellbild wurde im Assets-Ordner nicht gefunden")
     return await _store(it, slot, Path(src).read_bytes())
+
+
+class CopyAllBody(BaseModel):
+    source: str
+    targets: list[str]
+    overwrite: bool = False
+
+
+@app.post("/api/items/{item_id}/copy-all")
+async def copy_all(item_id: str, body: CopyAllBody):
+    """Use one existing asset of this title for many slots at once (e.g. poster.jpg -> Season00 … Season50)."""
+    it = _item(item_id)
+    src = it["slots"].get(body.source, {}).get("path")
+    if not src or not Path(src).is_file():
+        raise HTTPException(404, "Das Quellbild wurde im Assets-Ordner nicht gefunden")
+    known = set(it["slots"])
+    targets, skipped = [], []
+    for t in dict.fromkeys(body.targets):
+        if t == body.source:
+            continue
+        if not kometa.slot_allowed(it["type"], known, t):
+            skipped.append(t)
+            continue
+        if it["slots"].get(t, {}).get("exists") and not body.overwrite:
+            skipped.append(t)
+            continue
+        targets.append(t)
+    if not targets:
+        return {"ok": True, "written": [], "skipped": skipped, "warning": None, "item": _public_item(it, True)}
+    data = Path(src).read_bytes()
+    await asyncio.to_thread(uploads.write_assets, it, targets, data)
+    scanner.refresh_item(it["id"])
+    warn = await _plex_push(it, targets, data)
+    return {"ok": True, "written": targets, "skipped": skipped, "warning": warn, "item": _public_item(_item(it["id"]), True)}
 
 
 class UrlBody(BaseModel):

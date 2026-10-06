@@ -52,8 +52,9 @@ def normalize_image(data: bytes, convert_to_jpg: bool) -> tuple[bytes, str]:
     return buf.getvalue(), ".jpg"
 
 
-def write_asset(item: dict, slot: str, data: bytes) -> Path:
-    """Store an image for (item, slot) in the assets folder of the item's world, replacing the old one."""
+def write_assets(item: dict, slots: list[str], data: bytes) -> list[Path]:
+    """Store one image for several slots of a title (poster, Season00 …) in the assets folder of the item's
+    world. Every file is named Kometa-conform; previous files of the same slot are replaced."""
     cfg = config.get()
     acfg = cfg["assets"]
     root = Path(item["assets_path"])
@@ -61,24 +62,32 @@ def write_asset(item: dict, slot: str, data: bytes) -> Path:
         raise ValueError("Für diesen Titel ist kein Ordnername bekannt")
     if not root.is_dir():
         raise ValueError(f"Assets-Ordner {root} existiert nicht (im Container gemountet?)")
-    season = kometa.parse_slot_key(slot)
     body, ext = normalize_image(data, acfg["convert_to_jpg"])
     index = kometa.AssetIndex(root, acfg["asset_folders"], item.get("search_depth", 3))
     base = index.base_dir(item["folder"], root)
-    old = index.slots(item["folder"]).get(slot)
-    target = kometa.asset_target(base, item["folder"], season, acfg["asset_folders"], ext)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_name(f".{target.name}.{uuid.uuid4().hex[:6]}.tmp")
-    tmp.write_bytes(body)
-    tmp.replace(target)
-    # remove the previous file of this slot (other extension / spelling)
-    if old and old != target and old.exists():
-        old.unlink()
-    for ext2 in kometa.IMAGE_EXTS:
-        other = target.with_suffix(ext2)
-        if other != target and other.exists() and other.stem == target.stem:
-            other.unlink()
-    return target
+    existing = index.slots(item["folder"])
+    written: list[Path] = []
+    for slot in slots:
+        season = kometa.parse_slot_key(slot)
+        target = kometa.asset_target(base, item["folder"], season, acfg["asset_folders"], ext)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        tmp = target.with_name(f".{target.name}.{uuid.uuid4().hex[:6]}.tmp")
+        tmp.write_bytes(body)
+        tmp.replace(target)
+        # remove the previous file of this slot (other extension / spelling)
+        old = existing.get(slot)
+        if old and old != target and old.exists():
+            old.unlink()
+        for ext2 in kometa.IMAGE_EXTS:
+            other = target.with_suffix(ext2)
+            if other != target and other.exists() and other.stem == target.stem:
+                other.unlink()
+        written.append(target)
+    return written
+
+
+def write_asset(item: dict, slot: str, data: bytes) -> Path:
+    return write_assets(item, [slot], data)[0]
 
 
 # ------------------------------------------------------------- staging ---

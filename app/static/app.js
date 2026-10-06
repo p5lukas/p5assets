@@ -316,6 +316,7 @@ async function openItem(id) {
       h("div", { class: "acts" },
         h("button", { class: "btn sm", onclick: () => searchOnline(it, key, draw) }, "🔎 Online"),
         exists ? h("button", { class: "btn sm", title: "Bild vergrößern und Details ansehen", onclick: () => openPreview(it, key) }, "Vorschau") : null,
+        exists && it.type === "show" ? h("button", { class: "btn sm", title: "Dieses Bild für weitere Kacheln dieser Serie verwenden", onclick: () => openApplyAll(it, key, draw) }, "Auf alle …") : null,
         exists ? h("button", { class: "btn sm danger", onclick: async () => { if (confirm(`${slotLabel(key, it.type)} wirklich löschen?`)) { const r = await api(`/items/${it.id}/${key}`, { method: "DELETE" }); draw(r.item); } } }, "Löschen") : null));
     box.onclick = () => pickFiles(files => uploadSlot(it, key, files, draw), false);
     makeDropTarget(el, files => uploadSlot(it, key, files, draw));
@@ -373,6 +374,63 @@ function openPreview(it, key) {
   function close() { wrap.remove(); document.removeEventListener("keydown", onKey); }
   document.addEventListener("keydown", onKey);
   document.body.append(wrap);
+}
+
+/** Use one existing asset for many tiles of the title at once (e.g. poster -> Season00 … Season50), named Kometa-conform. */
+function openApplyAll(it, key, draw) {
+  const knownEmpty = Object.keys(it.slots).filter(t => t !== key && !it.slots[t].exists).length;
+  // no empty known tiles (e.g. a title without seasons yet): preselect the full Season00 – Season50 range
+  const opt = { range: knownEmpty ? "known" : "all", poster: key !== "poster", specials: true, overwrite: false };
+  const label = slotLabel(key, it.type);
+  const compute = () => {
+    let list = opt.range === "known" ? Object.keys(it.slots) : ["poster", ...Array.from({ length: it.max_season + 1 }, (_, n) => "season-" + n)];
+    list = list.filter(t => t !== key && (opt.poster || t !== "poster") && (opt.specials || t !== "season-0"));
+    const overwritten = list.filter(t => it.slots[t] && it.slots[t].exists);
+    const targets = opt.overwrite ? list : list.filter(t => !(it.slots[t] && it.slots[t].exists));
+    return { targets, overwritten: opt.overwrite ? overwritten : [] };
+  };
+  const summary = h("div", { class: "status", style: "font-size:14px" });
+  const go = h("button", { class: "btn primary" }, "Anwenden");
+  const refresh = () => {
+    const { targets, overwritten } = compute();
+    summary.className = "status" + (targets.length ? " ok" : "");
+    summary.textContent = targets.length
+      ? `${targets.length} Kachel${targets.length === 1 ? "" : "n"} werden mit „${label}“ gefüllt${overwritten.length ? `, davon ${overwritten.length} überschrieben` : ""}.`
+      : "Keine Kachel zu füllen – passe die Auswahl an.";
+    go.disabled = !targets.length;
+  };
+  const radio = (name, value, text, sub, checked, onPick) => h("label", { class: "opt" },
+    h("input", { type: "radio", name, checked, onchange: () => { onPick(value); refresh(); } }), h("div", {}, text, sub ? h("small", {}, sub) : null));
+  const check = (text, sub, checked, onPick) => h("label", { class: "opt" },
+    h("input", { type: "checkbox", checked, onchange: e => { onPick(e.target.checked); refresh(); } }), h("div", {}, text, sub ? h("small", {}, sub) : null));
+  const known = Object.keys(it.slots).filter(t => t !== key).length;
+  const m = modal(`„${label}“ für ${it.title} auf andere Kacheln anwenden`, h("div", {},
+    h("div", { class: "row", style: "margin-bottom:6px" },
+      h("img", { src: `/api/asset/${it.id}/${key}?v=${it.slots[key].mtime}`, alt: "", style: "width:64px;border-radius:6px;border:1px solid var(--line)" }),
+      h("div", { class: "hint" }, "Das Bild wird kopiert und jede Kopie Kometa-konform benannt (poster, Season00, Season01 …). Das Original bleibt unverändert.")),
+    h("label", { class: "f" }, "Welche Kacheln?"),
+    radio("range", "known", "Nur vorhandene Kacheln dieser Serie", `${known} weitere Kachel${known === 1 ? "" : "n"} (Poster + bekannte Staffeln laut Plex/Sonarr)`, opt.range === "known", v => { opt.range = v; }),
+    radio("range", "all", `Alle Kacheln bis Season${String(it.max_season).padStart(2, "0")}`, "Poster und Season00 – Season50, auch für Staffeln, die es noch nicht gibt", opt.range === "all", v => { opt.range = v; }),
+    key !== "poster" ? check("Serienposter einbeziehen", null, opt.poster, v => { opt.poster = v; }) : null,
+    check("Specials (Season00) einbeziehen", null, opt.specials, v => { opt.specials = v; }),
+    h("label", { class: "f" }, "Bereits belegte Kacheln"),
+    radio("ow", "no", "Nur leere Kacheln füllen", "Vorhandene Bilder bleiben unangetastet", true, () => { opt.overwrite = false; }),
+    radio("ow", "yes", "Auch belegte Kacheln überschreiben", null, false, () => { opt.overwrite = true; }),
+    h("div", { style: "margin-top:14px" }, summary)),
+    [go, h("button", { class: "btn", onclick: () => m.close() }, "Abbrechen")]);
+  go.onclick = async () => {
+    const { targets, overwritten } = compute();
+    if (overwritten.length && !confirm(`${overwritten.length} bereits belegte Kachel(n) werden überschrieben. Fortfahren?`)) return;
+    try {
+      const r = await busy(go, () => api(`/items/${it.id}/copy-all`, { json: { source: key, targets, overwrite: opt.overwrite } }));
+      m.close();
+      toast(`${r.written.length} Kachel${r.written.length === 1 ? "" : "n"} gesetzt ✓`, "ok");
+      if (r.warning) toast("Plex: " + r.warning, "bad");
+      r.written.forEach(t => S.rain.add(it.id + "|" + t));
+      draw(r.item);
+    } catch (e) { toast(e.message, "bad"); }
+  };
+  refresh();
 }
 
 async function uploadSlot(it, slot, files, draw) {
