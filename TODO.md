@@ -2,7 +2,7 @@
 
 ## Uploads
 - [ ] Beliebige zusätzliche Staffelposter hochladen können, auch für Staffeln, die Plex noch nicht kennt (z. B. Season05, bevor sie bei Plex landet). Benennung weiterhin automatisch Kometa-konform (`Season05.jpg` im richtigen Medienordner)
-- [ ] Offen: Gilt das auch für ganze Titel, die noch nicht in Plex sind (Poster im Voraus ablegen)?
+- [ ] Sonarr/Radarr anbinden (URL + API-Key im Onboarding, optional, mehrere Instanzen möglich): Titel und Staffeln inkl. noch nicht erschienener/nicht in Plex vorhandener liefern; Ordnername (letzte Pfadkomponente) aus Sonarr/Radarr ableiten und mit Plex per TVDB-/TMDB-ID zusammenführen. Titel nur in Sonarr/Radarr als „noch nicht in Plex“ kennzeichnen, Poster-Upload dafür erlauben
 
 ## Design
 - [ ] Futuristischeres Design im Matrix-Stil: Terminal-/Coding-Look mit grünen Akzenten auf dunklem Hintergrund, passende Monospace-Schrift. Kein Regeneffekt im Hintergrund
