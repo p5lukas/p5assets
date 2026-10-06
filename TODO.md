@@ -17,7 +17,7 @@ Alle bisher gesammelten Punkte sind in Version 2 umgesetzt. Neue Beobachtungen b
 - [ ] Plex-Adresse in drei Felder aufteilen: Protokoll als Dropdown (http/https), IP-Adresse oder Hostname als Textfeld (manuell, ohne Vorgabe), Port als eigenes Feld mit Beispiel 32400 (Platzhalter). Daraus wird intern die URL zusammengesetzt. Gleiches Muster eventuell auch für Sonarr/Radarr (Standardports 8989/7878)
 
 ## Detailansicht
-- [ ] Vorhandene Bilder innerhalb der Serienansicht auf andere Kacheln ziehen: z. B. das Poster von Staffel 1 auf die leere Kachel Staffel 2 ziehen. Das Bild wird kopiert und Kometa-konform umbenannt (`Season02.jpg`), das Original bleibt erhalten. Auch für die Kachel „Serienposter“ und die „Weiteren Staffeln“ nutzbar
+- [ ] Vorhandene Bilder innerhalb der Serienansicht auf andere Kacheln ziehen: z. B. das Poster von Staffel 1 auf die leere Kachel Staffel 2 ziehen. Das Bild wird kopiert und Kometa-konform umbenannt (`Season02.jpg`), das Original bleibt erhalten. Auch für die Kachel „Serienposter“ und die „Weiteren Staffeln“ nutzbar. Ist die Zielkachel schon belegt, vorher nachfragen, ob sie überschrieben werden soll
 
 ## Design
 - [x] Futuristischeres Design im Matrix-Stil: Terminal-/Coding-Look mit grünen Akzenten auf dunklem Hintergrund, passende Monospace-Schrift. Kein Regeneffekt im Hintergrund
