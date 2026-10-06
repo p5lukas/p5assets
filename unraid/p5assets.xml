@@ -13,7 +13,7 @@
   <Category>MediaApp:Other Tools:</Category>
   <WebUI>http://[IP]:[PORT:8080]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/p5lukas/p5assets/main/unraid/p5assets.xml</TemplateURL>
-  <Icon>https://raw.githubusercontent.com/p5lukas/p5assets/main/unraid/icon.svg</Icon>
+  <Icon>https://raw.githubusercontent.com/p5lukas/p5assets/main/unraid/icon.png</Icon>
   <ExtraParams/>
   <PostArgs/>
   <CPUset/>
