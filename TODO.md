@@ -20,6 +20,7 @@ Alle bisher gesammelten Punkte sind in Version 2 umgesetzt. Neue Beobachtungen b
 - [ ] Vorhandene Bilder innerhalb der Serienansicht auf andere Kacheln ziehen: z. B. das Poster von Staffel 1 auf die leere Kachel Staffel 2 ziehen. Das Bild wird kopiert und Kometa-konform umbenannt (`Season02.jpg`), das Original bleibt erhalten. Auch für die Kachel „Serienposter“ und die „Weiteren Staffeln“ nutzbar. Ist die Zielkachel schon belegt, vorher nachfragen, ob sie überschrieben werden soll
 
 ## Design
+- [ ] Welten-Farben komplett umfärben statt nur die Akzentfarbe zu tauschen: Alles, was in Welt 1 grün ist (Hintergrund-Tönung, Rahmen, Texte, Glow, Matrix-Regen), bekommt in Welt 2 eine andere Farbe, damit nicht Blau auf Grün gemischt ist. Welt 1 ist immer grün. Umsetzung über eine gemeinsame Farbton-Variable, aus der die ganze Palette abgeleitet wird. Weitere Welten bekommen automatisch eigene Farbtöne (Vorschlag: Welt 2 blau, Welt 3 rot, Welt 4 gelb/orange), optional im Onboarding änderbar
 - [x] Futuristischeres Design im Matrix-Stil: Terminal-/Coding-Look mit grünen Akzenten auf dunklem Hintergrund, passende Monospace-Schrift. Kein Regeneffekt im Hintergrund
 - [x] „Digital Rain“-Effekt nur beim Ersetzen eines Posters: im Poster-Rahmen läuft der Matrix-Regen, und das neue Poster erscheint daraus
 
