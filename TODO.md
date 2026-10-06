@@ -14,6 +14,7 @@ Alle bisher gesammelten Punkte sind in Version 2 umgesetzt. Neue Beobachtungen b
 - [x] Detailansicht einer Serie: leere Kacheln für Poster, Season00 bis Season50, auch für Staffeln, die es (noch) nicht gibt. Fehlende Extra-Kacheln zählen nicht als „fehlt“. Vorschlag: bekannte Staffeln zuerst, die übrigen eingeklappt unter „Weitere Staffeln“, damit die Ansicht übersichtlich bleibt. Backend muss dafür Staffel-Slots 0–50 erlauben
 
 ## Onboarding / Eingabe
+- [ ] Navigation in den Einstellungen deutlicher: Statt der schmalen Striche oben eine beschriftete Schrittleiste (z. B. „Plex · Bibliotheken · Sonarr/Radarr · Welten · Quellen“) im Matrix-/Terminal-Stil, mit Namen, aktivem Schritt hervorgehoben und Hover-Hinweis. Im Einstellungsmodus frei anklickbar, im ersten Onboarding nur bereits erreichte Schritte
 - [ ] Plex-Adresse in drei Felder aufteilen: Protokoll als Dropdown (http/https), IP-Adresse oder Hostname als Textfeld (manuell, ohne Vorgabe), Port als eigenes Feld mit Beispiel 32400 (Platzhalter). Daraus wird intern die URL zusammengesetzt. Gleiches Muster eventuell auch für Sonarr/Radarr (Standardports 8989/7878)
 
 ## Detailansicht
