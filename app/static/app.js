@@ -639,15 +639,21 @@ async function openItem(id) {
   function downloadBar(it, have) {
     const zip = keys => downloadUrl(`/api/download-zip/${it.id}?slots=${encodeURIComponent(keys.join(","))}`);
     const upload = h("button", { class: "btn sm primary", title: "Ordner oder ZIP mit allen Bildern dieser Serie – p5assets ordnet sie den Kacheln zu", onclick: () => pickSet(files => importFiles(files, it.id, draw, it, true)) }, icon("upload", 14), "Set hochladen");
-    const tpdb = h("button", { class: "btn sm", title: "ThePosterDB durchsuchen: öffnet die Suche in einem neuen Tab, das heruntergeladene Set legst du danach hier ab", onclick: () => openPosterDbSet(it, draw) }, icon("search", 14), "ThePosterDB");
+    const tpdb = h("button", { class: "btn sm", title: "ThePosterDB durchsuchen: im Fenster öffnest du die Suche und legst danach das heruntergeladene Set ab", onclick: () => openPosterDbSet(it, draw) }, icon("search", 14), "ThePosterDB");
     return h("div", { class: "dlbar row wrap" }, selMode ? null : upload, selMode ? null : tpdb,
       !have.length ? null : selMode ? [
         h("span", { class: "hint", style: "margin:0" }, `${sel.size} von ${have.length} ausgewählt – Kacheln antippen`),
         h("button", { class: "btn sm", onclick: () => { have.forEach(k => sel.add(k)); draw(it); } }, "Alle wählen"),
         h("button", { class: "btn sm primary", disabled: !sel.size, onclick: () => zip([...sel]) }, icon("download", 14), `Auswahl als ZIP (${sel.size})`),
         h("button", { class: "btn sm", onclick: () => { selMode = false; sel.clear(); draw(it); } }, "Fertig")]
-      : [h("button", { class: "btn sm", title: "Alle vorhandenen Poster in Originalqualität als ZIP", onclick: () => zip(have) }, icon("download", 14), `Alle als ZIP (${have.length})`),
-         h("button", { class: "btn sm", title: "Einzelne Poster auswählen und als ZIP laden", onclick: () => { selMode = true; draw(it); } }, "Auswählen …")]);
+      : [h("button", { class: "btn sm", title: "Poster in Originalqualität herunterladen", onclick: () => {
+          const m = modal("Herunterladen", h("div", {},
+            h("p", { class: "hint", style: "margin-top:0" }, "Die Poster werden unverändert aus dem Assets-Ordner geladen (Originalqualität)."),
+            h("div", { class: "row wrap" },
+              h("button", { class: "btn primary", onclick: () => { m.close(); zip(have); } }, icon("download", 16), `Alle als ZIP (${have.length})`),
+              h("button", { class: "btn", onclick: () => { m.close(); selMode = true; draw(it); } }, "Einzelne Poster auswählen …")),
+            h("p", { class: "hint" }, "Ein einzelnes Poster lädst du über „Herunterladen“ auf seiner Kachel.")));
+        } }, icon("download", 14), "Herunterladen")]);
   }
 
   function slotView(it, key, known) {
@@ -952,12 +958,7 @@ function posterDbPanel(it, slot, draw, done) {
 }
 
 function openPosterDbSet(it, draw) {
-  const panel = posterDbPanel(it, null, draw, () => m.close());
-  panel.prepend(h("div", { class: "status ok", style: "margin:0 0 10px" }, "Die Suche wurde in einem neuen Tab geöffnet. Lade dort das Set herunter und lege es danach hier ab. Kein neuer Tab? Dann unten auf „Auf ThePosterDB suchen ↗“ klicken."));
-  const m = modal(`ThePosterDB durchsuchen – Set für ${it.title}`, panel);
-  // the click that got us here is the user gesture that allows the new tab (opened without Referer, see posterDbPanel);
-  // with "noopener" the browser returns null even on success, so a blocked tab cannot be detected – hence the hint above
-  window.open($("a.btn", panel).href, "_blank", "noopener,noreferrer");
+  const m = modal(`ThePosterDB durchsuchen – Set für ${it.title}`, posterDbPanel(it, null, draw, () => m.close()));
 }
 
 /* ---------------------------------------------------- custom folder --- */
