@@ -639,7 +639,7 @@ async function openItem(id) {
   function downloadBar(it, have) {
     const zip = keys => downloadUrl(`/api/download-zip/${it.id}?slots=${encodeURIComponent(keys.join(","))}`);
     const upload = h("button", { class: "btn sm primary", title: "Ordner oder ZIP mit allen Bildern dieser Serie – p5assets ordnet sie den Kacheln zu", onclick: () => pickSet(files => importFiles(files, it.id, draw, it, true)) }, icon("upload", 14), "Set hochladen");
-    const tpdb = h("button", { class: "btn sm", title: "Set auf ThePosterDB suchen und das heruntergeladene Set hier ablegen", onclick: () => openPosterDbSet(it, draw) }, "ThePosterDB-Set");
+    const tpdb = h("button", { class: "btn sm", title: "ThePosterDB durchsuchen: öffnet die Suche in einem neuen Tab, das heruntergeladene Set legst du danach hier ab", onclick: () => openPosterDbSet(it, draw) }, icon("search", 14), "ThePosterDB");
     return h("div", { class: "dlbar row wrap" }, selMode ? null : upload, selMode ? null : tpdb,
       !have.length ? null : selMode ? [
         h("span", { class: "hint", style: "margin:0" }, `${sel.size} von ${have.length} ausgewählt – Kacheln antippen`),
@@ -952,7 +952,12 @@ function posterDbPanel(it, slot, draw, done) {
 }
 
 function openPosterDbSet(it, draw) {
-  let m; m = modal(`ThePosterDB-Set für ${it.title}`, posterDbPanel(it, null, draw, () => m.close()));
+  const panel = posterDbPanel(it, null, draw, () => m.close());
+  panel.prepend(h("div", { class: "status ok", style: "margin:0 0 10px" }, "Die Suche wurde in einem neuen Tab geöffnet. Lade dort das Set herunter und lege es danach hier ab. Kein neuer Tab? Dann unten auf „Auf ThePosterDB suchen ↗“ klicken."));
+  const m = modal(`ThePosterDB durchsuchen – Set für ${it.title}`, panel);
+  // the click that got us here is the user gesture that allows the new tab (opened without Referer, see posterDbPanel);
+  // with "noopener" the browser returns null even on success, so a blocked tab cannot be detected – hence the hint above
+  window.open($("a.btn", panel).href, "_blank", "noopener,noreferrer");
 }
 
 /* ---------------------------------------------------- custom folder --- */
