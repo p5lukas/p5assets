@@ -634,7 +634,7 @@ function slotActions(it, key, box, draw) {
       ? [ob("Ersetzen", pick), ob("Vorschau", () => openPreview(it, key, draw)), ob("Online", () => searchOnline(it, key, draw)),
          ob("Herunterladen", () => downloadSlot(it, key)),
          it.type === "show" ? ob("Auf alle …", () => openApplyAll(it, key, draw)) : null, ob("Löschen", del, "danger")]
-      : [ob("Datei wählen", pick), ob("Online", () => searchOnline(it, key, draw))]),
+      : [ob("Hochladen", pick), ob("Online", () => searchOnline(it, key, draw))]),
     h("div", { class: "ovhint" }, "oder Bild hierher ziehen"));
 }
 
@@ -671,7 +671,7 @@ function openPreview(it, key, draw) {
         (it.mirror_folders || []).length ? h("div", { style: "margin-top:8px" }, h("span", { class: "tag ok", title: "Coming-Soon-Platzhalter: Poster werden auch im echten Film-Ordner abgelegt" }, "Coming Soon gespiegelt")) : null,
         h("dl", {}, rows.map(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]), src ? [h("dt", {}, "Auflösung"), res] : null),
         h("div", { class: "row wrap", style: "margin-top:20px" },
-          it.folder ? h("button", { class: "btn sm primary", onclick: pick }, exists ? "Ersetzen" : "Datei wählen") : null,
+          it.folder ? h("button", { class: "btn sm primary", onclick: pick }, exists ? "Ersetzen" : "Hochladen") : null,
           exists ? h("button", { class: "btn sm", onclick: () => downloadSlot(it, key) }, icon("download", 14), "Herunterladen") : null,
           draw && it.folder ? h("button", { class: "btn sm", onclick: () => { close(); searchOnline(it, key, draw); } }, "Online") : null,
           draw && exists && it.type === "show" ? h("button", { class: "btn sm", onclick: () => { close(); openApplyAll(it, key, draw); } }, "Auf alle …") : null,
