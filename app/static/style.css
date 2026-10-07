@@ -430,3 +430,12 @@ header.top{padding-top:env(safe-area-inset-top)}
 .logbtn.alert-warn.nearamber{background:transparent;border-color:var(--warn);color:var(--warn);animation:none;box-shadow:0 0 14px #ffd24a66}
 @keyframes logpulse{0%,100%{box-shadow:0 0 14px var(--pulse),0 0 30px color-mix(in srgb,var(--pulse) 45%,transparent)}50%{box-shadow:0 0 26px var(--pulse),0 0 54px var(--pulse)}}
 @media(prefers-reduced-motion:reduce){.logbtn.alert-err,.logbtn.alert-warn{animation:none}.logbtn .cur{animation:none}}
+
+/* ThePosterDB panel */
+.tpsteps{margin:0 0 6px;padding-left:20px;color:var(--muted)}
+.tpsteps li{margin:3px 0}
+.tpzone{margin-top:14px;border:2px dashed var(--line);border-radius:12px;padding:22px 16px;text-align:center;background:var(--panel2);transition:.15s}
+.tpzone b{display:block;font-size:34px;font-weight:400;color:var(--faint2)}
+.tpzone small{display:block;color:var(--muted);margin-top:4px}
+.tpzone.dropping{border-color:var(--accent);box-shadow:0 0 28px var(--glow)}
+#dropveil{pointer-events:none}

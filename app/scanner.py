@@ -56,6 +56,8 @@ def build_slots(item: dict, index: kometa.AssetIndex, ignore_specials: bool) -> 
             if ignore_specials and s["number"] == 0:
                 continue
             known.append(kometa.slot_key(s["number"]))
+    # seasons that only Sonarr knows (Plex has no season yet, e.g. a season that is announced but not aired)
+    arr_only = {kometa.slot_key(x["number"]) for x in item["seasons"] if not x.get("rating_key")} if item["in_plex"] else set()
     slots: dict = {}
     for key in known:
         f = files.get(key)
@@ -65,6 +67,8 @@ def build_slots(item: dict, index: kometa.AssetIndex, ignore_specials: bool) -> 
             season = None if key == "poster" else int(key.split("-")[1])
             thumb = item["thumb"] if season is None else next((x["thumb"] for x in item["seasons"] if x["number"] == season), "")
             slots[key] = {"exists": False, "plex_thumb": bool(thumb)}
+        if key in arr_only:
+            slots[key]["only_arr"] = True
     if item["type"] == "show":
         for key, f in files.items():
             if key not in slots:
@@ -77,6 +81,8 @@ def build_slots(item: dict, index: kometa.AssetIndex, ignore_specials: bool) -> 
     item["slots"] = slots
     item["dupes"] = [_rel(p, index.root) for p in index.duplicates(item["folder"])] if item["folder"] else []
     item["missing"] = sum(1 for k in known if not slots[k]["exists"])
+    # only what Plex really has (series poster + seasons Plex knows): for the tab "In Plex, Poster fehlt"
+    item["missing_plex"] = sum(1 for k in known if not slots[k]["exists"] and k not in arr_only) if item["in_plex"] else 0
 
 
 def _ids_keys(item: dict) -> list[tuple]:

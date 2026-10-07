@@ -73,7 +73,8 @@ Ein schlanker Docker-Container im Matrix-Look. Er vergleicht deine Bibliotheken 
 - **Coming Soon**: eigener Reiter für Titel, die in Plex schon als Coming-Soon-Platzhalter (`{edition-Coming Soon}`) erscheinen und zeitnah ein Poster brauchen
 - **A–Z-Leiste** (oben und unten, im Reiter „Alle“) für große Bibliotheken: `#` für Zahlen/Sonderzeichen, die Suche durchsucht weiter alle Titel
 - **Filme direkt auf dem Poster bearbeiten**: Ersetzen, Vorschau, Online suchen, Herunterladen und Löschen per Hover (am Touchscreen per Tippen). Titel, Jahr und Poster öffnen die Vorschau mit allen Infos – eine Detailansicht gibt es nur für Serien
-- **Set hochladen** (Ordner oder ZIP) direkt in der Serien-Detailansicht
+- **Set hochladen** (Ordner oder ZIP) direkt in der Serien-Detailansicht, mit Prüfdialog und fest gewählter Serie
+- **ThePosterDB**: Tab im Dialog „Online suchen“ und Button „ThePosterDB-Set“ – öffnet die Suche mit dem englischen Arr-Ordnernamen; das dort (angemeldet) heruntergeladene Poster oder Set legst du in p5assets ab
 - **Schnelle Listen**: Kacheln nutzen kleine, zwischengespeicherte Vorschaubilder (`/config/cache/thumbs`, max. 600 MB, automatisch bereinigt); die Vorschau und der Download liefern immer das Original
 - **Herunterladen** in Originalqualität: einzelne Poster oder eine Auswahl/alle einer Serie als ZIP
 - Für iPhone und iPad optimiert (kompakte Kopfleiste, große Tippflächen)

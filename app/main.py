@@ -72,6 +72,8 @@ def _public_item(it: dict, full: bool = False) -> dict:
                               "updated", "in_plex", "sources", "custom", "dupes")}
     out["mirror_folders"] = it.get("mirror_folders") or []
     out["coming_soon"] = bool(it.get("coming_soon"))
+    out["missing_plex"] = it.get("missing_plex", 0)
+    out["arr_folders"] = it.get("arr_folders") or []
     out["monitored"] = it.get("monitored")      # None = no Sonarr/Radarr information
     out["has_files"] = it.get("has_files")
     out["available"] = it.get("available")
@@ -353,7 +355,7 @@ def _scope_stats(items: list[dict]) -> dict:
         c["complete"] += 0 if i["missing"] else 1
         c["comingsoon"] += 1 if i.get("coming_soon") else 0
         c["notplex"] += 0 if i["in_plex"] else 1
-        c["plexmissing"] += 1 if i["in_plex"] and i["missing"] else 0
+        c["plexmissing"] += 1 if i.get("missing_plex") else 0
     return {"items": c["items"], "slots": c["slots"], "missing": c["missing_slots"], "complete_items": c["complete"],
             "counts": {"all": c["items"], "missing": c["missing"], "complete": c["complete"],
                        "comingsoon": c["comingsoon"], "notplex": c["notplex"], "plexmissing": c["plexmissing"]}}
@@ -378,7 +380,7 @@ async def items(world: str = "", q: str = "", filter: str = "all", library: str 
     elif filter == "notplex":
         res = [i for i in res if not i["in_plex"]]
     elif filter == "plexmissing":     # already in Plex, but a poster/season is missing in the Kometa assets
-        res = [i for i in res if i["in_plex"] and i["missing"]]
+        res = [i for i in res if i.get("missing_plex")]
     elif filter == "comingsoon":      # Coming-Soon placeholders already visible in Plex: the ones without a poster first
         res = [i for i in res if i.get("coming_soon")]
         if nopost:

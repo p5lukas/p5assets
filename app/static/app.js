@@ -639,7 +639,8 @@ async function openItem(id) {
   function downloadBar(it, have) {
     const zip = keys => downloadUrl(`/api/download-zip/${it.id}?slots=${encodeURIComponent(keys.join(","))}`);
     const upload = h("button", { class: "btn sm primary", title: "Ordner oder ZIP mit allen Bildern dieser Serie – p5assets ordnet sie den Kacheln zu", onclick: () => pickSet(files => importFiles(files, it.id, draw, it, true)) }, icon("upload", 14), "Set hochladen");
-    return h("div", { class: "dlbar row wrap" }, selMode ? null : upload,
+    const tpdb = h("button", { class: "btn sm", title: "Set auf ThePosterDB suchen und das heruntergeladene Set hier ablegen", onclick: () => openPosterDbSet(it, draw) }, "ThePosterDB-Set");
+    return h("div", { class: "dlbar row wrap" }, selMode ? null : upload, selMode ? null : tpdb,
       !have.length ? null : selMode ? [
         h("span", { class: "hint", style: "margin:0" }, `${sel.size} von ${have.length} ausgewählt – Kacheln antippen`),
         h("button", { class: "btn sm", onclick: () => { have.forEach(k => sel.add(k)); draw(it); } }, "Alle wählen"),
@@ -654,6 +655,7 @@ async function openItem(id) {
     const box = posterBox(it, key, known);
     if (known) box.append(h("span", { class: "badge " + (exists ? "ok" : "bad") }, exists ? "vorhanden" : "fehlt"));
     else if (exists) box.append(h("span", { class: "badge ok" }, "vorhanden"));
+    if (sl && sl.only_arr) box.append(h("span", { class: "badge warn b", title: "Diese Staffel kennt bisher nur Sonarr – in Plex gibt es sie noch nicht" }, "noch nicht in Plex"));
     const pick = () => pickFiles(files => uploadSlot(it, key, files, draw), false);
     box.append(slotActions(it, key, box, draw));
     const el = h("div", { class: "slot" }, box, h("div", { class: "lab" }, slotLabel(key, it.type)));
@@ -878,11 +880,12 @@ async function searchOnline(it, slot, draw) {
       return p;
     };
     function render() {
-      fill(tabs, [{ name: "Alle", state: "ok", count: r.images.length }, ...r.providers].map(pv => h("button", {
+      fill(tabs, [{ name: "Alle", state: "ok", count: r.images.length }, ...r.providers, { name: "ThePosterDB", state: "ok", tpdb: true }].map(pv => h("button", {
         class: "tab" + (tab === pv.name ? " on" : "") + (pv.state !== "ok" ? " off" : ""), disabled: pv.state === "nokey",
         title: pv.state === "nokey" ? "Kein API-Key hinterlegt (Einstellungen → Quellen)" : pv.state === "error" ? pv.error : "",
         onclick: () => { tab = pv.name; render(); } },
-        pv.name, h("small", {}, pv.state === "nokey" ? "kein Key" : pv.state === "error" ? "Fehler" : pv.count))));
+        pv.name, pv.tpdb ? null : h("small", {}, pv.state === "nokey" ? "kein Key" : pv.state === "error" ? "Fehler" : pv.count))));
+      if (tab === "ThePosterDB") { fill(content, posterDbPanel(it, slot, draw, () => m.close())); return; }
       const prov = r.providers.find(p => p.name === tab);
       const list = tab === "Alle" ? r.images : r.images.filter(i => i.source === tab);
       const groups = r.languages.map(l => ({ code: l.code, imgs: list.filter(i => i.lang === l.code) }));
@@ -898,7 +901,50 @@ async function searchOnline(it, slot, draw) {
         list.length ? null : h("div", { class: "empty" }, "Keine Poster gefunden."));
     }
     fill(body, tabs, content); render();
-  } catch (e) { fill(body, h("div", { class: "status bad" }, e.message)); }
+  } catch (e) { fill(body, h("div", { class: "status bad" }, e.message), h("h4", { style: "margin:18px 0 0;color:var(--accent)" }, "ThePosterDB"), posterDbPanel(it, slot, draw, () => m.close())); }
+}
+
+/* -------------------------------------------------------- ThePosterDB --- */
+/** ThePosterDB has no API and only lets signed-in users download, so p5assets does not fetch anything from there:
+ *  a search link (in the arr naming of the folder) and a drop zone for what was downloaded in the browser.
+ *  slot = a single tile (one poster, or a set that is then reviewed); slot = null: a whole series set. */
+function posterDbPanel(it, slot, draw, done) {
+  const base = (it.arr_folders && it.arr_folders[0]) || it.folder || `${it.title}${it.year ? ` (${it.year})` : ""}`;
+  const bare = s => s.replace(/\s*[\{\[][^}\]]*[\}\]]/g, "").trim();            // without {tvdb-…} / [...]
+  const enc = s => encodeURIComponent(s).replace(/[()!'*]/g, c => "%" + c.charCodeAt(0).toString(16).toUpperCase());
+  const section = it.type === "movie" ? "movies" : "shows";
+  const term = h("input", { type: "text", value: lsGet("p5tpdbids") === "1" ? base : bare(base), "aria-label": "Suchbegriff" });
+  const link = h("a", { class: "btn primary", target: "_blank", rel: "noopener" }, "Auf ThePosterDB suchen ↗");
+  const upd = () => { link.href = `https://theposterdb.com/search?term=${enc(term.value.trim())}&section=${section}`; };
+  term.oninput = upd; upd();
+  const ids = h("input", { type: "checkbox", checked: lsGet("p5tpdbids") === "1", onchange: e => { lsSet("p5tpdbids", e.target.checked ? "1" : "0"); term.value = e.target.checked ? base : bare(base); upd(); } });
+  const handle = files => {
+    if (!files || !files.length) return;
+    const imgs = files.filter(f => /\.(jpe?g|png|webp|gif|bmp|tiff?|avif)$/i.test(f.path));
+    done();
+    if (slot && files.length === 1 && imgs.length === 1) uploadSlot(it, slot, files, draw);   // one poster for this tile
+    else importFiles(files, it.id, draw, it, true);                                           // set: review dialog, series fixed
+  };
+  const zone = h("div", { class: "tpzone" }, h("b", {}, "＋"),
+    h("div", {}, slot ? "Heruntergeladenes Poster hier ablegen" : "Heruntergeladenes Set hier ablegen"),
+    h("small", {}, slot ? "Ein einzelnes Bild ersetzt diese Kachel. Ein ZIP oder mehrere Bilder öffnen den Prüfdialog." : "ZIP, Ordner oder mehrere Bilder – danach den Prüfdialog bestätigen."),
+    h("div", { class: "row wrap", style: "justify-content:center;margin-top:10px" },
+      h("button", { class: "btn sm primary", onclick: () => pickFiles(handle, true) }, slot ? "Poster / ZIP wählen" : "ZIP / Bilder wählen"),
+      h("button", { class: "btn sm", onclick: () => pickFiles(handle, true, true) }, "Ordner wählen")));
+  makeDropTarget(zone, handle);
+  return h("div", { class: "tpdb" },
+    h("ol", { class: "tpsteps" },
+      h("li", {}, "Auf ThePosterDB suchen, Sprache und Set wählen und dort (angemeldet) herunterladen."),
+      h("li", {}, "Die heruntergeladene Datei hier ablegen: p5assets benennt sie Kometa-konform und legt sie ab.")),
+    h("label", { class: "f" }, "Suchbegriff (englischer Ordnername aus Sonarr/Radarr)"),
+    h("div", { class: "row wrap" }, h("div", { class: "grow", style: "min-width:220px" }, term), link),
+    h("label", { class: "opt", style: "margin-top:8px" }, ids, h("div", {}, "Kennung wie {tvdb-123} mitsuchen", h("small", {}, "Ohne Kennung (Standard) wird nur „Titel (Jahr)“ gesucht."))),
+    h("p", { class: "hint" }, "ThePosterDB bietet Downloads nur für angemeldete Nutzer an – deshalb lädt p5assets dort nichts selbst und braucht keine Zugangsdaten."),
+    zone);
+}
+
+function openPosterDbSet(it, draw) {
+  let m; m = modal(`ThePosterDB-Set für ${it.title}`, posterDbPanel(it, null, draw, () => m.close()));
 }
 
 /* ---------------------------------------------------- custom folder --- */
@@ -923,7 +969,7 @@ function openCustom() {
 /* ================================================== files / drag & drop === */
 let dragDepth = 0;
 const hasFiles = e => e.dataTransfer && [...e.dataTransfer.types].includes("Files");
-window.addEventListener("dragenter", e => { if (hasFiles(e)) { dragDepth++; $("#dropveil").classList.toggle("on", S.view === "dash"); } });
+window.addEventListener("dragenter", e => { if (hasFiles(e)) { dragDepth++; $("#dropveil").classList.toggle("on", S.view === "dash" && !(e.target.closest && e.target.closest(".droptgt, .modalwrap"))); } });
 window.addEventListener("dragleave", e => { if (hasFiles(e) && --dragDepth <= 0) { dragDepth = 0; $("#dropveil").classList.remove("on"); } });
 window.addEventListener("dragover", e => { if (hasFiles(e)) e.preventDefault(); });
 window.addEventListener("drop", async e => {
@@ -934,6 +980,7 @@ window.addEventListener("drop", async e => {
 
 function makeDropTarget(el, cb) {
   let depth = 0;
+  el.classList.add("droptgt");
   el.addEventListener("dragenter", e => { if (hasFiles(e)) { depth++; el.classList.add("dropping"); } });
   el.addEventListener("dragleave", () => { if (--depth <= 0) { depth = 0; el.classList.remove("dropping"); } });
   el.addEventListener("dragover", e => { if (hasFiles(e)) e.preventDefault(); });
@@ -1110,6 +1157,7 @@ async function wizard(settings = false) {
   S.view = "wiz";
   S.wizSettings = settings;
   await loadState();
+  S.settingsSig = settings ? scanSig() : null;     // remembered to decide on closing whether a rescan is needed
   S.step = settings ? "plex" : (stepList().includes(S.step) ? S.step : "welcome");
   S.reached = settings ? 99 : Math.max(S.reached || 0, stepList().indexOf(S.step));
   drawWiz();
@@ -1146,8 +1194,24 @@ function drawWiz() {
     h("div", { class: "wcard" }, view(nav, cfg()))));
 }
 
+/** What influences the title list: if one of these changed while the settings were open, closing them rescans. */
+function scanSig() {
+  const c = cfg();
+  return JSON.stringify({
+    plex: [c.plex.url, c.plex.server_name],
+    libs: c.libraries.map(l => [l.key, l.enabled, l.world]),
+    worlds: c.worlds.map(w => [w.id, w.assets_path, w.search_depth, w.mirror_coming_soon]),
+    arr: c.arr.map(a => [a.id, a.kind, a.name, a.url, a.world, a.hide_unmonitored]),
+    assets: [c.assets.asset_folders, c.assets.ignore_specials],
+    custom: c.custom.length,
+  });
+}
+
 async function closeSettings() {
-  await loadState(); dashboard(); doScan();
+  const before = S.settingsSig;
+  await loadState(); dashboard();
+  if (before != null && before !== scanSig()) { toast("Einstellungen geändert – Bibliotheken werden neu eingelesen", "ok"); doScan(); }
+  S.settingsSig = null;
 }
 
 const wWelcome = nav => h("div", {},
