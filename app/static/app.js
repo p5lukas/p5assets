@@ -923,8 +923,10 @@ function posterDbPanel(it, slot, draw, done) {
   // no Referer: ThePosterDB's firewall blocked clicks coming from a local address (the same link typed by hand worked)
   const link = h("a", { class: "btn primary", target: "_blank", rel: "noopener noreferrer", referrerpolicy: "no-referrer" }, "Auf ThePosterDB suchen ↗");
   const url = h("input", { type: "text", readOnly: true, class: "tpurl", "aria-label": "Fertige Such-Adresse", onfocus: e => e.target.select() });
-  // once the search is open in its tab, the window has done its job (the download goes in via "Set hochladen" / "Ersetzen" / dragging)
-  link.addEventListener("click", () => setTimeout(done, 150));
+  // Series: once the search is open in its tab the window has done its job (the download goes in via "Set hochladen" / the tile / dragging).
+  // Movies: the window stays and has its own upload button, a handy workflow for a single poster.
+  const movie = it.type === "movie";
+  if (!movie) link.addEventListener("click", () => setTimeout(done, 150));
   const upd = () => { link.href = url.value = `https://theposterdb.com/search?term=${enc(term.value.trim())}&section=${section}`; };
   const copy = h("button", { class: "btn sm", onclick: async () => {
     try { await navigator.clipboard.writeText(url.value); } catch { url.select(); document.execCommand("copy"); }
@@ -932,17 +934,32 @@ function posterDbPanel(it, slot, draw, done) {
   } }, "Link kopieren");
   term.oninput = upd; upd();
   const ids = h("input", { type: "checkbox", checked: lsGet("p5tpdbids") === "1", onchange: e => { lsSet("p5tpdbids", e.target.checked ? "1" : "0"); term.value = e.target.checked ? base : bare(base); upd(); } });
+  const handle = files => {
+    if (!files || !files.length) return;
+    const imgs = files.filter(f => /\.(jpe?g|png|webp|gif|bmp|tiff?|avif)$/i.test(f.path));
+    done();
+    if (slot && files.length === 1 && imgs.length === 1) uploadSlot(it, slot, files, draw);   // one poster for this tile
+    else importFiles(files, it.id, draw, it, true);                                           // several files: review dialog, title fixed
+  };
+  const zone = h("div", { class: "tpzone" }, h("b", {}, "＋"),
+    h("div", {}, "Heruntergeladenes Poster hier ablegen"),
+    h("small", {}, "Ein einzelnes Bild ersetzt das Poster dieses Films. Ein ZIP oder mehrere Bilder öffnen den Prüfdialog."),
+    h("div", { class: "row wrap", style: "justify-content:center;margin-top:10px" },
+      h("button", { class: "btn sm primary", onclick: () => pickFiles(handle, true) }, "Hochladen")));
+  if (movie) makeDropTarget(zone, handle);
   return h("div", { class: "tpdb" },
     h("ol", { class: "tpsteps" },
       h("li", {}, "Auf ThePosterDB suchen, Sprache und Set wählen und dort (angemeldet) herunterladen."),
-      h("li", {}, slot ? "Das Bild danach über „Ersetzen“ bzw. „Hochladen“ dieser Kachel wählen oder auf die Kachel ziehen: p5assets benennt es Kometa-konform und legt es ab."
+      h("li", {}, movie ? "Die heruntergeladene Datei danach hier hochladen oder ablegen: p5assets benennt sie Kometa-konform und legt sie ab."
+        : slot ? "Das Bild danach über „Ersetzen“ bzw. „Hochladen“ dieser Kachel wählen oder auf die Kachel ziehen: p5assets benennt es Kometa-konform und legt es ab."
         : "Das Set danach über „Set hochladen“ wählen oder einfach in die Serien-Ansicht ziehen: p5assets benennt es Kometa-konform und legt es ab.")),
     h("label", { class: "f" }, "Suchbegriff (englischer Ordnername aus Sonarr/Radarr)"),
     h("div", { class: "row wrap" }, h("div", { class: "grow", style: "min-width:220px" }, term), link),
     h("div", { class: "row", style: "margin-top:8px" }, h("div", { class: "grow" }, url), copy),
     h("div", { class: "hint", style: "margin:2px 0 0" }, "Falls der Button blockiert wird: Link kopieren und in einen neuen Tab einfügen."),
     h("label", { class: "opt", style: "margin-top:8px" }, ids, h("div", {}, "Kennung wie {tvdb-123} mitsuchen", h("small", {}, "Ohne Kennung (Standard) wird nur „Titel (Jahr)“ gesucht."))),
-    h("p", { class: "hint" }, "ThePosterDB bietet Downloads nur für angemeldete Nutzer an – deshalb lädt p5assets dort nichts selbst und braucht keine Zugangsdaten."));
+    h("p", { class: "hint" }, "ThePosterDB bietet Downloads nur für angemeldete Nutzer an – deshalb lädt p5assets dort nichts selbst und braucht keine Zugangsdaten."),
+    movie ? zone : null);
 }
 
 function openPosterDbSet(it, draw) {
