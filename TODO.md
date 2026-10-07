@@ -70,3 +70,6 @@ Alle bisher gesammelten Punkte sind in Version 2 umgesetzt. Neue Beobachtungen b
 - [x] Standard-Host-Port 8484 (Template, Compose, README)
 (hier sammeln wir, was dir beim Onboarding auffällt)
 - [ ] Suchfeld: statt `$`-Zeichen eine Lupe (oder etwas Passendes im Matrix-Look) als Symbol
+- [ ] Performance in großen Welten (HD: 3222 Titel, 4284 Assets): Ersetzen eines online gesuchten Bildes dauert mehrere Sekunden.
+      Vermutete Ursache: pro Ersetzen wird der Assets-Ordner mehrfach komplett neu eingelesen (`AssetIndex` in `uploads.write_assets` und erneut in `scanner.refresh_item`, Letzteres ggf. im Event-Loop).
+      Ziel: Index pro Welt cachen und gezielt aktualisieren (nur der betroffene Ordner), Dateisystem-Zugriffe aus dem Event-Loop halten, Download/Speichern ohne Voll-Scan; dazu RAM/CPU insgesamt schlank halten (Messung vorher/nachher, Antwort auf „ist die App ressourcenarm?“)
