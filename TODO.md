@@ -73,3 +73,5 @@ Alle bisher gesammelten Punkte sind in Version 2 umgesetzt. Neue Beobachtungen b
 - [ ] Performance in großen Welten (HD: 3222 Titel, 4284 Assets): Ersetzen eines online gesuchten Bildes dauert mehrere Sekunden.
       Vermutete Ursache: pro Ersetzen wird der Assets-Ordner mehrfach komplett neu eingelesen (`AssetIndex` in `uploads.write_assets` und erneut in `scanner.refresh_item`, Letzteres ggf. im Event-Loop).
       Ziel: Index pro Welt cachen und gezielt aktualisieren (nur der betroffene Ordner), Dateisystem-Zugriffe aus dem Event-Loop halten, Download/Speichern ohne Voll-Scan; dazu RAM/CPU insgesamt schlank halten (Messung vorher/nachher, Antwort auf „ist die App ressourcenarm?“)
+- [ ] Startseite bei großen Welten: statt „Mehr laden …“ am Ende der Liste eine A–Z-Leiste (unten bzw. seitlich) mit `#` für Titel, die mit Zahlen/Sonderzeichen beginnen; Start auf `#`, Klick auf einen Buchstaben zeigt nur diese Titel (Filter und Quellen bleiben kombinierbar).
+      Die globale Suche bleibt davon unberührt (sucht weiter über alle Titel) und soll möglichst noch schneller werden (z. B. Suchindex im Speicher, kurze Verzögerung beim Tippen).
