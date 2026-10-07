@@ -377,7 +377,7 @@ header.top{padding-top:env(safe-area-inset-top)}
   .modal>header,.modal>.body,.modal>footer{padding-left:14px;padding-right:14px}
   .modalwrap{padding:10px}
   .lbox{padding:12px;gap:14px}.lside{min-width:0;flex-basis:auto;max-width:none;width:100%}
-  .lbox img{max-height:60vh}
+  .lbox img{max-height:42vh}
   .chip{padding:8px 12px}
   input,select,textarea{font-size:16px}   /* iOS zooms into smaller fields */
   .az{min-width:34px;padding:9px 7px}
@@ -390,3 +390,9 @@ header.top{padding-top:env(safe-area-inset-top)}
   .ov-btn{min-height:36px;padding:6px 8px;font-size:13px}
   .btn.sm{padding:8px 12px;font-size:13px}
 }
+
+/* preview: image column, empty state */
+.limg{display:flex;flex-direction:column;gap:8px;align-items:center;flex:none;max-width:100%}
+.noimg{width:min(320px,70vw);aspect-ratio:2/3;display:grid;place-items:center;align-content:center;text-align:center;border:1px dashed var(--line);border-radius:var(--r);color:var(--faint);background:var(--panel2)}
+.noimg b{font-size:42px;font-weight:400;color:var(--faint2);display:block}
+@media(max-width:760px){.limg{width:100%}}

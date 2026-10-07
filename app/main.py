@@ -18,7 +18,7 @@ from collections import Counter
 
 from pydantic import BaseModel
 
-from . import arr as arrmod, config, kometa, languages as langmod, logs, version, plex as plexmod, providers, scanner, uploads
+from . import arr as arrmod, config, kometa, languages as langmod, logs, thumbs, version, plex as plexmod, providers, scanner, uploads
 from .plex import Plex, PlexError
 
 STATIC = Path(__file__).parent / "static"
@@ -395,6 +395,18 @@ async def asset(item_id: str, slot: str, v: str = ""):
     if not path or not Path(path).is_file():
         raise HTTPException(404)
     return FileResponse(path, headers={"Cache-Control": "public, max-age=31536000, immutable"})
+
+
+@app.get("/api/thumb/{item_id}/{slot}")
+async def thumb(item_id: str, slot: str, v: str = ""):
+    """Small preview of an asset for lists and tiles (the original stays untouched)."""
+    it = _item(item_id)
+    path = it["slots"].get(slot, {}).get("path")
+    if not path or not Path(path).is_file():
+        raise HTTPException(404)
+    out = await asyncio.to_thread(thumbs.get, Path(path))
+    return FileResponse(out, media_type="image/jpeg" if out != Path(path) else None,
+                        headers={"Cache-Control": "public, max-age=31536000, immutable"})
 
 
 def _safe_name(text: str) -> str:

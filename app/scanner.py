@@ -7,7 +7,7 @@ from collections import Counter
 import time
 from pathlib import Path
 
-from . import arr, config, kometa, logs, providers
+from . import arr, config, kometa, logs, providers, thumbs
 from .plex import Plex, PlexError
 
 STATE: dict = {
@@ -265,6 +265,7 @@ async def scan() -> None:
             for w in warnings:
                 log.warning("Scan: %s", w)
             log.info("Scan fertig: %d Titel in %.1f s", len(all_items), time.time() - t0)
+            await asyncio.to_thread(thumbs.prune)
         except Exception as e:  # noqa: BLE001
             log.error("Scan fehlgeschlagen: %s", e, exc_info=not isinstance(e, PlexError))
             STATE.update(error=str(e) or e.__class__.__name__, progress="")

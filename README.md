@@ -71,7 +71,9 @@ Ein schlanker Docker-Container im Matrix-Look. Er vergleicht deine Bibliotheken 
 - Fußzeile mit Version, Branch, Commit und GitHub-Link
 - Dashboard mit Abdeckung in %, Filter „Fehlende“, schneller Suche und automatischem Hintergrund-Scan
 - **A–Z-Leiste** (oben und unten) für große Bibliotheken: `#` für Zahlen/Sonderzeichen, die Suche durchsucht weiter alle Titel
-- **Filme direkt auf dem Poster bearbeiten**: Ersetzen, Vorschau, Online, Herunterladen und Löschen per Hover (am Touchscreen per Tippen)
+- **Filme direkt auf dem Poster bearbeiten**: Ersetzen, Vorschau, Online, Herunterladen und Löschen per Hover (am Touchscreen per Tippen). Titel, Jahr und Poster öffnen die Vorschau mit allen Infos – eine Detailansicht gibt es nur für Serien
+- **Set hochladen** (Ordner oder ZIP) direkt in der Serien-Detailansicht
+- **Schnelle Listen**: Kacheln nutzen kleine, zwischengespeicherte Vorschaubilder (`/config/cache/thumbs`, max. 600 MB, automatisch bereinigt); die Vorschau und der Download liefern immer das Original
 - **Herunterladen** in Originalqualität: einzelne Poster oder eine Auswahl/alle einer Serie als ZIP
 - Für iPhone und iPad optimiert (kompakte Kopfleiste, große Tippflächen)
 

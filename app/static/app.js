@@ -70,7 +70,7 @@ function icon(name, size = 18) {
 }
 
 /* ------------------------------------------------------------ state --- */
-const S = { st: null, langs: [], items: [], total: 0, filter: "all", q: "", lib: "", letter: null, letters: {}, allTotal: 0, req: 0, world: "", poll: null, step: "", reached: 0, rain: new Set(), view: "" };
+const S = { st: null, langs: [], items: [], total: 0, filter: "all", q: "", lib: "", letter: null, letters: {}, allTotal: 0, req: 0, pending: 0, ctl: null, world: "", poll: null, step: "", reached: 0, rain: new Set(), view: "" };
 const cfg = () => S.st.config;
 const curWorld = () => cfg().worlds.find(w => w.id === S.world) || cfg().worlds[0];
 const worldStats = () => (S.st.summary.worlds || {})[S.world] || { items: 0, slots: 0, missing: 0, complete_items: 0 };
@@ -94,22 +94,30 @@ const AZ_MIN = 150;   // from this many titles on the list is split by first let
 async function loadItems(append = false) {
   // S.lib is "lib:<Plex library>" or "src:<Sonarr/Radarr instance | Eigener Ordner>"
   const id = ++S.req, q = S.q.trim();
+  if (S.ctl) S.ctl.abort();                   // typing fast: the answer to an older keystroke is not needed any more
+  const ctl = S.ctl = new AbortController(), sig = { signal: ctl.signal };
+  S.pending++;
+  try { return await loadItemsInner(append, id, q, sig); }
+  catch (e) { if (e.name === "AbortError") return; throw e; }
+  finally { S.pending--; }
+}
+async function loadItemsInner(append, id, q, sig) {
   const query = (letter, limit, offset) => new URLSearchParams({ world: S.world, q: S.q, filter: S.filter, letter, library: S.lib.startsWith("lib:") ? S.lib.slice(4) : "",
     source: S.lib.startsWith("src:") ? S.lib.slice(4) : "", offset, limit });
   const total = letters => Object.values(letters || {}).reduce((a, b) => a + b, 0);
   let letter = q ? "" : (S.letter ?? "");     // the search always covers all titles, the letter is ignored then
   if (!q && S.letter === null) {              // first view of a big list: start with "#" (or the first letter that exists)
-    const r0 = await api("/items?" + query("", 1, 0));
+    const r0 = await api("/items?" + query("", 1, 0), sig);
     if (id !== S.req) return;
     S.letters = r0.letters; S.allTotal = total(r0.letters);
     const keys = Object.keys(r0.letters).sort((a, b) => a === "#" ? -1 : b === "#" ? 1 : a.localeCompare(b));
     S.letter = letter = S.allTotal <= AZ_MIN ? "" : keys[0] || "";
   }
-  const r = await api("/items?" + query(letter, 120, append ? S.items.length : 0));
+  const r = await api("/items?" + query(letter, 120, append ? S.items.length : 0), sig);
   if (id !== S.req) return;                   // a newer request (typing, filter) has taken over
   if (!q) {
     S.letters = r.letters; S.allTotal = total(r.letters);
-    if (letter && !r.letters[letter]) { S.letter = null; return loadItems(); }   // the letter is empty in this filter
+    if (letter && !r.letters[letter]) { S.letter = null; return loadItemsInner(false, id, q, sig); }   // the letter is empty in this filter
   }
   S.items = append ? S.items.concat(r.items) : r.items;
   S.total = r.total;
@@ -287,7 +295,7 @@ function dashboard() {
       h("div", { class: "logo" }, h("img", { class: "logoimg", src: "/static/icon.png", alt: "" }), h("span", {}, "assets", h("u", {}, "_"))),
       ws.length > 1 ? h("div", { class: "worlds", title: "Welt wechseln" }, ws.map(w =>
         h("button", { class: w.id === S.world ? "on" : "", style: `--c:${worldColor(w)}`, onclick: () => switchWorld(w.id) }, h("i"), w.name))) : null,
-      h("div", { class: "search" }, icon("search", 16), h("input", { type: "search", placeholder: "Titel suchen …", id: "q", value: S.q, autocomplete: "off", enterkeyhint: "search", oninput: debounce(async e => { S.q = e.target.value; await loadItems(); renderGrid(); }, 120) })),
+      h("div", { class: "search" }, icon("search", 16), h("input", { type: "search", placeholder: "Titel suchen …", id: "q", value: S.q, autocomplete: "off", enterkeyhint: "search", oninput: debounce(async e => { S.q = e.target.value; await loadItems(); renderGrid(); }, 150) })),
       h("div", { class: "spacer" }),
       h("button", { class: "btn tb", title: "Bilder, Ordner oder ZIPs hochladen – p5assets ordnet sie automatisch den Titeln zu", onclick: () => pickFiles() }, icon("upload"), h("span", { class: "lbl" }, "Bilder hochladen")),
       h("button", { class: "btn tb", title: "Einen Titel von Hand anlegen, der weder in Plex noch in Sonarr/Radarr steht", onclick: openCustom }, icon("folderplus"), h("span", { class: "lbl" }, "Titel anlegen")),
@@ -388,8 +396,10 @@ function renderAz() {
 }
 
 function renderGrid() {
+  if (S.pending) return;                       // a newer load is on its way: keep showing the current list, no intermediate states
   renderAz();
   const g = $("#grid"); if (!g) return;
+  g.querySelectorAll("img").forEach(i => i.removeAttribute("src"));   // cancels pictures of the old list that are still loading
   if (!S.items.length) {
     fill(g, h("div", { class: "empty" },
       S.st.summary.running ? h("h2", {}, "Scanne …") :
@@ -409,7 +419,7 @@ function posterBox(item, slot, known = true) {
   const wrap = h("div", { class: "poster" + (!exists && known ? " miss" : "") });
   const placeholder = txt => wrap.append(h("div", { class: "ph" }, h("div", {}, h("b", {}, "＋"), txt)));
   if (exists) {
-    wrap.append(h("img", { loading: "lazy", alt: "", draggable: false, src: `/api/asset/${item.id}/${slot}?v=${sl.mtime}`, onload: e => e.target.classList.add("loaded"),
+    wrap.append(h("img", { loading: "lazy", alt: "", draggable: false, src: `/api/thumb/${item.id}/${slot}?v=${sl.mtime}`, onload: e => e.target.classList.add("loaded"),
       onerror: e => { e.target.remove(); placeholder("Bild defekt"); } }));
   } else if (item.in_plex && known && sl && sl.plex_thumb) {
     wrap.append(h("img", { loading: "lazy", alt: "", draggable: false, src: `/api/season-thumb/${item.id}/${slot}`, onload: e => { e.target.classList.add("loaded"); wrap.append(h("span", { class: "badge warn b", title: "Nur Vorschau aus Plex (kann Overlays enthalten) – kein Kometa-Asset, nicht kopierbar" }, "Plex-Vorschau")); },
@@ -465,19 +475,26 @@ function card(item) {
   box.append(h("span", { class: "badge " + (bad ? "bad" : "ok") }, bad ? `${bad} fehlt` : "✓"));
   box.title = metaText(item);
   if (!item.in_plex) box.append(h("span", { class: "badge warn b" }, notPlexLabel(item)));
-  const info = h("div", { class: "info", onclick: movie ? () => openItem(item.id) : null, title: movie ? "Details öffnen" : null },
+  // a movie has one poster: no detail view, title/year and poster open the preview; the action buttons are built on first use
+  const info = h("div", { class: "info", onclick: movie ? () => openPreview(item, "poster", changed) : null, title: movie ? "Vorschau öffnen" : null },
     h("div", { class: "t", title: item.title }, item.title),
     h("div", { class: "s" }, [item.year, item.type === "show" ? `${item.season_count} Staffeln` : "Film"].filter(Boolean).join(" · ")));
+  function changed(it) {
+    const i = S.items.findIndex(x => x.id === it.id);
+    if (i >= 0) { S.items[i] = it; el.replaceWith(card(it)); }
+    api("/status").then(r => { S.st.summary = r; updateHero(); });
+  }
   if (movie && item.folder) {
-    // a movie has one poster: no detail view needed, the actions sit right on the poster (tap shows them on touch screens)
-    const changed = it => {
-      const i = S.items.findIndex(x => x.id === it.id);
-      if (i >= 0) { S.items[i] = it; const n = card(it); el.replaceWith(n); }
-      api("/status").then(r => { S.st.summary = r; updateHero(); });
+    let ready = false;
+    const ensure = () => { if (!ready) { ready = true; box.append(slotActions(item, "poster", box, changed)); } };
+    box.addEventListener("pointerenter", ensure, { once: true });
+    box.onclick = () => {
+      ensure();
+      if (matchMedia("(hover: none)").matches) toggleActions(box); else openPreview(item, "poster", changed);
     };
-    box.append(slotActions(item, "poster", box, changed));
-    box.onclick = () => { if (matchMedia("(hover: none)").matches) toggleActions(box); else if (item.slots.poster && item.slots.poster.exists) openPreview(item, "poster", changed); else pickFiles(f => uploadSlot(item, "poster", f, changed), false); };
     makeDropTarget(el, files => uploadSlot(item, "poster", files, changed));
+  } else if (movie) {
+    box.onclick = () => openPreview(item, "poster", changed);
   } else {
     makeDropTarget(el, files => importFiles(files, item.id));
   }
@@ -500,9 +517,10 @@ async function openItem(id) {
     loadItems().then(renderGrid);
   }
 
-  let selMode = false;
+  let selMode = false, cur = item;
   const sel = new Set();
   function draw(it) {
+    cur = it;
     const have = Object.keys(it.slots).filter(k => it.slots[k].exists);
     for (const k of [...sel]) if (!have.includes(k)) sel.delete(k);
     drawer.classList.toggle("selecting", selMode);
@@ -525,7 +543,7 @@ async function openItem(id) {
       h("div", { class: "body" },
         !it.folder ? h("div", { class: "status bad" }, "Für diesen Titel ist kein Ordnername bekannt – Upload nicht möglich.") : null,
         h("p", { class: "hint" }, "Bild auf eine Kachel ziehen oder anklicken, um es zu ersetzen. Ein vorhandenes Poster lässt sich auf eine andere Kachel ziehen, um es zu kopieren. Mehrere Dateien, Ordner oder eine ZIP auf dieses Fenster ziehen: p5assets ordnet sie automatisch zu und benennt sie Kometa-konform."),
-        have.length && it.type === "show" ? downloadBar(it, have) : null,
+        it.type === "show" ? downloadBar(it, have) : null,
         h("div", { class: "slots" }, keys.map(k => slotView(it, k, true))),
         extra.length ? h("details", { class: "more-seasons" },
           h("summary", {}, `Weitere Staffeln (Season00 – Season${String(it.max_season).padStart(2, "0")}) – auch für Staffeln, die Plex noch nicht kennt`),
@@ -536,8 +554,9 @@ async function openItem(id) {
   /** Download of single tiles (via the tile buttons) or several/all as a ZIP in original quality. */
   function downloadBar(it, have) {
     const zip = keys => downloadUrl(`/api/download-zip/${it.id}?slots=${encodeURIComponent(keys.join(","))}`);
-    return h("div", { class: "dlbar row wrap" },
-      selMode ? [
+    const upload = h("button", { class: "btn sm primary", title: "Ordner oder ZIP mit allen Bildern dieser Serie – p5assets ordnet sie den Kacheln zu", onclick: () => pickSet(files => importFiles(files, it.id, draw, it)) }, icon("upload", 14), "Set hochladen");
+    return h("div", { class: "dlbar row wrap" }, selMode ? null : upload,
+      !have.length ? null : selMode ? [
         h("span", { class: "hint", style: "margin:0" }, `${sel.size} von ${have.length} ausgewählt – Kacheln antippen`),
         h("button", { class: "btn sm", onclick: () => { have.forEach(k => sel.add(k)); draw(it); } }, "Alle wählen"),
         h("button", { class: "btn sm primary", disabled: !sel.size, onclick: () => zip([...sel]) }, icon("download", 14), `Auswahl als ZIP (${sel.size})`),
@@ -587,7 +606,7 @@ async function openItem(id) {
     });
     return el;
   }
-  makeDropTarget(drawer, files => importFiles(files, id, draw));
+  makeDropTarget(drawer, files => importFiles(files, id, draw, cur));
   draw(item);
 }
 
@@ -619,10 +638,11 @@ function slotActions(it, key, box, draw) {
     h("div", { class: "ovhint" }, "oder Bild hierher ziehen"));
 }
 
-/** Enlarged view of an existing asset with its details in a list next to it. */
+/** Enlarged view of a poster (always the original file) with its details and the actions. Works for empty slots too
+ *  (Plex preview or a placeholder, with "Ersetzen" / "Online"). */
 function openPreview(it, key, draw) {
-  const sl = it.slots[key];
-  const src = `/api/asset/${it.id}/${key}?v=${sl.mtime}`;
+  const sl = it.slots[key] || {}, exists = !!sl.exists;
+  const src = exists ? `/api/asset/${it.id}/${key}?v=${sl.mtime}` : sl.plex_thumb ? `/api/season-thumb/${it.id}/${key}` : "";
   const fmtSize = b => b >= 1048576 ? (b / 1048576).toFixed(2) + " MB" : Math.round(b / 1024) + " KB";
   const res = h("dd", {}, "…");
   const rows = [
@@ -630,29 +650,40 @@ function openPreview(it, key, draw) {
     ["Slot", slotLabel(key, it.type)],
     ["Kometa-Ordner", it.folder || "—"],
     ...((it.mirror_folders || []).length ? [["Zusätzlich gespeichert in", it.mirror_folders.join(", ")]] : []),
-    ["Datei", sl.file],
-    ...((sl.mirrors || []).length ? [["Kopie in", sl.mirrors.join(", ")]] : []),
-    ["Größe", fmtSize(sl.size)],
-    ["Geändert", new Date(sl.mtime * 1000).toLocaleString("de-DE")],
-    ["Format", (sl.file.split(".").pop() || "").toUpperCase()],
+    ...(exists ? [
+      ["Datei", sl.file],
+      ...((sl.mirrors || []).length ? [["Kopie in", sl.mirrors.join(", ")]] : []),
+      ["Größe", fmtSize(sl.size)],
+      ["Geändert", new Date(sl.mtime * 1000).toLocaleString("de-DE")],
+      ["Format", (sl.file.split(".").pop() || "").toUpperCase()]] : [["Datei", "noch kein Kometa-Asset vorhanden"]]),
   ];
   if ((it.dupes || []).length) rows.push(["Hinweis", `Ordnername auch an anderer Stelle gefunden (wird nicht genutzt): ${it.dupes.join(", ")}`]);
-  const img = h("img", { src, alt: "", onload: e => { res.textContent = `${e.target.naturalWidth} × ${e.target.naturalHeight} px`; } });
+  const touch = matchMedia("(hover: none)").matches;
+  const img = src ? h("img", { src, alt: "", onload: e => { res.textContent = `${e.target.naturalWidth} × ${e.target.naturalHeight} px${exists ? "" : " (Plex-Vorschau)"}`; } })
+    : h("div", { class: "noimg" }, h("b", {}, "＋"), "kein Bild");
+  const pick = () => pickFiles(files => { close(); uploadSlot(it, key, files, draw); }, false);
   const wrap = h("div", { class: "modalwrap lightbox", onclick: e => { if (e.target === wrap) close(); } },
-    h("div", { class: "lbox" }, img,
+    h("div", { class: "lbox" }, h("div", { class: "limg" }, img,
+        touch && exists ? h("div", { class: "hint", style: "text-align:center" }, "Bild lange drücken → „Zu Fotos hinzufügen“ (Originalqualität)") : null),
       h("div", { class: "lside" },
         h("div", { class: "row" }, h("h3", { class: "grow" }, "Vorschau"), h("button", { class: "btn ghost sm", onclick: () => close() }, "✕")),
         metaGroups(it),
         (it.mirror_folders || []).length ? h("div", { style: "margin-top:8px" }, h("span", { class: "tag ok", title: "Coming-Soon-Platzhalter: Poster werden auch im echten Film-Ordner abgelegt" }, "Coming Soon gespiegelt")) : null,
-        h("dl", {}, rows.map(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]), h("dt", {}, "Auflösung"), res),
+        h("dl", {}, rows.map(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]), src ? [h("dt", {}, "Auflösung"), res] : null),
         h("div", { class: "row wrap", style: "margin-top:20px" },
-          h("button", { class: "btn sm", onclick: () => downloadSlot(it, key) }, icon("download", 14), "Herunterladen"),
-          draw ? h("button", { class: "btn sm", onclick: () => { close(); searchOnline(it, key, draw); } }, "Online") : null,
-          draw && it.type === "show" ? h("button", { class: "btn sm", onclick: () => { close(); openApplyAll(it, key, draw); } }, "Auf alle …") : null,
-          draw ? h("button", { class: "btn sm danger", onclick: async () => {
+          it.folder ? h("button", { class: "btn sm primary", onclick: pick }, exists ? "Ersetzen" : "Datei wählen") : null,
+          exists ? h("button", { class: "btn sm", onclick: () => downloadSlot(it, key) }, icon("download", 14), "Herunterladen") : null,
+          draw && it.folder ? h("button", { class: "btn sm", onclick: () => { close(); searchOnline(it, key, draw); } }, "Online") : null,
+          draw && exists && it.type === "show" ? h("button", { class: "btn sm", onclick: () => { close(); openApplyAll(it, key, draw); } }, "Auf alle …") : null,
+          draw && exists ? h("button", { class: "btn sm danger", onclick: async () => {
             if (!confirm(`${slotLabel(key, it.type)} wirklich löschen?`)) return;
             close(); const r = await api(`/items/${it.id}/${key}`, { method: "DELETE" }); draw(r.item);
-          } }, "Löschen") : null))));
+          } }, "Löschen") : null,
+          it.custom && it.type === "movie" ? h("button", { class: "btn sm danger", title: "Entfernt nur den Eintrag, Dateien bleiben erhalten", onclick: async () => {
+            if (!confirm("Eigenen Ordner aus der Liste entfernen? Die Dateien bleiben erhalten.")) return;
+            await api("/custom/" + it.id, { method: "DELETE" }); close(); toast("Entfernt", "ok"); await loadItems(); renderGrid();
+          } }, "Eintrag entfernen") : null),
+        !it.folder ? h("div", { class: "status bad" }, "Für diesen Titel ist kein Ordnername bekannt – Upload nicht möglich.") : null)));
   const onKey = e => { if (e.key === "Escape") close(); };
   function close() { wrap.remove(); document.removeEventListener("keydown", onKey); }
   document.addEventListener("keydown", onKey);
@@ -696,7 +727,7 @@ function openApplyAll(it, key, draw) {
   const allRow = h("label", { class: "opt" }, allRadio, h("div", {}, "Alle Kacheln bis Season", limitInput, allSub));
   const m = modal(`„${label}“ für ${it.title} auf andere Kacheln anwenden`, h("div", {},
     h("div", { class: "row", style: "margin-bottom:6px" },
-      h("img", { src: `/api/asset/${it.id}/${key}?v=${it.slots[key].mtime}`, alt: "", style: "width:64px;border-radius:6px;border:1px solid var(--line)" }),
+      h("img", { src: `/api/thumb/${it.id}/${key}?v=${it.slots[key].mtime}`, alt: "", style: "width:64px;border-radius:6px;border:1px solid var(--line)" }),
       h("div", { class: "hint" }, "Das Bild wird kopiert und jede Kopie Kometa-konform benannt (poster, Season00, Season01 …). Das Original bleibt unverändert.")),
     h("label", { class: "f" }, "Welche Kacheln?"),
     radio("range", "known", "Nur vorhandene Kacheln dieser Serie", `${known} weitere Kachel${known === 1 ? "" : "n"} (Poster + bekannte Staffeln laut Plex/Sonarr)`, opt.range === "known", v => { opt.range = v; }),
@@ -795,7 +826,8 @@ function openCustom() {
   const go = h("button", { class: "btn primary", onclick: async e => {
     try {
       const r = await busy(e.currentTarget, () => api("/custom", { json: { world: S.world, folder: folder.value, type: type.value, title: title.value } }));
-      m.close(); await loadItems(); renderGrid(); api("/status").then(s => { S.st.summary = s; updateHero(); }); openItem(r.item.id);
+      m.close(); await loadItems(); renderGrid(); api("/status").then(s => { S.st.summary = s; updateHero(); });
+      if (r.item.type === "movie") openPreview(r.item, "poster", it => { loadItems().then(renderGrid); }); else openItem(r.item.id);
     } catch (err) { st.className = "status bad"; st.textContent = "⚠ " + err.message; }
   } }, "Anlegen");
   const m = modal("Eigener Ordner", h("div", {},
@@ -866,8 +898,17 @@ function pickFiles(cb, multiple = true, directory = false) {
   inp.click();
 }
 
+/** "Set hochladen": ask whether a folder or a ZIP/images is meant (a folder cannot be picked in the same dialog). */
+function pickSet(cb) {
+  const m = modal("Set hochladen", h("div", {},
+    h("p", { class: "hint", style: "margin-top:0" }, "Alle Bilder gehören zu dieser Serie. p5assets erkennt Poster und Staffeln an den Dateinamen und benennt sie Kometa-konform."),
+    h("div", { class: "row wrap" },
+      h("button", { class: "btn primary", onclick: () => { m.close(); pickFiles(cb, true, true); } }, icon("folderplus", 16), "Ordner wählen"),
+      h("button", { class: "btn", onclick: () => { m.close(); pickFiles(cb, true); } }, icon("upload", 16), "ZIP / Bilder wählen"))));
+}
+
 /* ------------------------------------------------------------ import --- */
-async function importFiles(files, itemId, onDone) {
+async function importFiles(files, itemId, onDone, item) {
   if (!files || !files.length) return;
   const fd = new FormData();
   if (itemId) fd.append("item_id", itemId); else fd.append("world", S.world);
@@ -889,7 +930,16 @@ async function importFiles(files, itemId, onDone) {
   res.errors.forEach(e => toast(e, "bad"));
   if (!res.entries.length) { toast("Keine Bilder gefunden", "bad"); return; }
   const allSet = res.entries.every(e => e.kind === "ignore" || e.item_id);
-  if (itemId && allSet) return applyImport(res.session, res.entries, onDone);
+  const used = res.entries.filter(e => e.item_id && e.slot && e.kind !== "ignore").map(e => e.slot);
+  const twice = used.length !== new Set(used).size;      // two files for the same tile: let the user decide in the review
+  if (itemId && allSet && !twice) {
+    const clash = item ? [...new Set(used)].filter(k => item.slots[k] && item.slots[k].exists) : [];
+    if (clash.length && !confirm(`${clash.length} Kachel${clash.length === 1 ? " ist" : "n sind"} schon belegt (${clash.slice(0, 6).map(k => slotLabel(k, "show")).join(", ")}${clash.length > 6 ? " …" : ""}) und ${clash.length === 1 ? "wird" : "werden"} überschrieben. Fortfahren?`)) {
+      api("/import/" + res.session, { method: "DELETE" }).catch(() => {});
+      return;
+    }
+    return applyImport(res.session, res.entries, onDone);
+  }
   reviewImport(res, onDone);
 }
 
