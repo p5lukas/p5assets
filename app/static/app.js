@@ -70,9 +70,10 @@ function icon(name, size = 18) {
 }
 
 /* ------------------------------------------------------------ state --- */
-const S = { st: null, langs: [], items: [], total: 0, filter: "all", q: "", lib: "", letter: null, letters: {}, allTotal: 0, req: 0, pending: 0, ctl: null, world: "", poll: null, step: "", reached: 0, rain: new Set(), view: "" };
+const S = { st: null, langs: [], items: [], total: 0, filter: "all", q: "", lib: "", letter: null, letters: {}, allTotal: 0, req: 0, pending: 0, ctl: null, stats: null, nopost: false, io: null, world: "", poll: null, step: "", reached: 0, rain: new Set(), view: "" };
 const cfg = () => S.st.config;
 const curWorld = () => cfg().worlds.find(w => w.id === S.world) || cfg().worlds[0];
+const scopeStats = () => S.stats || worldStats();
 const worldStats = () => (S.st.summary.worlds || {})[S.world] || { items: 0, slots: 0, missing: 0, complete_items: 0 };
 
 const worldColor = w => `hsl(${w && w.hue != null ? w.hue : 140} 100% 50%)`;
@@ -102,11 +103,14 @@ async function loadItems(append = false) {
   finally { S.pending--; }
 }
 async function loadItemsInner(append, id, q, sig) {
-  const query = (letter, limit, offset) => new URLSearchParams({ world: S.world, q: S.q, filter: S.filter, letter, library: S.lib.startsWith("lib:") ? S.lib.slice(4) : "",
-    source: S.lib.startsWith("src:") ? S.lib.slice(4) : "", offset, limit });
+  // S.lib: "" = all | "type:movie|show" = all movie/series sources combined | "lib:<Plex library>" | "src:<Sonarr/Radarr instance | Eigener Ordner>"
+  const scope = { type: S.lib.startsWith("type:") ? S.lib.slice(5) : "", library: S.lib.startsWith("lib:") ? S.lib.slice(4) : "", source: S.lib.startsWith("src:") ? S.lib.slice(4) : "" };
+  const query = (letter, limit, offset) => new URLSearchParams({ world: S.world, q: S.q, filter: S.filter, letter, ...scope,
+    ...(S.filter === "comingsoon" && S.nopost ? { nopost: "1" } : {}), offset, limit });
   const total = letters => Object.values(letters || {}).reduce((a, b) => a + b, 0);
-  let letter = q ? "" : (S.letter ?? "");     // the search always covers all titles, the letter is ignored then
-  if (!q && S.letter === null) {              // first view of a big list: start with "#" (or the first letter that exists)
+  const useLetters = S.filter === "all" && !q;   // only the tab "Alle" is split by letter; the search always covers all titles
+  let letter = useLetters ? (S.letter ?? "") : "";
+  if (useLetters && S.letter === null) {          // first view of a big list: start with "#" (or the first letter that exists)
     const r0 = await api("/items?" + query("", 1, 0), sig);
     if (id !== S.req) return;
     S.letters = r0.letters; S.allTotal = total(r0.letters);
@@ -114,11 +118,12 @@ async function loadItemsInner(append, id, q, sig) {
     S.letter = letter = S.allTotal <= AZ_MIN ? "" : keys[0] || "";
   }
   const r = await api("/items?" + query(letter, 120, append ? S.items.length : 0), sig);
-  if (id !== S.req) return;                   // a newer request (typing, filter) has taken over
-  if (!q) {
+  if (id !== S.req) return;                       // a newer request (typing, filter) has taken over
+  if (useLetters) {
     S.letters = r.letters; S.allTotal = total(r.letters);
-    if (letter && !r.letters[letter]) { S.letter = null; return loadItemsInner(false, id, q, sig); }   // the letter is empty in this filter
+    if (letter && !r.letters[letter]) { S.letter = null; return loadItemsInner(false, id, q, sig); }   // the letter is empty in this selection
   }
+  S.stats = r.stats;
   S.items = append ? S.items.concat(r.items) : r.items;
   S.total = r.total;
 }
@@ -316,7 +321,7 @@ function switchWorld(id) {
   if (id === S.world) return;
   const w = cfg().worlds.find(x => x.id === id);
   worldTransition(w, async () => {
-    S.world = id; S.filter = "all"; S.q = ""; S.lib = ""; S.letter = null; S.letters = {};
+    S.world = id; S.filter = "all"; S.q = ""; S.lib = ""; S.letter = null; S.letters = {}; S.stats = null; S.nopost = false;
     try { localStorage.setItem("p5world", id); } catch { /* ignore */ }
     setAccent(); dashboard();
   });
@@ -329,50 +334,70 @@ async function doScan() {
 
 function updateHero() {
   const hero = $("#hero"); if (!hero) return;
-  const s = S.st.summary, ws = worldStats();
+  const s = S.st.summary, ws = scopeStats(), c = cfg();
   const pct = ws.slots ? Math.round(((ws.slots - ws.missing) / ws.slots) * 100) : 0;
   const sb = $("#scanbtn"); if (sb) { sb.disabled = s.running; sb.classList.toggle("spinning", !!s.running); }
-  fill(hero, h("div", { class: "hero" },
-    h("div", { class: "ring", style: `--p:${pct}` }, h("b", {}, pct + "%")),
-    h("div", {},
-      s.running ? h("div", { class: "row", style: "margin-bottom:10px" }, h("span", { class: "spin" }), s.progress || "Scanne …") : null,
-      s.error ? h("div", { class: "status bad" }, "⚠ " + s.error) : null,
-      (s.warnings || []).map(w => h("div", { class: "status bad" }, "⚠ " + w)),
-      h("div", { class: "stats" },
-        stat(ws.items, "Titel"), stat(ws.slots - ws.missing, "Assets vorhanden", "ok"), stat(ws.missing, "Fehlen", ws.missing ? "bad" : "ok"),
-        stat(ws.complete_items, "Vollständig")),
-    ),
-    h("div", { class: "hint", style: "text-align:right;white-space:pre" }, s.scanned_at ? "Zuletzt gescannt\n" + new Date(s.scanned_at * 1000).toLocaleString("de-DE") : ""),
-  ));
+  let box = hero.firstElementChild;
+  if (!box) {   // built once; only the parts are refreshed, so an open source dropdown is not torn down by a re-render
+    box = h("div", { class: "hero" }, h("div", { class: "ring" }), h("div", { id: "hmain" }), h("div", { id: "hsrc", style: "display:contents" }),
+      h("div", { class: "hint scanned", id: "hhint", style: "text-align:right;white-space:pre" }));
+    hero.append(box);
+  }
+  box.firstElementChild.style.setProperty("--p", pct);
+  fill(box.firstElementChild, h("b", {}, pct + "%"));
+  fill($("#hmain"),
+    s.running ? h("div", { class: "row", style: "margin-bottom:10px" }, h("span", { class: "spin" }), s.progress || "Scanne …") : null,
+    s.error ? h("div", { class: "status bad" }, "⚠ " + s.error) : null,
+    (s.warnings || []).map(w => h("div", { class: "status bad" }, "⚠ " + w)),
+    h("div", { class: "stats" },
+      stat(ws.items, "Titel"), stat(ws.slots - ws.missing, "Assets vorhanden", "ok"), stat(ws.missing, "Fehlen", ws.missing ? "bad" : "ok"),
+      stat(ws.complete_items, "Vollständig")));
+  const sig = JSON.stringify([S.world, S.lib, c.libraries.map(l => [l.title, l.enabled, l.world]), c.arr.map(a => [a.name, a.world]), c.custom.length]);
+  if (box.dataset.sig !== sig) { box.dataset.sig = sig; fill($("#hsrc"), sourceSelect()); }
+  const hasSrc = !!$("#hsrc").firstChild;
+  box.classList.toggle("hassrc", hasSrc);
+  fill($("#hhint"), s.scanned_at ? "Zuletzt gescannt\n" + new Date(s.scanned_at * 1000).toLocaleString("de-DE") : "");
   renderChips();
 }
 const stat = (n, label, cls = "") => h("div", { class: "stat " + cls }, h("b", {}, n ?? 0), h("span", {}, label));
 
+/** Source filter in the statistic block: all / all movie / all series sources (combined, every title counted once) /
+ *  single Plex libraries / single Sonarr+Radarr instances. Ring, numbers and tab counters follow the selection. */
+function sourceSelect() {
+  const c = cfg();
+  const libs = c.libraries.filter(l => l.enabled && l.world === S.world), arrs = c.arr.filter(a => a.world === S.world);
+  const custom = c.custom.some(x => x.world === S.world);
+  const hasMovie = libs.some(l => l.type === "movie") || arrs.some(a => a.kind === "radarr") || custom;
+  const hasShow = libs.some(l => l.type === "show") || arrs.some(a => a.kind === "sonarr") || custom;
+  const groups = [
+    hasMovie && hasShow ? [null, [{ v: "type:movie", label: "Alle Filmquellen (kombiniert)" }, { v: "type:show", label: "Alle Serienquellen (kombiniert)" }]] : null,
+    libs.length ? ["Plex-Bibliotheken", libs.map(l => ({ v: "lib:" + l.title, label: l.title }))] : null,
+    arrs.length || custom ? ["Sonarr / Radarr / Ordner", [...arrs.map(a => ({ v: "src:" + a.name, label: a.name })), ...(custom ? [{ v: "src:Eigener Ordner", label: "Eigene Ordner" }] : [])]] : null,
+  ].filter(Boolean);
+  const all = groups.flatMap(g => g[1]);
+  if (S.lib && !all.some(o => o.v === S.lib)) S.lib = "";
+  const opt = o => h("option", { value: o.v, selected: S.lib === o.v }, o.label);
+  if (all.length < 2) return null;               // only one source: nothing to choose
+  return h("div", { class: "srccell" }, h("label", { class: "srclab" }, "Quelle"),
+    h("select", { title: "Statistik und Liste nach Quelle einschränken", onchange: async e => { S.lib = e.target.value; S.letter = null; await loadItems(); renderGrid(); } },
+      h("option", { value: "" }, "Alle Quellen"),
+      groups.map(([label, os]) => label ? h("optgroup", { label }, os.map(opt)) : os.map(opt))));
+}
+
 function renderChips() {
   const el = $("#chips"); if (!el) return;
-  const ws = worldStats(), c = cfg();
-  const chip = (label, on, fn, small) => h("button", { class: "chip" + (on ? " on" : ""), onclick: fn }, label, small != null ? h("small", {}, small) : null);
-  const setF = f => async () => { S.filter = f; renderChips(); await loadItems(); renderGrid(); };
-  const libs = c.libraries.filter(l => l.enabled && l.world === S.world);
+  const c = cfg(), cnt = (S.stats && S.stats.counts) || {};
   const hasExtra = c.arr.some(a => a.world === S.world) || c.custom.some(x => x.world === S.world);
-  // filter by source: Plex libraries, Sonarr/Radarr instances, own folders (in the "Nicht in Plex" tab only the latter two)
-  const plexOpts = S.filter === "notplex" ? [] : libs.map(l => ({ v: "lib:" + l.title, label: l.title }));
-  const srcOpts = [...c.arr.filter(a => a.world === S.world).map(a => ({ v: "src:" + a.name, label: a.name })),
-    ...(c.custom.some(x => x.world === S.world) ? [{ v: "src:Eigener Ordner", label: "Eigene Ordner" }] : [])];
-  if (S.lib && ![...plexOpts, ...srcOpts].some(o => o.v === S.lib)) S.lib = "";
-  const opt = o => h("option", { value: o.v, selected: S.lib === o.v }, o.label);
+  const chip = (label, key, n, title) => h("button", { class: "chip" + (S.filter === key ? " on" : ""), title, onclick: async () => { S.filter = key; renderChips(); await loadItems(); renderGrid(); } },
+    label, n != null ? h("small", {}, n) : null);
   fill(el,
-    chip("Alle", S.filter === "all", setF("all"), ws.items),
-    chip("Fehlende", S.filter === "missing", setF("missing"), ws.items - ws.complete_items),
-    chip("Vollständig", S.filter === "complete", setF("complete"), ws.complete_items),
-    hasExtra ? chip("Nicht in Plex", S.filter === "notplex", setF("notplex")) : null,
-    c.arr.some(a => a.world === S.world) ? [
-      h("button", { class: "chip" + (S.filter === "monitored" ? " on" : ""), title: "In Sonarr/Radarr überwacht", onclick: setF("monitored") }, "Überwacht"),
-      h("button", { class: "chip" + (S.filter === "wanted" ? " on" : ""), title: "In Sonarr/Radarr überwacht, aber noch keine Datei (missing)", onclick: setF("wanted") }, "Überwacht, ohne Datei")] : null,
-    plexOpts.length + srcOpts.length > 1 ? h("select", { style: "width:auto", title: "Nach Quelle filtern", onchange: async e => { S.lib = e.target.value; await loadItems(); renderGrid(); } },
-      h("option", { value: "" }, "Alle Quellen"),
-      plexOpts.length ? h("optgroup", { label: "Plex-Bibliotheken" }, plexOpts.map(opt)) : null,
-      srcOpts.length ? h("optgroup", { label: "Sonarr / Radarr / Ordner" }, srcOpts.map(opt)) : null) : null,
+    chip("Alle", "all", cnt.all),
+    chip("Fehlende", "missing", cnt.missing),
+    chip("Vollständig", "complete", cnt.complete),
+    cnt.comingsoon > 0 || S.filter === "comingsoon" ? chip("Coming Soon", "comingsoon", cnt.comingsoon, "In Plex schon als Coming-Soon-Platzhalter (UMTK) sichtbar – brauchen zeitnah ein Poster") : null,
+    hasExtra || cnt.notplex > 0 || S.filter === "notplex" ? chip("Noch nicht in Plex", "notplex", cnt.notplex, "Nur in Sonarr/Radarr bzw. als eigener Ordner: noch ohne Datei, nicht erschienen oder von Plex noch nicht eingelesen") : null,
+    S.filter === "comingsoon" ? h("label", { class: "chip" + (S.nopost ? " on" : ""), style: "display:inline-flex;gap:8px;align-items:center;cursor:pointer" },
+      h("input", { type: "checkbox", checked: S.nopost, style: "accent-color:var(--accent)", onchange: async e => { S.nopost = e.target.checked; renderChips(); await loadItems(); renderGrid(); } }), "nur ohne Poster") : null,
   );
 }
 
@@ -382,9 +407,9 @@ function setLetter(l, fromBottom) {
   loadItems().then(() => { renderGrid(); if (fromBottom) window.scrollTo({ top: Math.max(0, ($("#az").offsetTop || 0) - 80), behavior: "smooth" }); });
 }
 
-/** A–Z bar above and below the grid (only for big lists; hidden while a search is active). */
+/** A–Z bar above and below the grid (only tab "Alle", only for big lists, hidden while a search is active). */
 function renderAz() {
-  const show = !S.q.trim() && S.allTotal > AZ_MIN;
+  const show = S.filter === "all" && !S.q.trim() && S.allTotal > AZ_MIN;   // letters only in the tab "Alle"
   for (const [id, bottom] of [["#az", false], ["#az2", true]]) {
     const el = $(id); if (!el) continue;
     el.hidden = !show;
@@ -397,19 +422,43 @@ function renderAz() {
 
 function renderGrid() {
   if (S.pending) return;                       // a newer load is on its way: keep showing the current list, no intermediate states
+  updateHero();                                // statistic and tab counters belong to the chosen source
   renderAz();
   const g = $("#grid"); if (!g) return;
   g.querySelectorAll("img").forEach(i => i.removeAttribute("src"));   // cancels pictures of the old list that are still loading
   if (!S.items.length) {
     fill(g, h("div", { class: "empty" },
       S.st.summary.running ? h("h2", {}, "Scanne …") :
-      S.filter === "missing" && !S.q && worldStats().items ? [h("div", { class: "big" }, "🎉"), h("h2", {}, "Alles vollständig!"), "Für kein Poster oder keine Staffel fehlt etwas."] :
+      S.filter === "missing" && !S.q && scopeStats().items ? [h("div", { class: "big" }, "🎉"), h("h2", {}, "Alles vollständig!"), "Für kein Poster oder keine Staffel fehlt etwas."] :
       !worldStats().items ? [h("h2", {}, "Hier ist noch nichts"), "Ordne dieser Welt unter ⚙ Bibliotheken oder Sonarr/Radarr zu – oder lege mit „＋ Ordner“ einen eigenen Titel an."] :
       [h("h2", {}, "Nichts gefunden"), "Passe Filter oder Suche an – oder starte einen neuen Scan."]));
     return;
   }
-  fill(g, h("div", { class: "grid" }, S.items.map(card)));
-  if (S.items.length < S.total) g.append(h("button", { class: "btn more", onclick: async () => { await loadItems(true); renderGrid(); } }, `Mehr laden (${S.total - S.items.length})`));
+  fill(g, h("div", { class: "grid", id: "gridin" }, S.items.map(card)));
+  moreControl(g);
+}
+
+/** More titles load by themselves while scrolling (120 at a time); from ~500 loaded cards on a button asks first,
+ *  so phones are not overloaded. New cards are appended, the list is not rebuilt. */
+const MAX_AUTO = 480;
+function moreControl(g) {
+  if (S.io) { S.io.disconnect(); S.io = null; }
+  g.querySelectorAll(".more, .sentinel").forEach(e => e.remove());
+  if (S.items.length >= S.total) return;
+  const loadMore = async () => {
+    const before = S.items.length, gen = S.req;
+    await loadItems(true);
+    if (S.req !== gen + 1 || S.items.length === before) return;      // typing/filtering took over meanwhile
+    const grid = $("#gridin"); if (!grid) return;
+    S.items.slice(before).forEach(it => grid.append(card(it)));
+    moreControl($("#grid"));
+  };
+  if (S.items.length < MAX_AUTO) {
+    const sentinel = h("div", { class: "sentinel" });
+    g.append(sentinel);
+    S.io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { S.io.disconnect(); loadMore(); } }, { rootMargin: "900px" });
+    S.io.observe(sentinel);
+  } else g.append(h("button", { class: "btn more", onclick: async e => { e.currentTarget.disabled = true; await loadMore(); } }, `Mehr laden (${S.total - S.items.length})`));
 }
 
 /** `known` = slot counts as "missing" when empty; otherwise it is an optional empty tile. */
@@ -442,6 +491,7 @@ function notPlexLabel(item) {
 function statusTags(it) {
   const t = [];
   if (!it.in_plex) t.push({ text: "nicht in Plex", cls: "warn" });
+  if (it.coming_soon) t.push({ text: "Coming Soon", cls: "warn" });
   if (it.monitored != null) {
     t.push(it.monitored ? { text: "überwacht", cls: "ok" } : { text: "nicht überwacht", cls: "" });
     if (it.has_files === false) t.push({ text: "ohne Datei", cls: "warn" });
@@ -475,6 +525,7 @@ function card(item) {
   box.append(h("span", { class: "badge " + (bad ? "bad" : "ok") }, bad ? `${bad} fehlt` : "✓"));
   box.title = metaText(item);
   if (!item.in_plex) box.append(h("span", { class: "badge warn b" }, notPlexLabel(item)));
+  else if (item.coming_soon) box.append(h("span", { class: "badge warn b", title: "In Plex als Coming-Soon-Platzhalter sichtbar" }, "Coming Soon"));
   // a movie has one poster: no detail view, title/year and poster open the preview; the action buttons are built on first use
   const info = h("div", { class: "info", onclick: movie ? () => openPreview(item, "poster", changed) : null, title: movie ? "Vorschau öffnen" : null },
     h("div", { class: "t", title: item.title }, item.title),
@@ -554,7 +605,7 @@ async function openItem(id) {
   /** Download of single tiles (via the tile buttons) or several/all as a ZIP in original quality. */
   function downloadBar(it, have) {
     const zip = keys => downloadUrl(`/api/download-zip/${it.id}?slots=${encodeURIComponent(keys.join(","))}`);
-    const upload = h("button", { class: "btn sm primary", title: "Ordner oder ZIP mit allen Bildern dieser Serie – p5assets ordnet sie den Kacheln zu", onclick: () => pickSet(files => importFiles(files, it.id, draw, it)) }, icon("upload", 14), "Set hochladen");
+    const upload = h("button", { class: "btn sm primary", title: "Ordner oder ZIP mit allen Bildern dieser Serie – p5assets ordnet sie den Kacheln zu", onclick: () => pickSet(files => importFiles(files, it.id, draw, it, true)) }, icon("upload", 14), "Set hochladen");
     return h("div", { class: "dlbar row wrap" }, selMode ? null : upload,
       !have.length ? null : selMode ? [
         h("span", { class: "hint", style: "margin:0" }, `${sel.size} von ${have.length} ausgewählt – Kacheln antippen`),
@@ -631,15 +682,15 @@ function slotActions(it, key, box, draw) {
   const ob = (label, fn, cls = "") => h("button", { class: "ov-btn " + cls, onclick: e => { e.stopPropagation(); box.classList.remove("show"); fn(); } }, label);
   return h("div", { class: "hover" },
     h("div", { class: "ovbtns" }, exists
-      ? [ob("Ersetzen", pick), ob("Vorschau", () => openPreview(it, key, draw)), ob("Online", () => searchOnline(it, key, draw)),
+      ? [ob("Ersetzen", pick), ob("Vorschau", () => openPreview(it, key, draw)), ob("Online suchen", () => searchOnline(it, key, draw)),
          ob("Herunterladen", () => downloadSlot(it, key)),
          it.type === "show" ? ob("Auf alle …", () => openApplyAll(it, key, draw)) : null, ob("Löschen", del, "danger")]
-      : [ob("Hochladen", pick), ob("Online", () => searchOnline(it, key, draw))]),
+      : [ob("Hochladen", pick), ob("Online suchen", () => searchOnline(it, key, draw))]),
     h("div", { class: "ovhint" }, "oder Bild hierher ziehen"));
 }
 
 /** Enlarged view of a poster (always the original file) with its details and the actions. Works for empty slots too
- *  (Plex preview or a placeholder, with "Ersetzen" / "Online"). */
+ *  (Plex preview or a placeholder, with "Ersetzen" / "Online suchen"). */
 function openPreview(it, key, draw) {
   const sl = it.slots[key] || {}, exists = !!sl.exists;
   const src = exists ? `/api/asset/${it.id}/${key}?v=${sl.mtime}` : sl.plex_thumb ? `/api/season-thumb/${it.id}/${key}` : "";
@@ -673,7 +724,7 @@ function openPreview(it, key, draw) {
         h("div", { class: "row wrap", style: "margin-top:20px" },
           it.folder ? h("button", { class: "btn sm primary", onclick: pick }, exists ? "Ersetzen" : "Hochladen") : null,
           exists ? h("button", { class: "btn sm", onclick: () => downloadSlot(it, key) }, icon("download", 14), "Herunterladen") : null,
-          draw && it.folder ? h("button", { class: "btn sm", onclick: () => { close(); searchOnline(it, key, draw); } }, "Online") : null,
+          draw && it.folder ? h("button", { class: "btn sm", onclick: () => { close(); searchOnline(it, key, draw); } }, "Online suchen") : null,
           draw && exists && it.type === "show" ? h("button", { class: "btn sm", onclick: () => { close(); openApplyAll(it, key, draw); } }, "Auf alle …") : null,
           draw && exists ? h("button", { class: "btn sm danger", onclick: async () => {
             if (!confirm(`${slotLabel(key, it.type)} wirklich löschen?`)) return;
@@ -908,7 +959,7 @@ function pickSet(cb) {
 }
 
 /* ------------------------------------------------------------ import --- */
-async function importFiles(files, itemId, onDone, item) {
+async function importFiles(files, itemId, onDone, item, review) {
   if (!files || !files.length) return;
   const fd = new FormData();
   if (itemId) fd.append("item_id", itemId); else fd.append("world", S.world);
@@ -932,6 +983,7 @@ async function importFiles(files, itemId, onDone, item) {
   const allSet = res.entries.every(e => e.kind === "ignore" || e.item_id);
   const used = res.entries.filter(e => e.item_id && e.slot && e.kind !== "ignore").map(e => e.slot);
   const twice = used.length !== new Set(used).size;      // two files for the same tile: let the user decide in the review
+  if (review && item) return reviewImport(res, onDone, item);   // "Set hochladen": always the review dialog, series fixed
   if (itemId && allSet && !twice) {
     const clash = item ? [...new Set(used)].filter(k => item.slots[k] && item.slots[k].exists) : [];
     if (clash.length && !confirm(`${clash.length} Kachel${clash.length === 1 ? " ist" : "n sind"} schon belegt (${clash.slice(0, 6).map(k => slotLabel(k, "show")).join(", ")}${clash.length > 6 ? " …" : ""}) und ${clash.length === 1 ? "wird" : "werden"} überschrieben. Fortfahren?`)) {
@@ -958,20 +1010,26 @@ async function applyImport(sid, entries, onDone) {
   } catch (e) { toast(e.message, "bad"); }
 }
 
-function reviewImport(res, onDone) {
+function reviewImport(res, onDone, fixed) {
   const rows = res.entries.map(e => ({ ...e, use: !!e.item_id && e.kind !== "ignore" }));
   const list = h("div");
   const count = () => rows.filter(r => r.use && r.item_id).length;
   const apply = h("button", { class: "btn primary" });
   const refreshBtn = () => { const n = count(); apply.textContent = `${n} Asset${n === 1 ? "" : "s"} übernehmen`; apply.disabled = !n; };
 
+  const fixedSlots = () => fixed ? ["poster", ...Array.from({ length: (fixed.max_season ?? 50) + 1 }, (_, n) => "season-" + n), ...Object.keys(fixed.slots).filter(k => !/^season-\d+$/.test(k) && k !== "poster")]
+    .map(k => ({ slot: k, label: slotLabel(k, fixed.type) })) : null;
+  const dupSlots = () => { const c = {}; rows.filter(r => r.use && r.item_id).forEach(r => { c[r.slot] = (c[r.slot] || 0) + 1; }); return c; };
+
   function draw() {
+    const dups = dupSlots();
     fill(list, rows.map(r => {
-      const sel = h("select", { onchange: e => { r.slot = e.target.value; } });
+      const sel = h("select", { onchange: e => { r.slot = e.target.value; if (fixed) draw(); } });
       const fillSlots = opts => fill(sel, opts.map(o => h("option", { value: o.slot, selected: o.slot === r.slot }, o.label)));
       const input = h("input", { type: "text", placeholder: "Titel suchen …", value: r.item_id ? `${r.item_title}${r.item_year ? " (" + r.item_year + ")" : ""}` : "" });
       const list2 = h("div", { class: "list", hidden: true });
-      if (r.item_id) {
+      if (fixed && r.item_id) fillSlots(fixedSlots());
+      else if (r.item_id) {
         fillSlots([{ slot: r.slot, label: slotLabel(r.slot, "show") }]);
         api(`/slots?world=${res.world}&q=` + encodeURIComponent(r.item_title || "")).then(os => { const o = os.find(x => x.id === r.item_id); if (o) fillSlots(o.slots); });
       }
@@ -986,11 +1044,15 @@ function reviewImport(res, onDone) {
         } }, `${o.title}${o.year ? " (" + o.year + ")" : ""} `, h("span", { class: "pill" }, o.type === "movie" ? "Film" : "Serie"))));
       }, 200);
       input.onblur = () => setTimeout(() => (list2.hidden = true), 150);
-      const chk = h("input", { type: "checkbox", checked: r.use, title: "Übernehmen", onchange: e => { r.use = e.target.checked; row.classList.toggle("skip", !r.use); refreshBtn(); } });
+      const chk = h("input", { type: "checkbox", checked: r.use, title: "Übernehmen", onchange: e => { r.use = e.target.checked; row.classList.toggle("skip", !r.use); refreshBtn(); if (fixed) draw(); } });
       const row = h("div", { class: "imp" + (r.use ? "" : " skip") },
         h("img", { src: `/api/import/${res.session}/${r.id}`, loading: "lazy" }),
         h("div", { class: "fn" }, r.name, r.kind === "ignore" ? h("div", {}, h("span", { class: "pill bad" }, "Hintergrund/Banner – ignoriert")) : null),
-        h("div", { class: "ac c3" }, input, list2),
+        fixed && r.item_id
+          ? h("div", { class: "c3 fixedtitle" }, h("b", {}, fixed.title + (fixed.year ? ` (${fixed.year})` : "")), h("span", { class: "pill ok" }, "diese Serie"),
+              r.use && fixed.slots[r.slot] && fixed.slots[r.slot].exists ? h("span", { class: "pill warn", title: "Für diese Kachel gibt es schon ein Bild" }, "ersetzt vorhandenes Bild") : null,
+              r.use && dups[r.slot] > 1 ? h("span", { class: "pill bad", title: "Mehrere Dateien für dieselbe Kachel – nur die letzte bleibt" }, "doppelt belegt") : null)
+          : h("div", { class: "ac c3" }, input, list2),
         h("div", { class: "c4" }, sel), chk);
       return row;
     }));
@@ -998,7 +1060,8 @@ function reviewImport(res, onDone) {
   }
   draw();
   const m = modal(`${rows.length} Bilder erkannt`, h("div", {},
-    h("p", { class: "hint" }, "Zuordnung automatisch anhand von Datei- und Ordnernamen (nur Titel dieser Welt). Prüfe oder ändere sie – die Dateien werden Kometa-konform benannt (poster, Season01 …)."), list),
+    h("p", { class: "hint" }, fixed ? `Alle Bilder gehören zu „${fixed.title}“. Die Zuordnung zu Poster und Staffeln erkennt p5assets an den Dateinamen – prüfe oder ändere sie. Die Dateien werden Kometa-konform benannt (poster, Season01 …).`
+      : "Zuordnung automatisch anhand von Datei- und Ordnernamen (nur Titel dieser Welt). Prüfe oder ändere sie – die Dateien werden Kometa-konform benannt (poster, Season01 …)."), list),
     [apply, h("button", { class: "btn", onclick: () => { api("/import/" + res.session, { method: "DELETE" }); m.close(); } }, "Abbrechen"),
       h("span", { class: "spacer" }),
       h("span", { class: "hint" }, `${rows.filter(r => r.item_id).length} von ${rows.length} zugeordnet`)]);

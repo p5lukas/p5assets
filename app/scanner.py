@@ -196,6 +196,7 @@ def _prep(it: dict) -> None:
     it["_nt"] = kometa.normalize(it["title"])
     it["_fl"] = (it["folder"] or "").casefold()
     it["letter"] = kometa.letter_of(it["title"])
+    it["coming_soon"] = kometa.is_coming_soon(it["folder"])
 
 
 def custom_item(entry: dict) -> dict:

@@ -396,3 +396,17 @@ header.top{padding-top:env(safe-area-inset-top)}
 .noimg{width:min(320px,70vw);aspect-ratio:2/3;display:grid;place-items:center;align-content:center;text-align:center;border:1px dashed var(--line);border-radius:var(--r);color:var(--faint);background:var(--panel2)}
 .noimg b{font-size:42px;font-weight:400;color:var(--faint2);display:block}
 @media(max-width:760px){.limg{width:100%}}
+
+/* source select inside the statistic block, tabs, fixed title in the review */
+.hero.hassrc{grid-template-columns:auto 1fr auto auto}
+.srccell{display:flex;flex-direction:column;gap:4px;min-width:200px;max-width:280px}
+.srclab{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.srclab:before{content:"> ";color:var(--accent)}
+.srccell select{padding:8px 10px;font-size:13px}
+.sentinel{height:1px}
+.fixedtitle{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center}
+.pill.warn{color:var(--warn);border-color:#ffd24a66}
+@media(max-width:700px){
+  .hero.hassrc{grid-template-columns:auto 1fr}
+  .srccell{grid-column:1/-1;max-width:none}
+}

@@ -69,9 +69,10 @@ Ein schlanker Docker-Container im Matrix-Look. Er vergleicht deine Bibliotheken 
 - Online-Suche nach Postern (TMDb, TVDB, fanart.tv) mit Tabs je Anbieter, gruppiert nach deiner **Sprach-Prioritätsliste pro Welt** (z. B. Textless → Deutsch → English); Übernahme per Klick
 - **Log-Seite** (Listen-Symbol in der Kopfzeile): Live-Log mit Suche, Level-Filter, Download und Leeren; geschrieben nach `/config/logs/p5assets.log`, Tokens und API-Keys werden nie protokolliert
 - Fußzeile mit Version, Branch, Commit und GitHub-Link
-- Dashboard mit Abdeckung in %, Filter „Fehlende“, schneller Suche und automatischem Hintergrund-Scan
-- **A–Z-Leiste** (oben und unten) für große Bibliotheken: `#` für Zahlen/Sonderzeichen, die Suche durchsucht weiter alle Titel
-- **Filme direkt auf dem Poster bearbeiten**: Ersetzen, Vorschau, Online, Herunterladen und Löschen per Hover (am Touchscreen per Tippen). Titel, Jahr und Poster öffnen die Vorschau mit allen Infos – eine Detailansicht gibt es nur für Serien
+- Dashboard mit Abdeckung in %, Reitern **Alle · Fehlende · Vollständig · Coming Soon · Noch nicht in Plex**, Quellenauswahl (auch „Alle Filmquellen / Serienquellen kombiniert“), schneller Suche und automatischem Hintergrund-Scan
+- **Coming Soon**: eigener Reiter für Titel, die in Plex schon als UMTK-Platzhalter erscheinen und zeitnah ein Poster brauchen
+- **A–Z-Leiste** (oben und unten, im Reiter „Alle“) für große Bibliotheken: `#` für Zahlen/Sonderzeichen, die Suche durchsucht weiter alle Titel
+- **Filme direkt auf dem Poster bearbeiten**: Ersetzen, Vorschau, Online suchen, Herunterladen und Löschen per Hover (am Touchscreen per Tippen). Titel, Jahr und Poster öffnen die Vorschau mit allen Infos – eine Detailansicht gibt es nur für Serien
 - **Set hochladen** (Ordner oder ZIP) direkt in der Serien-Detailansicht
 - **Schnelle Listen**: Kacheln nutzen kleine, zwischengespeicherte Vorschaubilder (`/config/cache/thumbs`, max. 600 MB, automatisch bereinigt); die Vorschau und der Download liefern immer das Original
 - **Herunterladen** in Originalqualität: einzelne Poster oder eine Auswahl/alle einer Serie als ZIP

@@ -31,6 +31,7 @@ async def lifespan(app: FastAPI):
     config.load()
     v = version.info()
     log.info("p5assets %s gestartet (Branch %s, Commit %s)", v["version"], v["branch"] or "-", v["commit_short"] or "-")
+    await asyncio.to_thread(thumbs.cleanup_old)
     task = asyncio.create_task(scanner.loop())
     yield
     task.cancel()
@@ -70,6 +71,7 @@ def _public_item(it: dict, full: bool = False) -> dict:
     out = {k: it[k] for k in ("id", "world", "type", "title", "year", "folder", "library_title", "missing",
                               "updated", "in_plex", "sources", "custom", "dupes")}
     out["mirror_folders"] = it.get("mirror_folders") or []
+    out["coming_soon"] = bool(it.get("coming_soon"))
     out["monitored"] = it.get("monitored")      # None = no Sonarr/Radarr information
     out["has_files"] = it.get("has_files")
     out["available"] = it.get("available")
@@ -340,9 +342,25 @@ async def status():
     return scanner.summary()
 
 
+def _scope_stats(items: list[dict]) -> dict:
+    """Numbers for the statistic block and the tab counters of one source selection."""
+    c = Counter()
+    for i in items:
+        c["items"] += 1
+        c["slots"] += sum(1 for s in i["slots"].values() if not s.get("extra"))
+        c["missing_slots"] += i["missing"]
+        c["missing"] += 1 if i["missing"] else 0
+        c["complete"] += 0 if i["missing"] else 1
+        c["comingsoon"] += 1 if i.get("coming_soon") else 0
+        c["notplex"] += 0 if i["in_plex"] else 1
+    return {"items": c["items"], "slots": c["slots"], "missing": c["missing_slots"], "complete_items": c["complete"],
+            "counts": {"all": c["items"], "missing": c["missing"], "complete": c["complete"],
+                       "comingsoon": c["comingsoon"], "notplex": c["notplex"]}}
+
+
 @app.get("/api/items")
 async def items(world: str = "", q: str = "", filter: str = "all", library: str = "", source: str = "",
-                type: str = "", letter: str = "", offset: int = 0, limit: int = Query(120, le=500)):
+                type: str = "", letter: str = "", nopost: bool = False, offset: int = 0, limit: int = Query(120, le=500)):
     wid = _world(world)["id"]   # once – config.get() deep-copies the whole configuration
     res = [i for i in scanner.STATE["items"] if i["world"] == wid]
     if library:
@@ -351,12 +369,18 @@ async def items(world: str = "", q: str = "", filter: str = "all", library: str 
         res = [i for i in res if source in i["sources"]]
     if type:
         res = [i for i in res if i["type"] == type]
+    stats = _scope_stats(res)          # for the chosen source, independent of tab, letter and search
     if filter == "missing":
         res = [i for i in res if i["missing"]]
     elif filter == "complete":
         res = [i for i in res if not i["missing"]]
     elif filter == "notplex":
         res = [i for i in res if not i["in_plex"]]
+    elif filter == "comingsoon":      # UMTK placeholders already visible in Plex: the ones without a poster first
+        res = [i for i in res if i.get("coming_soon")]
+        if nopost:
+            res = [i for i in res if not i["slots"].get("poster", {}).get("exists")]
+        res.sort(key=lambda i: (bool(i["slots"].get("poster", {}).get("exists")), i["title"].casefold()))
     elif filter == "monitored":
         res = [i for i in res if i.get("monitored")]
     elif filter == "wanted":  # monitored in Sonarr/Radarr but no file yet ("missing")
@@ -369,7 +393,8 @@ async def items(world: str = "", q: str = "", filter: str = "all", library: str 
         letters = dict(Counter(i["letter"] for i in res))
         if letter:
             res = [i for i in res if i["letter"] == letter]
-    return {"total": len(res), "letters": letters, "items": [_public_item(i) for i in res[offset:offset + limit]]}
+    return {"total": len(res), "letters": letters, "stats": stats,
+            "items": [_public_item(i) for i in res[offset:offset + limit]]}
 
 
 @app.get("/api/items/{item_id}")
