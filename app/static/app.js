@@ -923,6 +923,8 @@ function posterDbPanel(it, slot, draw, done) {
   // no Referer: ThePosterDB's firewall blocked clicks coming from a local address (the same link typed by hand worked)
   const link = h("a", { class: "btn primary", target: "_blank", rel: "noopener noreferrer", referrerpolicy: "no-referrer" }, "Auf ThePosterDB suchen ↗");
   const url = h("input", { type: "text", readOnly: true, class: "tpurl", "aria-label": "Fertige Such-Adresse", onfocus: e => e.target.select() });
+  // whole-series window: once the search is open in its tab, the window has done its job (the set goes in via "Set hochladen" / dragging)
+  if (!slot) link.addEventListener("click", () => setTimeout(done, 150));
   const upd = () => { link.href = url.value = `https://theposterdb.com/search?term=${enc(term.value.trim())}&section=${section}`; };
   const copy = h("button", { class: "btn sm", onclick: async () => {
     try { await navigator.clipboard.writeText(url.value); } catch { url.select(); document.execCommand("copy"); }
