@@ -3,14 +3,19 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
+import tempfile
 import uuid
+import zipfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from collections import Counter
+
 from pydantic import BaseModel
 
 from . import arr as arrmod, config, kometa, languages as langmod, logs, version, plex as plexmod, providers, scanner, uploads
@@ -129,7 +134,7 @@ async def _plex_push(it: dict, slots: list[str], data: bytes) -> str | None:
 
 async def _store(it: dict, slot: str, data: bytes) -> dict:
     path = await asyncio.to_thread(uploads.write_asset, it, slot, data)
-    scanner.refresh_item(it["id"])
+    await asyncio.to_thread(scanner.refresh_item, it["id"])
     warn = await _plex_push(it, [slot], data)
     log.info("Gespeichert: %s / %s → %s%s", it["title"], slot, path,
              f" (+ Spiegel: {', '.join(it['mirror_folders'])})" if it.get("mirror_folders") else "")
@@ -337,8 +342,9 @@ async def status():
 
 @app.get("/api/items")
 async def items(world: str = "", q: str = "", filter: str = "all", library: str = "", source: str = "",
-                type: str = "", offset: int = 0, limit: int = Query(120, le=500)):
-    res = [i for i in scanner.STATE["items"] if i["world"] == _world(world)["id"]]
+                type: str = "", letter: str = "", offset: int = 0, limit: int = Query(120, le=500)):
+    wid = _world(world)["id"]   # once – config.get() deep-copies the whole configuration
+    res = [i for i in scanner.STATE["items"] if i["world"] == wid]
     if library:
         res = [i for i in res if i["library_title"] == library]
     if source:  # Sonarr/Radarr instance name or "Eigener Ordner"
@@ -355,10 +361,15 @@ async def items(world: str = "", q: str = "", filter: str = "all", library: str 
         res = [i for i in res if i.get("monitored")]
     elif filter == "wanted":  # monitored in Sonarr/Radarr but no file yet ("missing")
         res = [i for i in res if i.get("monitored") and i.get("has_files") is False]
-    if q:
-        nq = kometa.normalize(q)
-        res = [i for i in res if nq in kometa.normalize(i["title"]) or q.casefold() in i["folder"].casefold()]
-    return {"total": len(res), "items": [_public_item(i) for i in res[offset:offset + limit]]}
+    if q:  # the search always looks at ALL titles of the world/filter, the A-Z letter does not apply
+        nq, cq = kometa.normalize(q), q.casefold()
+        res = [i for i in res if (nq and nq in i["_nt"]) or cq in i["_fl"]]
+        letters: dict = {}
+    else:
+        letters = dict(Counter(i["letter"] for i in res))
+        if letter:
+            res = [i for i in res if i["letter"] == letter]
+    return {"total": len(res), "letters": letters, "items": [_public_item(i) for i in res[offset:offset + limit]]}
 
 
 @app.get("/api/items/{item_id}")
@@ -384,6 +395,70 @@ async def asset(item_id: str, slot: str, v: str = ""):
     if not path or not Path(path).is_file():
         raise HTTPException(404)
     return FileResponse(path, headers={"Cache-Control": "public, max-age=31536000, immutable"})
+
+
+def _safe_name(text: str) -> str:
+    return re.sub(r'[<>:"/\\|?*\x00-\x1f]+', " ", text).strip(" .") or "poster"
+
+
+def _download_name(it: dict, slot: str, path: Path) -> str:
+    base = f"{it['title']} ({it['year']})" if it.get("year") else it["title"]
+    season = kometa.parse_slot_key(slot)
+    part = "Poster" if season is None else ("Specials" if season == 0 else f"Season {season:02d}")
+    return f"{_safe_name(base)} - {part}{path.suffix.lower()}"
+
+
+@app.get("/api/download/{item_id}/{slot}")
+async def download_asset(item_id: str, slot: str):
+    """The asset exactly as it lies in the assets folder (original quality, no re-encoding)."""
+    it = _item(item_id)
+    path = it["slots"].get(slot, {}).get("path")
+    if not path or not Path(path).is_file():
+        raise HTTPException(404, "Kein Bild vorhanden")
+    p = Path(path)
+    log.info("Download: %s / %s", it["title"], slot)
+    return FileResponse(p, filename=_download_name(it, slot, p), headers={"Cache-Control": "no-store"})
+
+
+def _build_zip(entries: list[tuple[Path, str]]):
+    tmp = tempfile.TemporaryFile()  # spills to disk, so a big series does not sit in RAM
+    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_STORED, allowZip64=True) as zf:  # posters are compressed already
+        for src, arc in entries:
+            zf.write(src, arc)
+    size = tmp.tell()
+    tmp.seek(0)
+    return tmp, size
+
+
+@app.get("/api/download-zip/{item_id}")
+async def download_zip(item_id: str, slots: str = ""):
+    """Several assets of one title as a ZIP: ``<Kometa folder>/poster.jpg``, ``Season01.jpg`` … in original quality."""
+    it = _item(item_id)
+    wanted = [x for x in slots.split(",") if x] or list(it["slots"])
+    folder = _safe_name(it["folder"] or it["title"])
+    entries = []
+    for key in wanted:
+        sl = it["slots"].get(key)
+        if sl and sl.get("exists") and Path(sl["path"]).is_file():
+            p = Path(sl["path"])
+            entries.append((p, f"{folder}/{kometa.slot_basename(kometa.parse_slot_key(key))}{p.suffix.lower()}"))
+    if not entries:
+        raise HTTPException(404, "Keine Bilder zum Herunterladen")
+    tmp, size = await asyncio.to_thread(_build_zip, entries)
+    log.info("Download ZIP: %s (%d Bilder, %.1f MB)", it["title"], len(entries), size / 1048576)
+
+    def chunks():
+        try:
+            while block := tmp.read(1 << 20):
+                yield block
+        finally:
+            tmp.close()
+    name = _safe_name(f"{it['title']} ({it['year']})" if it.get("year") else it["title"]) + ".zip"
+    quoted = re.sub(r"[^A-Za-z0-9._ -]", "_", name)
+    from urllib.parse import quote
+    return StreamingResponse(chunks(), media_type="application/zip", headers={
+        "Content-Length": str(size), "Cache-Control": "no-store",
+        "Content-Disposition": f"attachment; filename=\"{quoted}\"; filename*=UTF-8''{quote(name)}"})
 
 
 @app.get("/api/season-thumb/{item_id}/{slot}")
@@ -492,7 +567,7 @@ async def copy_all(item_id: str, body: CopyAllBody):
     data = Path(src).read_bytes()
     await asyncio.to_thread(uploads.write_assets, it, targets, data)
     log.info("Auf alle: %s / %s → %d Kacheln (%d übersprungen)", it["title"], body.source, len(targets), len(skipped))
-    scanner.refresh_item(it["id"])
+    await asyncio.to_thread(scanner.refresh_item, it["id"])
     warn = await _plex_push(it, targets, data)
     return {"ok": True, "written": targets, "skipped": skipped, "warning": warn, "item": _public_item(_item(it["id"]), True)}
 
@@ -561,7 +636,7 @@ async def delete_slot(item_id: str, slot: str):
             log.info("Gelöscht (Spiegel): %s / %s (%s)", it["title"], slot, extra)
         Path(path).unlink()
         log.info("Gelöscht: %s / %s (%s)", it["title"], slot, path)
-    scanner.refresh_item(item_id)
+    await asyncio.to_thread(scanner.refresh_item, item_id)
     return {"ok": True, "item": _public_item(_item(item_id), True)}
 
 

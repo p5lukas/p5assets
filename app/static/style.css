@@ -47,8 +47,8 @@ header.top{position:sticky;top:0;z-index:20;background:hsl(var(--h) 80% 2% / .88
 .logo u{text-decoration:none;animation:blink 1.1s steps(1) infinite}
 @keyframes blink{50%{opacity:0}}
 .search{max-width:340px;position:relative;flex:1;min-width:160px}
-.search input{padding-left:32px}
-.search:before{content:"$";position:absolute;left:12px;top:8px;color:var(--accent)}
+.search input{padding-left:34px}
+.search svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--accent);pointer-events:none;filter:drop-shadow(0 0 4px var(--glow))}
 main{max-width:1500px;margin:auto;padding:22px}
 
 /* world switch */
@@ -108,11 +108,11 @@ main{max-width:1500px;margin:auto;padding:22px}
 .drawer header h2{margin:0;font-size:19px;color:var(--accent);text-shadow:0 0 12px var(--glow)}
 .drawer .body{padding:24px}
 .slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:20px}
-.slot .poster{cursor:pointer}
+.slot .poster,.card.movie .poster{cursor:pointer}
+.card.movie:hover{transform:none}
+.card .info{cursor:pointer}
 .slot .lab{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-weight:700}
 .slot .acts{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
-.slot .poster .hover{position:absolute;inset:0;background:#000b;display:grid;place-items:center;opacity:0;transition:.15s;font-weight:700;text-align:center;color:var(--accent)}
-.slot .poster:hover .hover{opacity:1}
 details.more-seasons{margin-top:28px;border:1px solid var(--line);border-radius:var(--r);padding:0 16px}
 details.more-seasons summary{cursor:pointer;padding:14px 0;color:var(--accent)}
 details.more-seasons .slots{padding:6px 0 20px}
@@ -272,10 +272,11 @@ details.more-seasons .slots{padding:6px 0 20px}
 @media(max-width:1100px){.btn.tb .lbl{display:none}}
 
 /* poster hover overlay with actions */
-.slot .poster .hover{position:absolute;inset:0;background:color-mix(in srgb,var(--bg) 84%,transparent);display:flex;flex-direction:column;justify-content:center;gap:6px;padding:14px;opacity:0;transition:.15s;color:var(--text);font-weight:400;text-align:left}
-.slot .poster:hover .hover,.slot .poster.show .hover{opacity:1}
+.poster .hover{position:absolute;inset:0;z-index:3;background:color-mix(in srgb,var(--bg) 84%,transparent);display:flex;flex-direction:column;justify-content:center;gap:6px;padding:14px;opacity:0;pointer-events:none;transition:.15s;color:var(--text);font-weight:400;text-align:left}
+.poster.show .hover{opacity:1;pointer-events:auto}
+@media(hover:hover){.poster:hover .hover{opacity:1;pointer-events:auto}}
 .ovbtns{display:flex;flex-direction:column;gap:6px}
-.ov-btn{background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);padding:7px 10px;font-size:13px;color:var(--text);text-align:center;transition:.12s}
+.ov-btn{min-height:34px;background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);padding:7px 10px;font-size:13px;color:var(--text);text-align:center;transition:.12s}
 .ov-btn:hover{border-color:var(--accent);color:var(--accent);box-shadow:0 0 12px var(--dim)}
 .ov-btn.danger:hover{border-color:var(--bad);color:var(--bad);box-shadow:0 0 12px #ff4d5e33}
 .ovhint{text-align:center;font-size:11px;color:var(--muted);margin-top:4px}
@@ -332,3 +333,60 @@ a.btn{text-decoration:none}
 .lside{min-width:360px;max-width:560px;flex:1 1 420px}
 .lside dd{word-break:normal;overflow-wrap:anywhere}
 .lside dl{grid-template-columns:minmax(120px,auto) 1fr}
+
+/* A–Z bar */
+.azbar{display:flex;gap:4px;margin:0 0 16px;padding:6px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);overflow-x:auto;scrollbar-width:thin}
+.azbar[hidden]{display:none}
+#az2{margin:22px 0 0}
+.az{flex:1 0 auto;min-width:32px;padding:6px 7px;border:1px solid transparent;border-radius:4px;background:transparent;color:var(--text);font-size:13px;font-weight:700;text-align:center}
+.az:not(:disabled):hover{border-color:var(--accent);color:var(--accent)}
+.az.on{background:var(--accent);color:var(--on-accent);box-shadow:0 0 14px var(--glow)}
+.az:disabled{color:var(--faint2);opacity:.55;cursor:default}
+
+/* download bar + selection mode (series detail) */
+.dlbar{margin-bottom:16px;gap:8px}
+.poster.selectable{outline:2px solid var(--line);outline-offset:2px}
+.poster.selected{outline-color:var(--accent);box-shadow:0 0 24px var(--glow)}
+.selmark{position:absolute;top:8px;right:8px;z-index:4;width:26px;height:26px;border-radius:6px;border:2px solid var(--accent);background:hsl(var(--h) 100% 6% / .85);color:var(--accent);display:grid;place-items:center;font-weight:800}
+.selecting .poster .hover{display:none}
+
+/* mobile / touch */
+html{-webkit-text-size-adjust:100%}
+header.top{padding-top:env(safe-area-inset-top)}
+@media(max-width:700px){
+  html,body{overflow-x:hidden}
+  .top .in{padding:8px 12px;gap:8px}
+  .logo{font-size:17px}.logoimg{width:30px;height:30px}
+  .top .in .search{order:20;flex:1 1 100%;max-width:none}
+  .top .in .spacer{flex:1 1 0}
+  .vsep{display:none}
+  .top .in{gap:6px}
+  .btn.tb,.btn.tb.icon{padding:0;min-height:40px;width:40px;justify-content:center}
+  .logo span{display:none}
+  .worlds button{padding:8px 11px}
+  main{padding:14px 12px}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(135px,1fr));gap:14px}
+  .slots{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:14px}
+  .hero{padding:14px;gap:10px;grid-template-columns:auto 1fr;text-align:left;justify-items:stretch}
+  .hero>.hint{grid-column:1/-1;text-align:left!important;white-space:normal!important;margin:0}
+  .hero .ring{width:64px;height:64px}.hero .ring b{width:50px;height:50px;font-size:15px}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+  .stat b{font-size:19px}.stat span{font-size:9.5px;letter-spacing:.02em;display:block}
+  .drawer header{padding:12px 14px}.drawer .body{padding:14px}
+  .scrim{justify-content:stretch}.drawer{width:100%;border-left:0}
+  .modal>header,.modal>.body,.modal>footer{padding-left:14px;padding-right:14px}
+  .modalwrap{padding:10px}
+  .lbox{padding:12px;gap:14px}.lside{min-width:0;flex-basis:auto;max-width:none;width:100%}
+  .lbox img{max-height:60vh}
+  .chip{padding:8px 12px}
+  input,select,textarea{font-size:16px}   /* iOS zooms into smaller fields */
+  .az{min-width:34px;padding:9px 7px}
+  .wiz{margin:18px auto;padding:0 12px}.wcard{padding:18px}
+  #foot{padding:18px 12px}
+}
+@media(hover:none){
+  .ovhint{display:none}
+  .poster .hover{padding:8px}.ovbtns{gap:5px}
+  .ov-btn{min-height:36px;padding:6px 8px;font-size:13px}
+  .btn.sm{padding:8px 12px;font-size:13px}
+}

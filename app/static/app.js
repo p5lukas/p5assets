@@ -54,6 +54,7 @@ const ICONS = {
   gear: [{ d: "M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" }, { c: [12, 12, 3] }],
   back: [{ d: "M19 12H5" }, { d: "M12 19l-7-7 7-7" }],
   file: [{ d: "M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" }, { d: "M14 2v6h6" }, { d: "M8 13h8" }, { d: "M8 17h6" }],
+  search: [{ c: [11, 11, 8] }, { d: "M21 21l-4.3-4.3" }],
   download: [{ d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" }, { d: "M7 10l5 5 5-5" }, { d: "M12 15V3" }],
   trash: [{ d: "M3 6h18" }, { d: "M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" }, { d: "M10 11v6" }, { d: "M14 11v6" }, { d: "M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" }],
 };
@@ -69,7 +70,7 @@ function icon(name, size = 18) {
 }
 
 /* ------------------------------------------------------------ state --- */
-const S = { st: null, langs: [], items: [], total: 0, filter: "all", q: "", lib: "", world: "", poll: null, step: "", reached: 0, rain: new Set(), view: "" };
+const S = { st: null, langs: [], items: [], total: 0, filter: "all", q: "", lib: "", letter: null, letters: {}, allTotal: 0, req: 0, world: "", poll: null, step: "", reached: 0, rain: new Set(), view: "" };
 const cfg = () => S.st.config;
 const curWorld = () => cfg().worlds.find(w => w.id === S.world) || cfg().worlds[0];
 const worldStats = () => (S.st.summary.worlds || {})[S.world] || { items: 0, slots: 0, missing: 0, complete_items: 0 };
@@ -89,11 +90,27 @@ async function loadState() {
 }
 async function savePatch(patch) { const r = await api("/config", { json: { patch } }); S.st.config = r; return r; }
 
+const AZ_MIN = 150;   // from this many titles on the list is split by first letter instead of one endless page
 async function loadItems(append = false) {
   // S.lib is "lib:<Plex library>" or "src:<Sonarr/Radarr instance | Eigener Ordner>"
-  const p = new URLSearchParams({ world: S.world, q: S.q, filter: S.filter, library: S.lib.startsWith("lib:") ? S.lib.slice(4) : "",
-    source: S.lib.startsWith("src:") ? S.lib.slice(4) : "", offset: append ? S.items.length : 0, limit: 120 });
-  const r = await api("/items?" + p);
+  const id = ++S.req, q = S.q.trim();
+  const query = (letter, limit, offset) => new URLSearchParams({ world: S.world, q: S.q, filter: S.filter, letter, library: S.lib.startsWith("lib:") ? S.lib.slice(4) : "",
+    source: S.lib.startsWith("src:") ? S.lib.slice(4) : "", offset, limit });
+  const total = letters => Object.values(letters || {}).reduce((a, b) => a + b, 0);
+  let letter = q ? "" : (S.letter ?? "");     // the search always covers all titles, the letter is ignored then
+  if (!q && S.letter === null) {              // first view of a big list: start with "#" (or the first letter that exists)
+    const r0 = await api("/items?" + query("", 1, 0));
+    if (id !== S.req) return;
+    S.letters = r0.letters; S.allTotal = total(r0.letters);
+    const keys = Object.keys(r0.letters).sort((a, b) => a === "#" ? -1 : b === "#" ? 1 : a.localeCompare(b));
+    S.letter = letter = S.allTotal <= AZ_MIN ? "" : keys[0] || "";
+  }
+  const r = await api("/items?" + query(letter, 120, append ? S.items.length : 0));
+  if (id !== S.req) return;                   // a newer request (typing, filter) has taken over
+  if (!q) {
+    S.letters = r.letters; S.allTotal = total(r.letters);
+    if (letter && !r.letters[letter]) { S.letter = null; return loadItems(); }   // the letter is empty in this filter
+  }
   S.items = append ? S.items.concat(r.items) : r.items;
   S.total = r.total;
 }
@@ -270,7 +287,7 @@ function dashboard() {
       h("div", { class: "logo" }, h("img", { class: "logoimg", src: "/static/icon.png", alt: "" }), h("span", {}, "assets", h("u", {}, "_"))),
       ws.length > 1 ? h("div", { class: "worlds", title: "Welt wechseln" }, ws.map(w =>
         h("button", { class: w.id === S.world ? "on" : "", style: `--c:${worldColor(w)}`, onclick: () => switchWorld(w.id) }, h("i"), w.name))) : null,
-      h("div", { class: "search" }, h("input", { type: "search", placeholder: "Titel suchen …", id: "q", value: S.q, oninput: debounce(async e => { S.q = e.target.value; await loadItems(); renderGrid(); }, 200) })),
+      h("div", { class: "search" }, icon("search", 16), h("input", { type: "search", placeholder: "Titel suchen …", id: "q", value: S.q, autocomplete: "off", enterkeyhint: "search", oninput: debounce(async e => { S.q = e.target.value; await loadItems(); renderGrid(); }, 120) })),
       h("div", { class: "spacer" }),
       h("button", { class: "btn tb", title: "Bilder, Ordner oder ZIPs hochladen – p5assets ordnet sie automatisch den Titeln zu", onclick: () => pickFiles() }, icon("upload"), h("span", { class: "lbl" }, "Bilder hochladen")),
       h("button", { class: "btn tb", title: "Einen Titel von Hand anlegen, der weder in Plex noch in Sonarr/Radarr steht", onclick: openCustom }, icon("folderplus"), h("span", { class: "lbl" }, "Titel anlegen")),
@@ -279,7 +296,7 @@ function dashboard() {
       h("button", { class: "btn tb icon", title: "Logs", onclick: logsPage }, icon("list", 20)),
       h("button", { class: "btn tb icon", title: "Einstellungen", onclick: () => wizard(true) }, icon("gear", 20)),
     )),
-    h("main", {}, h("div", { id: "hero" }), h("div", { id: "chips" }), h("div", { id: "grid" })),
+    h("main", {}, h("div", { id: "hero" }), h("div", { id: "chips" }), h("div", { id: "az", class: "azbar" }), h("div", { id: "grid" }), h("div", { id: "az2", class: "azbar" })),
   );
   updateHero();
   loadItems().then(renderGrid);
@@ -291,7 +308,7 @@ function switchWorld(id) {
   if (id === S.world) return;
   const w = cfg().worlds.find(x => x.id === id);
   worldTransition(w, async () => {
-    S.world = id; S.filter = "all"; S.q = ""; S.lib = "";
+    S.world = id; S.filter = "all"; S.q = ""; S.lib = ""; S.letter = null; S.letters = {};
     try { localStorage.setItem("p5world", id); } catch { /* ignore */ }
     setAccent(); dashboard();
   });
@@ -351,7 +368,27 @@ function renderChips() {
   );
 }
 
+function setLetter(l, fromBottom) {
+  if (S.letter === l) return;
+  S.letter = l; renderAz();
+  loadItems().then(() => { renderGrid(); if (fromBottom) window.scrollTo({ top: Math.max(0, ($("#az").offsetTop || 0) - 80), behavior: "smooth" }); });
+}
+
+/** A–Z bar above and below the grid (only for big lists; hidden while a search is active). */
+function renderAz() {
+  const show = !S.q.trim() && S.allTotal > AZ_MIN;
+  for (const [id, bottom] of [["#az", false], ["#az2", true]]) {
+    const el = $(id); if (!el) continue;
+    el.hidden = !show;
+    if (!show) { el.replaceChildren(); continue; }
+    const b = (label, l, n) => h("button", { class: "az" + (S.letter === l ? " on" : ""), disabled: l !== "" && !n, title: l === "" ? `Alle Titel (${S.allTotal})` : n ? `${n} Titel` : "keine Titel",
+      onclick: () => setLetter(l, bottom) }, label);
+    fill(el, b("Alle", "", S.allTotal), b("#", "#", S.letters["#"]), "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").map(c => b(c, c, S.letters[c])));
+  }
+}
+
 function renderGrid() {
+  renderAz();
   const g = $("#grid"); if (!g) return;
   if (!S.items.length) {
     fill(g, h("div", { class: "empty" },
@@ -421,15 +458,30 @@ function metaText(it) {
 }
 
 function card(item) {
-  const el = h("div", { class: "card", onclick: () => openItem(item.id) });
+  const movie = item.type === "movie";
+  const el = h("div", { class: "card" + (movie ? " movie" : ""), onclick: movie ? null : () => openItem(item.id) });
   const box = posterBox(item, "poster");
   const bad = item.missing;
   box.append(h("span", { class: "badge " + (bad ? "bad" : "ok") }, bad ? `${bad} fehlt` : "✓"));
   box.title = metaText(item);
   if (!item.in_plex) box.append(h("span", { class: "badge warn b" }, notPlexLabel(item)));
-  el.append(box, h("div", { class: "t", title: item.title }, item.title),
+  const info = h("div", { class: "info", onclick: movie ? () => openItem(item.id) : null, title: movie ? "Details öffnen" : null },
+    h("div", { class: "t", title: item.title }, item.title),
     h("div", { class: "s" }, [item.year, item.type === "show" ? `${item.season_count} Staffeln` : "Film"].filter(Boolean).join(" · ")));
-  makeDropTarget(el, files => importFiles(files, item.id));
+  if (movie && item.folder) {
+    // a movie has one poster: no detail view needed, the actions sit right on the poster (tap shows them on touch screens)
+    const changed = it => {
+      const i = S.items.findIndex(x => x.id === it.id);
+      if (i >= 0) { S.items[i] = it; const n = card(it); el.replaceWith(n); }
+      api("/status").then(r => { S.st.summary = r; updateHero(); });
+    };
+    box.append(slotActions(item, "poster", box, changed));
+    box.onclick = () => { if (matchMedia("(hover: none)").matches) toggleActions(box); else if (item.slots.poster && item.slots.poster.exists) openPreview(item, "poster", changed); else pickFiles(f => uploadSlot(item, "poster", f, changed), false); };
+    makeDropTarget(el, files => uploadSlot(item, "poster", files, changed));
+  } else {
+    makeDropTarget(el, files => importFiles(files, item.id));
+  }
+  el.append(box, info);
   return el;
 }
 
@@ -448,7 +500,12 @@ async function openItem(id) {
     loadItems().then(renderGrid);
   }
 
+  let selMode = false;
+  const sel = new Set();
   function draw(it) {
+    const have = Object.keys(it.slots).filter(k => it.slots[k].exists);
+    for (const k of [...sel]) if (!have.includes(k)) sel.delete(k);
+    drawer.classList.toggle("selecting", selMode);
     const keys = ["poster", ...Object.keys(it.slots).filter(k => k !== "poster").sort((a, b) => seasonNum(a) - seasonNum(b))];
     const extra = [];
     if (it.type === "show") for (let n = 0; n <= it.max_season; n++) if (!("season-" + n in it.slots)) extra.push("season-" + n);
@@ -468,11 +525,25 @@ async function openItem(id) {
       h("div", { class: "body" },
         !it.folder ? h("div", { class: "status bad" }, "Für diesen Titel ist kein Ordnername bekannt – Upload nicht möglich.") : null,
         h("p", { class: "hint" }, "Bild auf eine Kachel ziehen oder anklicken, um es zu ersetzen. Ein vorhandenes Poster lässt sich auf eine andere Kachel ziehen, um es zu kopieren. Mehrere Dateien, Ordner oder eine ZIP auf dieses Fenster ziehen: p5assets ordnet sie automatisch zu und benennt sie Kometa-konform."),
+        have.length && it.type === "show" ? downloadBar(it, have) : null,
         h("div", { class: "slots" }, keys.map(k => slotView(it, k, true))),
         extra.length ? h("details", { class: "more-seasons" },
           h("summary", {}, `Weitere Staffeln (Season00 – Season${String(it.max_season).padStart(2, "0")}) – auch für Staffeln, die Plex noch nicht kennt`),
           h("div", { class: "slots" }, extra.map(k => slotView(it, k, false)))) : null),
     );
+  }
+
+  /** Download of single tiles (via the tile buttons) or several/all as a ZIP in original quality. */
+  function downloadBar(it, have) {
+    const zip = keys => downloadUrl(`/api/download-zip/${it.id}?slots=${encodeURIComponent(keys.join(","))}`);
+    return h("div", { class: "dlbar row wrap" },
+      selMode ? [
+        h("span", { class: "hint", style: "margin:0" }, `${sel.size} von ${have.length} ausgewählt – Kacheln antippen`),
+        h("button", { class: "btn sm", onclick: () => { have.forEach(k => sel.add(k)); draw(it); } }, "Alle wählen"),
+        h("button", { class: "btn sm primary", disabled: !sel.size, onclick: () => zip([...sel]) }, icon("download", 14), `Auswahl als ZIP (${sel.size})`),
+        h("button", { class: "btn sm", onclick: () => { selMode = false; sel.clear(); draw(it); } }, "Fertig")]
+      : [h("button", { class: "btn sm", title: "Alle vorhandenen Poster in Originalqualität als ZIP", onclick: () => zip(have) }, icon("download", 14), `Alle als ZIP (${have.length})`),
+         h("button", { class: "btn sm", title: "Einzelne Poster auswählen und als ZIP laden", onclick: () => { selMode = true; draw(it); } }, "Auswählen …")]);
   }
 
   function slotView(it, key, known) {
@@ -481,17 +552,14 @@ async function openItem(id) {
     if (known) box.append(h("span", { class: "badge " + (exists ? "ok" : "bad") }, exists ? "vorhanden" : "fehlt"));
     else if (exists) box.append(h("span", { class: "badge ok" }, "vorhanden"));
     const pick = () => pickFiles(files => uploadSlot(it, key, files, draw), false);
-    const del = async () => { if (confirm(`${slotLabel(key, it.type)} wirklich löschen?`)) { const r = await api(`/items/${it.id}/${key}`, { method: "DELETE" }); draw(r.item); } };
-    const ob = (label, fn, cls = "") => h("button", { class: "ov-btn " + cls, onclick: e => { e.stopPropagation(); box.classList.remove("show"); fn(); } }, label);
-    box.append(h("div", { class: "hover" },
-      h("div", { class: "ovbtns" }, exists
-        ? [ob("Ersetzen", pick), ob("Vorschau", () => openPreview(it, key, draw)), ob("Online", () => searchOnline(it, key, draw)),
-           it.type === "show" ? ob("Auf alle …", () => openApplyAll(it, key, draw)) : null, ob("Löschen", del, "danger")]
-        : [ob("Datei wählen", pick), ob("Online", () => searchOnline(it, key, draw))]),
-      h("div", { class: "ovhint" }, "oder Bild hierher ziehen")));
+    box.append(slotActions(it, key, box, draw));
     const el = h("div", { class: "slot" }, box, h("div", { class: "lab" }, slotLabel(key, it.type)));
     // click on the picture itself: preview (existing) / file dialog (empty); touch screens have no hover, so a tap shows the buttons first
-    box.onclick = () => { if (matchMedia("(hover: none)").matches) box.classList.toggle("show"); else if (exists) openPreview(it, key, draw); else pick(); };
+    box.onclick = () => {
+      if (selMode) { if (!exists) return; sel.has(key) ? sel.delete(key) : sel.add(key); draw(it); return; }
+      if (matchMedia("(hover: none)").matches) toggleActions(box); else if (exists) openPreview(it, key, draw); else pick();
+    };
+    if (selMode && exists) { box.classList.add("selectable"); if (sel.has(key)) box.classList.add("selected"); box.append(h("span", { class: "selmark" }, sel.has(key) ? "✓" : "")); }
     makeDropTarget(el, files => uploadSlot(it, key, files, draw));
     // Kometa assets can be dragged onto other tiles of this title: the file is copied and renamed Kometa-conform
     if (exists) {
@@ -523,6 +591,34 @@ async function openItem(id) {
   draw(item);
 }
 
+/** Touch screens: a tap shows the action buttons of one poster at a time. */
+function toggleActions(box) {
+  document.querySelectorAll(".poster.show").forEach(p => { if (p !== box) p.classList.remove("show"); });
+  box.classList.toggle("show");
+}
+
+/** Save an asset (original file, no re-encoding) or a ZIP – a normal download link, works on iPhone/iPad too. */
+function downloadUrl(url) {
+  const a = h("a", { href: url, download: "", hidden: true });
+  document.body.append(a); a.click(); a.remove();
+}
+const downloadSlot = (it, key) => downloadUrl(`/api/download/${it.id}/${key}`);
+
+/** Hover/tap overlay of a poster tile with its actions (series tiles in the detail view, movie posters on the dashboard). */
+function slotActions(it, key, box, draw) {
+  const exists = !!(it.slots[key] && it.slots[key].exists);
+  const pick = () => pickFiles(files => uploadSlot(it, key, files, draw), false);
+  const del = async () => { if (confirm(`${slotLabel(key, it.type)} wirklich löschen?`)) { const r = await api(`/items/${it.id}/${key}`, { method: "DELETE" }); draw(r.item); } };
+  const ob = (label, fn, cls = "") => h("button", { class: "ov-btn " + cls, onclick: e => { e.stopPropagation(); box.classList.remove("show"); fn(); } }, label);
+  return h("div", { class: "hover" },
+    h("div", { class: "ovbtns" }, exists
+      ? [ob("Ersetzen", pick), ob("Vorschau", () => openPreview(it, key, draw)), ob("Online", () => searchOnline(it, key, draw)),
+         ob("Herunterladen", () => downloadSlot(it, key)),
+         it.type === "show" ? ob("Auf alle …", () => openApplyAll(it, key, draw)) : null, ob("Löschen", del, "danger")]
+      : [ob("Datei wählen", pick), ob("Online", () => searchOnline(it, key, draw))]),
+    h("div", { class: "ovhint" }, "oder Bild hierher ziehen"));
+}
+
 /** Enlarged view of an existing asset with its details in a list next to it. */
 function openPreview(it, key, draw) {
   const sl = it.slots[key];
@@ -549,13 +645,14 @@ function openPreview(it, key, draw) {
         metaGroups(it),
         (it.mirror_folders || []).length ? h("div", { style: "margin-top:8px" }, h("span", { class: "tag ok", title: "Coming-Soon-Platzhalter: Poster werden auch im echten Film-Ordner abgelegt" }, "Coming Soon gespiegelt")) : null,
         h("dl", {}, rows.map(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]), h("dt", {}, "Auflösung"), res),
-        draw ? h("div", { class: "row wrap", style: "margin-top:20px" },
-          h("button", { class: "btn sm", onclick: () => { close(); searchOnline(it, key, draw); } }, "Online"),
-          it.type === "show" ? h("button", { class: "btn sm", onclick: () => { close(); openApplyAll(it, key, draw); } }, "Auf alle …") : null,
-          h("button", { class: "btn sm danger", onclick: async () => {
+        h("div", { class: "row wrap", style: "margin-top:20px" },
+          h("button", { class: "btn sm", onclick: () => downloadSlot(it, key) }, icon("download", 14), "Herunterladen"),
+          draw ? h("button", { class: "btn sm", onclick: () => { close(); searchOnline(it, key, draw); } }, "Online") : null,
+          draw && it.type === "show" ? h("button", { class: "btn sm", onclick: () => { close(); openApplyAll(it, key, draw); } }, "Auf alle …") : null,
+          draw ? h("button", { class: "btn sm danger", onclick: async () => {
             if (!confirm(`${slotLabel(key, it.type)} wirklich löschen?`)) return;
             close(); const r = await api(`/items/${it.id}/${key}`, { method: "DELETE" }); draw(r.item);
-          } }, "Löschen")) : null)));
+          } }, "Löschen") : null))));
   const onKey = e => { if (e.key === "Escape") close(); };
   function close() { wrap.remove(); document.removeEventListener("keydown", onKey); }
   document.addEventListener("keydown", onKey);

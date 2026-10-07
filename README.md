@@ -69,7 +69,11 @@ Ein schlanker Docker-Container im Matrix-Look. Er vergleicht deine Bibliotheken 
 - Online-Suche nach Postern (TMDb, TVDB, fanart.tv) mit Tabs je Anbieter, gruppiert nach deiner **Sprach-Prioritätsliste pro Welt** (z. B. Textless → Deutsch → English); Übernahme per Klick
 - **Log-Seite** (Listen-Symbol in der Kopfzeile): Live-Log mit Suche, Level-Filter, Download und Leeren; geschrieben nach `/config/logs/p5assets.log`, Tokens und API-Keys werden nie protokolliert
 - Fußzeile mit Version, Branch, Commit und GitHub-Link
-- Dashboard mit Abdeckung in %, Filter „Fehlende“, Suche, automatischer Hintergrund-Scan
+- Dashboard mit Abdeckung in %, Filter „Fehlende“, schneller Suche und automatischem Hintergrund-Scan
+- **A–Z-Leiste** (oben und unten) für große Bibliotheken: `#` für Zahlen/Sonderzeichen, die Suche durchsucht weiter alle Titel
+- **Filme direkt auf dem Poster bearbeiten**: Ersetzen, Vorschau, Online, Herunterladen und Löschen per Hover (am Touchscreen per Tippen)
+- **Herunterladen** in Originalqualität: einzelne Poster oder eine Auswahl/alle einer Serie als ZIP
+- Für iPhone und iPad optimiert (kompakte Kopfleiste, große Tippflächen)
 
 ## Schnellstart (Docker Compose)
 ```yaml

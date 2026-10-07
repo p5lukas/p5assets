@@ -64,9 +64,14 @@ def write_assets(item: dict, slots: list[str], data: bytes) -> list[Path]:
     if not root.is_dir():
         raise ValueError(f"Assets-Ordner {root} existiert nicht (im Container gemountet?)")
     body, ext = normalize_image(data, acfg["convert_to_jpg"])
-    index = kometa.AssetIndex(root, acfg["asset_folders"], item.get("search_depth", 3))
+    depth = item.get("search_depth", 3)
+    index = kometa.get_index(root, acfg["asset_folders"], depth)
     from . import scanner  # late import: scanner does not import uploads, keeps the module graph simple
-    base = index.base_dir(item["folder"], scanner.preferred_base(item) or root)
+    if not index.knows(item["folder"]):
+        # new title (or a folder created outside p5assets since the last scan): look again once before creating one
+        index = kometa.get_index(root, acfg["asset_folders"], depth, fresh=True)
+    # the "where do new folders go" heuristic walks all titles – only needed for a title without a folder
+    base = index.base_dir(item["folder"], root) if index.knows(item["folder"]) else (scanner.preferred_base(item) or root)
 
     def put(folder: str, folder_base: Path) -> list[Path]:
         existing = index.slots(folder)
@@ -86,6 +91,7 @@ def write_assets(item: dict, slots: list[str], data: bytes) -> list[Path]:
                 other = target.with_suffix(ext2)
                 if other != target and other.exists() and other.stem == target.stem:
                     other.unlink()
+            index.note_written(folder, target)
             out.append(target)
         return out
 
@@ -99,7 +105,7 @@ def mirror_files(item: dict, slot: str) -> list[Path]:
     """Existing files of a slot in the mirror folders (used to keep deletes in sync)."""
     cfg = config.get()
     root = Path(item["assets_path"])
-    index = kometa.AssetIndex(root, cfg["assets"]["asset_folders"], item.get("search_depth", 3))
+    index = kometa.get_index(root, cfg["assets"]["asset_folders"], item.get("search_depth", 3))
     return [p for m in item.get("mirror_folders") or [] if (p := index.slots(m).get(slot))]
 
 

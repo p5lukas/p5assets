@@ -15,6 +15,8 @@ The name has to match the folder the media lives in on disk.
 from __future__ import annotations
 
 import difflib
+import threading
+import time
 from collections import deque
 import re
 import unicodedata
@@ -120,6 +122,19 @@ class AssetIndex:
                 elif e.suffix.lower() in IMAGE_EXTS and not self.folders:
                     self.flat.setdefault(e.stem.casefold(), e)
 
+    def knows(self, folder_name: str) -> bool:
+        """True if the title already has a folder (folder mode) / files (flat mode) in the index."""
+        if not folder_name:
+            return False
+        return folder_name.casefold() in self.dirs if self.folders else bool(self.slots(folder_name))
+
+    def note_written(self, folder_name: str, target: Path) -> None:
+        """Keep the cached index current after a file was written – no re-scan of the whole assets folder."""
+        if self.folders:
+            self.dirs.setdefault(folder_name.casefold(), target.parent)
+        else:
+            self.flat[target.stem.casefold()] = target
+
     def duplicates(self, folder_name: str) -> list[Path]:
         return self.dupes.get(folder_name.casefold(), [])
 
@@ -176,6 +191,24 @@ class AssetIndex:
             if f:
                 return f.parent
         return default_root
+
+
+_INDEX_CACHE: dict[tuple, AssetIndex] = {}
+_INDEX_LOCK = threading.Lock()
+
+
+def get_index(root: Path, folders: bool, depth: int = 3, fresh: bool = False) -> AssetIndex:
+    """One shared AssetIndex per assets folder. Walking thousands of title folders takes seconds on a NAS, so it is
+    done once per scan (``fresh=True``) and kept current incrementally (``note_written``) instead of on every change."""
+    key = (str(root), bool(folders), int(depth))
+    with _INDEX_LOCK:
+        idx = _INDEX_CACHE.get(key)
+        if idx is not None and not fresh:
+            return idx
+    idx = AssetIndex(root, folders, depth)
+    with _INDEX_LOCK:
+        _INDEX_CACHE[key] = idx
+    return idx
 
 
 def find_image(directory: Path, stem: str) -> Path | None:
@@ -252,6 +285,19 @@ def normalize(text: str) -> str:
     text = text.casefold().replace("&", " and ")
     text = re.sub(r"\b(the|a|an|der|die|das)\b", " ", text)
     return re.sub(r"[^a-z0-9]+", "", text)
+
+
+def letter_of(title: str) -> str:
+    """Index letter for the A-Z bar: A-Z, or "#" for digits, symbols and everything else."""
+    for ch in unicodedata.normalize("NFKD", (title or "").strip()):
+        c = ch.encode("ascii", "ignore").decode().upper()
+        if c.isalpha():
+            return c
+        if c.isdigit():
+            return "#"
+        if c and not c.isspace() and c not in "\"'`.,:;!?-_()[]{}":
+            return "#"
+    return "#"
 
 
 def match_item(title: str, year: int | None, items: list[dict]) -> dict | None:

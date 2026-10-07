@@ -191,6 +191,13 @@ def _merge(plex_items: list[dict], arr_items: list[dict]) -> list[dict]:
     return items
 
 
+def _prep(it: dict) -> None:
+    """Search helpers computed once per title, so typing in the search box does not normalise thousands of titles."""
+    it["_nt"] = kometa.normalize(it["title"])
+    it["_fl"] = (it["folder"] or "").casefold()
+    it["letter"] = kometa.letter_of(it["title"])
+
+
 def custom_item(entry: dict) -> dict:
     return {
         "rating_key": None, "library_title": "", "type": entry["type"], "title": entry.get("title") or entry["folder"],
@@ -210,6 +217,7 @@ def _finish(world: dict, items: list[dict], index: kometa.AssetIndex, ignore_spe
         it.update(id=iid, world=world["id"], assets_path=world["assets_path"], search_depth=world.get("search_depth", 3), updated=0,
                   mirror_folders=kometa.coming_soon_mirrors(it["folder"], it.get("arr_folders", [])) if world.get("mirror_coming_soon", True) else [])
         build_slots(it, index, ignore_specials)
+        _prep(it)
     return items
 
 
@@ -233,8 +241,8 @@ async def scan() -> None:
                 for world in cfg["worlds"]:
                     STATE["progress"] = f"{world['name']}: lese Assets-Ordner …"
                     index = await asyncio.to_thread(
-                        kometa.AssetIndex, Path(world["assets_path"]), cfg["assets"]["asset_folders"],
-                        world.get("search_depth", 3))
+                        kometa.get_index, Path(world["assets_path"]), cfg["assets"]["asset_folders"],
+                        world.get("search_depth", 3), True)
                     plex_items = await _plex_items(cfg, world, plex, warnings) if plex else []
                     arr_items = await _arr_items(cfg, world, warnings)
                     items = _merge(plex_items, arr_items)
@@ -315,7 +323,7 @@ def refresh_item(item_id: str) -> None:
     item = next((i for i in STATE["items"] if i["id"] == item_id), None)
     if not item:
         return
-    index = kometa.AssetIndex(Path(item["assets_path"]), cfg["assets"]["asset_folders"], item.get("search_depth", 3))
+    index = kometa.get_index(Path(item["assets_path"]), cfg["assets"]["asset_folders"], item.get("search_depth", 3))
     build_slots(item, index, cfg["assets"]["ignore_specials"])
 
 
@@ -327,10 +335,11 @@ def add_custom(entry: dict) -> dict:
         if it["world"] == world["id"] and it["type"] == entry["type"] and it["folder"].casefold() == entry["folder"].casefold():
             return it
     item = custom_item(entry)
-    index = kometa.AssetIndex(Path(world["assets_path"]), cfg["assets"]["asset_folders"], world.get("search_depth", 3))
+    index = kometa.get_index(Path(world["assets_path"]), cfg["assets"]["asset_folders"], world.get("search_depth", 3))
     item.update(id=f"{world['id']}-c{entry['id']}", world=world["id"], assets_path=world["assets_path"],
                 search_depth=world.get("search_depth", 3), updated=0)
     build_slots(item, index, cfg["assets"]["ignore_specials"])
+    _prep(item)
     STATE["items"].append(item)
     STATE["items"].sort(key=lambda i: i["title"].casefold())
     return item
