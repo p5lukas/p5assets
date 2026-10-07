@@ -17,23 +17,24 @@ from PIL import Image, ImageOps
 from . import config, logs
 
 WIDTH = 360
-QUALITY = 40
+QUALITY = 50
 MAX_CACHE_BYTES = 600 * 1024 * 1024
 log = logs.get("thumbs")
 _lock = threading.Lock()
 
 
 def _dir() -> Path:
-    return config.CACHE_DIR / "thumbs-v2"
+    return config.CACHE_DIR / "thumbs-v3"
 
 
 def cleanup_old() -> None:
     """Remove cache folders of earlier versions (higher JPEG quality) once at start."""
     import shutil
-    old = config.CACHE_DIR / "thumbs"
-    if old.is_dir():
-        shutil.rmtree(old, ignore_errors=True)
-        log.info("Alter Vorschaubild-Cache entfernt")
+    for name in ("thumbs", "thumbs-v2"):
+        old = config.CACHE_DIR / name
+        if old.is_dir():
+            shutil.rmtree(old, ignore_errors=True)
+            log.info("Alter Vorschaubild-Cache entfernt (%s)", name)
 
 
 def thumb_path(src: Path, width: int = WIDTH) -> Path:

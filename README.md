@@ -20,7 +20,7 @@ Ein schlanker Docker-Container im Matrix-Look. Er vergleicht deine Bibliotheken 
 > *English in short:* p5assets is a self-hosted web UI that scans Plex (plus optional Sonarr/Radarr) for missing
 > posters and season posters, lets you replace them by drag & drop (single files, folders, ZIPs) and writes them with
 > Kometa-compatible names (`poster.jpg`, `Season01.jpg`, …). It supports multiple "worlds" (e.g. HD and 4K), per-world
-> language priorities, TMDb/TVDB/fanart.tv search and UMTK "Coming Soon" mirroring. Docker image:
+> language priorities, TMDb/TVDB/fanart.tv search and "Coming Soon" poster mirroring. Docker image:
 > `ghcr.io/p5lukas/p5assets:dev`, default port 8484.
 
 ## Auf einen Blick
@@ -53,10 +53,10 @@ Ein schlanker Docker-Container im Matrix-Look. Er vergleicht deine Bibliotheken 
 - Onboarding: Plex-Login (PIN) oder URL + Token, Bibliotheken, Sonarr/Radarr, Welten mit Assets-Ordnern, TMDb/TVDB/fanart.tv
 - **Welten** (z. B. HD und 4K): getrennte Bereiche mit eigenem Assets-Ordner, eigener Titelliste, eigenem Dashboard und
   **eigener Farbe** (die ganze Oberfläche färbt sich um). Bibliotheken und Sonarr-/Radarr-Instanzen ordnest du per
-  Drag & Drop in Bubbles einer Welt zu. Umschalten per Matrix-Animation.
+  Drag & Drop in Bubbles einer Welt zu. Jede Farbe hat ihren eigenen kleinen Planeten in der Kopfzeile; der Wechsel ist eine kurze Wurmloch-Reise.
 - **Sonarr & Radarr** (beliebig viele Instanzen): auch Titel und Staffeln, die noch nicht in Plex sind – Poster lassen sich schon im Voraus ablegen
 - **Überwachung sichtbar**: Titel aus Sonarr/Radarr zeigen „überwacht“, „ohne Datei“ oder „nicht erschienen“; Filter „Überwacht“ und „Überwacht, ohne Datei“; pro Instanz lassen sich nicht überwachte Titel ausblenden
-- **UMTK / Coming Soon**: Poster für Plex-Platzhalter mit `{edition-Coming Soon}` werden zusätzlich im echten Radarr-/Sonarr-Ordner abgelegt (pro Welt abschaltbar); andere Editionen bleiben getrennt
+- **Coming-Soon-Poster**: Poster für Plex-Platzhalter mit `{edition-Coming Soon}` im Ordnernamen werden zusätzlich im echten Radarr-/Sonarr-Ordner abgelegt (pro Welt abschaltbar); andere Editionen bleiben getrennt
 - **Eigene Ordner**: Poster für Titel ablegen, die weder in Plex noch in Sonarr/Radarr stehen
 - Detailansicht mit Kacheln für Poster und **Season00 – Season50**, auch für Staffeln, die es noch nicht gibt
 - Vorhandene Poster per Drag & Drop auf eine andere Kachel **kopieren** (z. B. Staffel 1 → Staffel 2, automatisch umbenannt)
@@ -67,10 +67,10 @@ Ein schlanker Docker-Container im Matrix-Look. Er vergleicht deine Bibliotheken 
 - Neue Titelordner landen dort, wo die anderen Titel schon liegen (z. B. `assets/4K-Serien/…` statt direkt in `assets/`): erkannt über die Bibliothek, einen gleich benannten Ordner, die Sonarr-/Radarr-Instanz oder den Typ
 - Kometa-konforme Benennung: `<Medienordner>/poster.jpg`, `Season00.jpg`, `Season01.jpg` … (oder flach mit `asset_folders: false`)
 - Online-Suche nach Postern (TMDb, TVDB, fanart.tv) mit Tabs je Anbieter, gruppiert nach deiner **Sprach-Prioritätsliste pro Welt** (z. B. Textless → Deutsch → English); Übernahme per Klick
-- **Log-Seite** (Listen-Symbol in der Kopfzeile): Live-Log mit Suche, Level-Filter, Download und Leeren; geschrieben nach `/config/logs/p5assets.log`, Tokens und API-Keys werden nie protokolliert
+- **Log-Seite** (Terminal-Symbol `>_` in der Kopfzeile; bei neuen Warnungen/Fehlern leuchtet es auf und zeigt die Anzahl): Live-Log mit Suche, Level-Filter, Download und Leeren; geschrieben nach `/config/logs/p5assets.log`, Tokens und API-Keys werden nie protokolliert
 - Fußzeile mit Version, Branch, Commit und GitHub-Link
 - Dashboard mit Abdeckung in %, Reitern **Alle · Fehlende · Vollständig · Coming Soon · Noch nicht in Plex**, Quellenauswahl (auch „Alle Filmquellen / Serienquellen kombiniert“), schneller Suche und automatischem Hintergrund-Scan
-- **Coming Soon**: eigener Reiter für Titel, die in Plex schon als UMTK-Platzhalter erscheinen und zeitnah ein Poster brauchen
+- **Coming Soon**: eigener Reiter für Titel, die in Plex schon als Coming-Soon-Platzhalter (`{edition-Coming Soon}`) erscheinen und zeitnah ein Poster brauchen
 - **A–Z-Leiste** (oben und unten, im Reiter „Alle“) für große Bibliotheken: `#` für Zahlen/Sonderzeichen, die Suche durchsucht weiter alle Titel
 - **Filme direkt auf dem Poster bearbeiten**: Ersetzen, Vorschau, Online suchen, Herunterladen und Löschen per Hover (am Touchscreen per Tippen). Titel, Jahr und Poster öffnen die Vorschau mit allen Infos – eine Detailansicht gibt es nur für Serien
 - **Set hochladen** (Ordner oder ZIP) direkt in der Serien-Detailansicht

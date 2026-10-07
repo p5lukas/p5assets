@@ -326,9 +326,8 @@ def match_item(title: str, year: int | None, items: list[dict]) -> dict | None:
     return best if best_score >= 0.86 else None
 
 
-# ---------------------------------------------------------------- UMTK ---
-# UMTK ("Upcoming Movies & TV for Kometa") creates placeholder titles whose Plex folder carries the suffix
-# "{edition-Coming Soon}". Posters for them are mirrored into the real Radarr/Sonarr folder so they survive the
+# ------------------------------------------------------------ coming soon ---
+# Placeholder titles in Plex carry the suffix "{edition-Coming Soon}" in their folder name. Posters for them are mirrored into the real Radarr/Sonarr folder so they survive the
 # switch to the real file. Other editions ({edition-black&white} …) may have their own posters and are NOT mirrored.
 _COMING_SOON = re.compile(r"\s*\{edition-coming soon\}", re.IGNORECASE)
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import re
 import sys
+from collections import deque
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -15,6 +16,31 @@ FORMAT = "[%(asctime)s] [%(levelname)s] %(name)s | %(message)s"
 DATEFMT = "%Y-%m-%d %H:%M:%S"
 _LINE = re.compile(r"^\[(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] \[(?P<level>[A-Z]+)\] (?P<src>[^|]*?) \| (?P<msg>.*)$")
 _FILE_OK = re.compile(r"^p5assets\.log(\.\d+)?$")
+
+
+class AlertCounter(logging.Handler):
+    """Remembers warnings/errors (in memory, since start) so the UI can show "n new" without parsing the log file."""
+
+    def __init__(self) -> None:
+        super().__init__(logging.WARNING)
+        self.seq = 0
+        self.events: deque[tuple[int, bool]] = deque(maxlen=1000)   # (sequence number, is_error)
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.seq += 1
+        self.events.append((self.seq, record.levelno >= logging.ERROR))
+
+
+alerts = AlertCounter()
+
+
+def alert_state(since: int = 0) -> dict:
+    """Warnings/errors newer than ``since`` (a sequence number the browser remembers from its last visit of the log page)."""
+    if since > alerts.seq:   # app restarted since the browser last looked
+        since = 0
+    new = [e for s, e in alerts.events if s > since]
+    errors = sum(1 for e in new if e)
+    return {"seq": alerts.seq, "errors": errors, "warnings": len(new) - errors}
 
 
 class Redactor(logging.Filter):
@@ -53,6 +79,7 @@ def setup() -> None:
     ch = logging.StreamHandler(sys.stdout)
     ch.setFormatter(fmt)
     root.addHandler(ch)
+    root.addHandler(alerts)
     root.addFilter(Redactor())
     for h in root.handlers:
         h.addFilter(Redactor())

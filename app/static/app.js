@@ -50,6 +50,7 @@ const ICONS = {
   folderplus: [{ d: "M12 10v6" }, { d: "M9 13h6" }, { d: "M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" }],
   // two arrows chasing each other in a circle (rotates while a scan is running)
   sync: [{ d: "M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" }, { d: "M21 3v5h-5" }, { d: "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" }, { d: "M8 16H3v5" }],
+  terminal: [{ d: "M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" }, { d: "M6.5 9.5l3 2.5-3 2.5" }, { d: "M12.5 15.5h4.5", cls: "cur" }],
   list: [{ d: "M8 6h13" }, { d: "M8 12h13" }, { d: "M8 18h13" }, { d: "M3 6h.01" }, { d: "M3 12h.01" }, { d: "M3 18h.01" }],
   gear: [{ d: "M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" }, { c: [12, 12, 3] }],
   back: [{ d: "M19 12H5" }, { d: "M12 19l-7-7 7-7" }],
@@ -63,6 +64,7 @@ function icon(name, size = 18) {
   for (const [k, v] of Object.entries({ viewBox: "0 0 24 24", width: size, height: size, fill: "none", stroke: "currentColor", "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true" })) svg.setAttribute(k, v);
   for (const p of ICONS[name]) {
     const el = document.createElementNS(ns, p.c ? "circle" : "path");
+    if (p.cls) el.setAttribute("class", p.cls);
     if (p.c) { el.setAttribute("cx", p.c[0]); el.setAttribute("cy", p.c[1]); el.setAttribute("r", p.c[2]); } else el.setAttribute("d", p.d);
     svg.append(el);
   }
@@ -134,7 +136,7 @@ function startPolling() {
     try {
       const was = S.st.summary.running;
       S.st.summary = await api("/status");
-      if (S.view === "dash") { updateHero(); if (was && !S.st.summary.running) { await loadItems(); renderGrid(); } }
+      if (S.view === "dash") { updateHero(); if (was && !S.st.summary.running) { await loadItems(); renderGrid(); checkAlerts(); } }
       if (!S.st.summary.running) clearInterval(S.poll);
     } catch { /* ignore */ }
   }, 1500);
@@ -181,11 +183,12 @@ function rainEl() {
 
 function worldTransition(world, mid) {
   if (reduced()) { mid(); return; }
-  const fx = h("div", { class: "worldfx", style: `--c:${worldColor(world)}` }, h("canvas"), h("div", {}, world.name));
+  const hue = world && world.hue != null ? world.hue : 140;
+  const fx = h("div", { class: "worldfx", style: `--c:${worldColor(world)}` }, h("canvas"), h("div", { class: "wfplanet" }, planetSvg(hue, 256)));
   document.body.append(fx);
-  requestAnimationFrame(() => runRain($("canvas", fx), 1100, worldColor(world), false));
-  setTimeout(mid, 480);
-  setTimeout(() => fx.remove(), 1200);
+  requestAnimationFrame(() => runWormhole($("canvas", fx), hue, 1300));
+  setTimeout(mid, 650);                 // the colour changes while the screen is covered
+  setTimeout(() => fx.remove(), 1350);
 }
 
 /* --------------------------------------------------------------- footer --- */
@@ -200,6 +203,33 @@ async function loadVersion() {
   } catch { /* footer is optional */ }
 }
 
+/* ------------------------------------------------------------ log alert --- */
+// The log button shows new warnings/errors since the log page was opened last: filled button + counter + pulse
+// (not only a colour, because a world can be red or orange itself).
+const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } };
+async function checkAlerts(markSeen) {
+  try {
+    if (S.logSeen == null) S.logSeen = +(lsGet("p5logseen") || 0);
+    const r = await api(`/logs/alerts?since=${S.logSeen}`);
+    if (markSeen) { S.logSeen = r.seq; lsSet("p5logseen", r.seq); r.errors = 0; r.warnings = 0; }
+    S.alert = r; paintAlert();
+  } catch { /* the indicator is optional */ }
+}
+function paintAlert() {
+  const b = $("#logbtn"); if (!b) return;
+  const a = S.alert || { errors: 0, warnings: 0 }, hue = (curWorld() || {}).hue ?? 140;
+  const nearRed = hue >= 340 || hue <= 20, nearAmber = hue > 20 && hue <= 65;
+  b.classList.toggle("alert-err", a.errors > 0);
+  b.classList.toggle("alert-warn", !a.errors && a.warnings > 0);
+  b.classList.toggle("nearred", a.errors > 0 && nearRed);
+  b.classList.toggle("nearamber", !a.errors && a.warnings > 0 && nearAmber);
+  $(".lbadge", b).textContent = a.errors || a.warnings || "";
+  const parts = [a.errors ? `${a.errors} neue${a.errors === 1 ? "r Fehler" : " Fehler"}` : null, a.warnings ? `${a.warnings} neue Warnung${a.warnings === 1 ? "" : "en"}` : null].filter(Boolean);
+  b.title = parts.length ? "Logs – " + parts.join(", ") : "Logs";
+}
+setInterval(() => { if (S.view === "dash") checkAlerts(); }, 60000);
+
 /* ------------------------------------------------------------ routing --- */
 async function boot() {
   loadVersion();
@@ -211,6 +241,7 @@ async function boot() {
 /* =============================================================== logs === */
 async function logsPage() {
   S.view = "logs";
+  checkAlerts(true);
   clearInterval(S.logTimer);
   const st = { file: "p5assets.log", entries: [], offset: 0, level: "ALL", q: "", auto: true, live: true, full: false, files: await api("/logs") };
   const LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR"];
@@ -263,8 +294,8 @@ async function logsPage() {
     h("header", { class: "top" }, h("div", { class: "in" },
       h("div", { class: "logo" }, h("img", { class: "logoimg", src: "/static/icon.png", alt: "" }), h("span", {}, "logs", h("u", {}, "_"))),
       h("div", { class: "spacer" }),
-      h("button", { class: "btn tb", onclick: () => { clearInterval(S.logTimer); dashboard(); } }, icon("back"), h("span", { class: "lbl" }, "Zurück zum Dashboard")),
-      h("button", { class: "btn tb icon", title: "Einstellungen", onclick: () => { clearInterval(S.logTimer); wizard(true); } }, icon("gear", 20)))),
+      h("button", { class: "btn tb", onclick: async () => { clearInterval(S.logTimer); await checkAlerts(true); dashboard(); } }, icon("back"), h("span", { class: "lbl" }, "Zurück zum Dashboard")),
+      h("button", { class: "btn tb icon", title: "Einstellungen", onclick: async () => { clearInterval(S.logTimer); await checkAlerts(true); wizard(true); } }, icon("gear", 20)))),
     h("main", {},
       h("div", { class: "logcard" },
         h("div", { class: "row wrap", style: "align-items:flex-end" },
@@ -299,19 +330,20 @@ function dashboard() {
     h("header", { class: "top" }, h("div", { class: "in" },
       h("div", { class: "logo" }, h("img", { class: "logoimg", src: "/static/icon.png", alt: "" }), h("span", {}, "assets", h("u", {}, "_"))),
       ws.length > 1 ? h("div", { class: "worlds", title: "Welt wechseln" }, ws.map(w =>
-        h("button", { class: w.id === S.world ? "on" : "", style: `--c:${worldColor(w)}`, onclick: () => switchWorld(w.id) }, h("i"), w.name))) : null,
+        h("button", { class: w.id === S.world ? "on" : "", style: `--c:${worldColor(w)}`, title: w.name, onclick: () => switchWorld(w.id) }, planetSvg(w.hue ?? 140, 20), w.name))) : null,
       h("div", { class: "search" }, icon("search", 16), h("input", { type: "search", placeholder: "Titel suchen …", id: "q", value: S.q, autocomplete: "off", enterkeyhint: "search", oninput: debounce(async e => { S.q = e.target.value; await loadItems(); renderGrid(); }, 150) })),
       h("div", { class: "spacer" }),
       h("button", { class: "btn tb", title: "Bilder, Ordner oder ZIPs hochladen – p5assets ordnet sie automatisch den Titeln zu", onclick: () => pickFiles() }, icon("upload"), h("span", { class: "lbl" }, "Bilder hochladen")),
       h("button", { class: "btn tb", title: "Einen Titel von Hand anlegen, der weder in Plex noch in Sonarr/Radarr steht", onclick: openCustom }, icon("folderplus"), h("span", { class: "lbl" }, "Titel anlegen")),
       h("span", { class: "vsep" }),
       h("button", { class: "btn tb", id: "scanbtn", title: "Plex, Sonarr/Radarr und die Assets-Ordner neu einlesen", onclick: doScan }, icon("sync"), h("span", { class: "lbl" }, "Scannen")),
-      h("button", { class: "btn tb icon", title: "Logs", onclick: logsPage }, icon("list", 20)),
+      h("button", { class: "btn tb icon logbtn", id: "logbtn", title: "Logs", onclick: logsPage }, icon("terminal", 20), h("span", { class: "lbadge" })),
       h("button", { class: "btn tb icon", title: "Einstellungen", onclick: () => wizard(true) }, icon("gear", 20)),
     )),
     h("main", {}, h("div", { id: "hero" }), h("div", { id: "chips" }), h("div", { id: "az", class: "azbar" }), h("div", { id: "grid" }), h("div", { id: "az2", class: "azbar" })),
   );
   updateHero();
+  checkAlerts();
   loadItems().then(renderGrid);
   if (S.st.summary.running) startPolling();
   else if (!S.st.summary.scanned_at) doScan();
@@ -393,8 +425,9 @@ function renderChips() {
   fill(el,
     chip("Alle", "all", cnt.all),
     chip("Fehlende", "missing", cnt.missing),
+    chip("In Plex, Poster fehlt", "plexmissing", cnt.plexmissing, "In Plex vorhanden, aber bei Kometa fehlt ein Poster oder eine Staffel (ohne Titel, die nur in Sonarr/Radarr stehen)"),
     chip("Vollständig", "complete", cnt.complete),
-    cnt.comingsoon > 0 || S.filter === "comingsoon" ? chip("Coming Soon", "comingsoon", cnt.comingsoon, "In Plex schon als Coming-Soon-Platzhalter (UMTK) sichtbar – brauchen zeitnah ein Poster") : null,
+    cnt.comingsoon > 0 || S.filter === "comingsoon" ? chip("Coming Soon", "comingsoon", cnt.comingsoon, "Coming-Soon-Poster ({edition-Coming Soon}): in Plex schon sichtbar, brauchen zeitnah ein Poster") : null,
     hasExtra || cnt.notplex > 0 || S.filter === "notplex" ? chip("Noch nicht in Plex", "notplex", cnt.notplex, "Nur in Sonarr/Radarr bzw. als eigener Ordner: noch ohne Datei, nicht erschienen oder von Plex noch nicht eingelesen") : null,
     S.filter === "comingsoon" ? h("label", { class: "chip" + (S.nopost ? " on" : ""), style: "display:inline-flex;gap:8px;align-items:center;cursor:pointer" },
       h("input", { type: "checkbox", checked: S.nopost, style: "accent-color:var(--accent)", onchange: async e => { S.nopost = e.target.checked; renderChips(); await loadItems(); renderGrid(); } }), "nur ohne Poster") : null,
@@ -1308,7 +1341,7 @@ function wWorlds(nav, c) {
       h("div", { class: "row" }, h("div", { class: "grow" }, path), h("button", { class: "btn", onclick: () => browse(path.value || "/") }, "📂 Durchsuchen")),
       fsBox, st,
       h("label", { class: "opt", style: "margin-top:14px" }, h("input", { type: "checkbox", checked: w.mirror_coming_soon !== false, onchange: e => { w.mirror_coming_soon = e.target.checked; persist(); } }),
-        h("div", {}, "Coming-Soon-Poster (UMTK) auch im echten Film-Ordner ablegen", h("small", {}, "Gilt nur für Ordner mit {edition-Coming Soon}. Andere Editionen wie {edition-black&white} bleiben getrennt."))),
+        h("div", {}, "Coming-Soon-Poster auch im echten Film-Ordner ablegen", h("small", {}, "Gilt nur für Ordner mit {edition-Coming Soon}. Andere Editionen wie {edition-black&white} bleiben getrennt."))),
       h("label", { class: "f" }, "Bevorzugte Sprache der Poster (Reihenfolge = Priorität)"), langList(w, persist));
   };
 

@@ -55,7 +55,7 @@ def normalize_image(data: bytes, convert_to_jpg: bool) -> tuple[bytes, str]:
 def write_assets(item: dict, slots: list[str], data: bytes) -> list[Path]:
     """Store one image for several slots of a title (poster, Season00 …) in the assets folder of the item's
     world. Every file is named Kometa-conform; previous files of the same slot are replaced. Coming-Soon
-    placeholders (UMTK) are mirrored into the real Radarr/Sonarr folder as well. Returns the primary files."""
+    placeholders ({edition-Coming Soon}) are mirrored into the real Radarr/Sonarr folder as well. Returns the primary files."""
     cfg = config.get()
     acfg = cfg["assets"]
     root = Path(item["assets_path"])
