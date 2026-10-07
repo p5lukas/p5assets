@@ -947,14 +947,15 @@ function posterDbPanel(it, slot, draw, done) {
   return h("div", { class: "tpdb" },
     h("ol", { class: "tpsteps" },
       h("li", {}, "Auf ThePosterDB suchen, Sprache und Set wählen und dort (angemeldet) herunterladen."),
-      h("li", {}, "Die heruntergeladene Datei hier ablegen: p5assets benennt sie Kometa-konform und legt sie ab.")),
+      h("li", {}, slot ? "Die heruntergeladene Datei hier ablegen: p5assets benennt sie Kometa-konform und legt sie ab."
+        : "Das Set danach über „Set hochladen“ wählen oder einfach in die Serien-Ansicht ziehen: p5assets benennt es Kometa-konform und legt es ab.")),
     h("label", { class: "f" }, "Suchbegriff (englischer Ordnername aus Sonarr/Radarr)"),
     h("div", { class: "row wrap" }, h("div", { class: "grow", style: "min-width:220px" }, term), link),
     h("div", { class: "row", style: "margin-top:8px" }, h("div", { class: "grow" }, url), copy),
     h("div", { class: "hint", style: "margin:2px 0 0" }, "Falls der Button blockiert wird: Link kopieren und in einen neuen Tab einfügen."),
     h("label", { class: "opt", style: "margin-top:8px" }, ids, h("div", {}, "Kennung wie {tvdb-123} mitsuchen", h("small", {}, "Ohne Kennung (Standard) wird nur „Titel (Jahr)“ gesucht."))),
     h("p", { class: "hint" }, "ThePosterDB bietet Downloads nur für angemeldete Nutzer an – deshalb lädt p5assets dort nichts selbst und braucht keine Zugangsdaten."),
-    zone);
+    slot ? zone : null);   // for a whole series the buttons "Set hochladen" / dragging into the window do the same
 }
 
 function openPosterDbSet(it, draw) {
