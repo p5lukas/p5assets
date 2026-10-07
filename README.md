@@ -106,7 +106,7 @@ Aus dem Quellcode: `docker compose up -d --build`.
 |---|---|---|
 | `:dev` | Branch `dev` | Neues testen |
 | `:latest` | Branch `main` | stabil |
-| `:0.2.0` | Git-Tag `v0.2.0` | feste Version (Versionen zählen wir ab `0.1.0`, `1.0.0` erst bei stabilem Stand) |
+| `:0.2.0` | Git-Tag `v0.2.0` | feste Version (aktuell `0.2.0`, `1.0.0` erst bei ausgereiftem Stand) |
 | `:sha-…` | jeder Build | Fehlersuche |
 
 Solange p5assets in der Entwicklung ist, nutzen Template und Compose-Datei `:dev`. Sobald alles stabil läuft,
