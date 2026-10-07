@@ -434,9 +434,5 @@ header.top{padding-top:env(safe-area-inset-top)}
 /* ThePosterDB panel */
 .tpsteps{margin:0 0 6px;padding-left:20px;color:var(--muted)}
 .tpsteps li{margin:3px 0}
-.tpzone{margin-top:14px;border:2px dashed var(--line);border-radius:12px;padding:22px 16px;text-align:center;background:var(--panel2);transition:.15s}
-.tpzone b{display:block;font-size:34px;font-weight:400;color:var(--faint2)}
-.tpzone small{display:block;color:var(--muted);margin-top:4px}
-.tpzone.dropping{border-color:var(--accent);box-shadow:0 0 28px var(--glow)}
 #dropveil{pointer-events:none}
 .tpurl{font-size:12px;color:var(--muted)}
