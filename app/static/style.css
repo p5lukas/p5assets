@@ -439,3 +439,4 @@ header.top{padding-top:env(safe-area-inset-top)}
 .tpzone small{display:block;color:var(--muted);margin-top:4px}
 .tpzone.dropping{border-color:var(--accent);box-shadow:0 0 28px var(--glow)}
 #dropveil{pointer-events:none}
+.tpurl{font-size:12px;color:var(--muted)}

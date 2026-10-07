@@ -910,12 +910,18 @@ async function searchOnline(it, slot, draw) {
  *  slot = a single tile (one poster, or a set that is then reviewed); slot = null: a whole series set. */
 function posterDbPanel(it, slot, draw, done) {
   const base = (it.arr_folders && it.arr_folders[0]) || it.folder || `${it.title}${it.year ? ` (${it.year})` : ""}`;
-  const bare = s => s.replace(/\s*[\{\[][^}\]]*[\}\]]/g, "").trim();            // without {tvdb-…} / [...]
+  const bare = s => s.replace(/\s*[\{\[][^}\]]*[\}\]]/g, "").replace(/[:"&<>|\\\/*?;]+/g, " ").replace(/\s+/g, " ").trim();   // without {tvdb-…} / [...] and characters a firewall may dislike
   const enc = s => encodeURIComponent(s).replace(/[()!'*]/g, c => "%" + c.charCodeAt(0).toString(16).toUpperCase());
   const section = it.type === "movie" ? "movies" : "shows";
   const term = h("input", { type: "text", value: lsGet("p5tpdbids") === "1" ? base : bare(base), "aria-label": "Suchbegriff" });
-  const link = h("a", { class: "btn primary", target: "_blank", rel: "noopener" }, "Auf ThePosterDB suchen ↗");
-  const upd = () => { link.href = `https://theposterdb.com/search?term=${enc(term.value.trim())}&section=${section}`; };
+  // no Referer: ThePosterDB's firewall blocked clicks coming from a local address (the same link typed by hand worked)
+  const link = h("a", { class: "btn primary", target: "_blank", rel: "noopener noreferrer", referrerpolicy: "no-referrer" }, "Auf ThePosterDB suchen ↗");
+  const url = h("input", { type: "text", readOnly: true, class: "tpurl", "aria-label": "Fertige Such-Adresse", onfocus: e => e.target.select() });
+  const upd = () => { link.href = url.value = `https://theposterdb.com/search?term=${enc(term.value.trim())}&section=${section}`; };
+  const copy = h("button", { class: "btn sm", onclick: async () => {
+    try { await navigator.clipboard.writeText(url.value); } catch { url.select(); document.execCommand("copy"); }
+    toast("Link kopiert", "ok");
+  } }, "Link kopieren");
   term.oninput = upd; upd();
   const ids = h("input", { type: "checkbox", checked: lsGet("p5tpdbids") === "1", onchange: e => { lsSet("p5tpdbids", e.target.checked ? "1" : "0"); term.value = e.target.checked ? base : bare(base); upd(); } });
   const handle = files => {
@@ -938,6 +944,8 @@ function posterDbPanel(it, slot, draw, done) {
       h("li", {}, "Die heruntergeladene Datei hier ablegen: p5assets benennt sie Kometa-konform und legt sie ab.")),
     h("label", { class: "f" }, "Suchbegriff (englischer Ordnername aus Sonarr/Radarr)"),
     h("div", { class: "row wrap" }, h("div", { class: "grow", style: "min-width:220px" }, term), link),
+    h("div", { class: "row", style: "margin-top:8px" }, h("div", { class: "grow" }, url), copy),
+    h("div", { class: "hint", style: "margin:2px 0 0" }, "Falls der Button blockiert wird: Link kopieren und in einen neuen Tab einfügen."),
     h("label", { class: "opt", style: "margin-top:8px" }, ids, h("div", {}, "Kennung wie {tvdb-123} mitsuchen", h("small", {}, "Ohne Kennung (Standard) wird nur „Titel (Jahr)“ gesucht."))),
     h("p", { class: "hint" }, "ThePosterDB bietet Downloads nur für angemeldete Nutzer an – deshalb lädt p5assets dort nichts selbst und braucht keine Zugangsdaten."),
     zone);
