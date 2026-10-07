@@ -78,11 +78,12 @@ const curWorld = () => cfg().worlds.find(w => w.id === S.world) || cfg().worlds[
 const scopeStats = () => S.stats || worldStats();
 const worldStats = () => (S.st.summary.worlds || {})[S.world] || { items: 0, slots: 0, missing: 0, complete_items: 0 };
 
-const worldColor = w => `hsl(${w && w.hue != null ? w.hue : 140} 100% 50%)`;
-const HUES = [[140, "Grün"], [170, "Türkis"], [205, "Blau"], [270, "Violett"], [320, "Pink"], [355, "Rot"], [30, "Orange"], [55, "Gelb"]];
+const worldColor = w => { const hue = w && w.hue != null ? w.hue : 140, t = themeOf(hue); return `hsl(${hue} ${t.sat}% ${t.lit}%)`; };
+const hueVars = w => { const hue = w && w.hue != null ? w.hue : 140, t = themeOf(hue); return `--h:${hue};--sat:${t.sat}%;--lit:${t.lit}%`; };
 function setAccent() {
   const w = curWorld();
-  document.documentElement.style.setProperty("--h", w && w.hue != null ? w.hue : 140);
+  const hue = w && w.hue != null ? w.hue : 140, t = themeOf(hue), st = document.documentElement.style;
+  st.setProperty("--h", hue); st.setProperty("--sat", t.sat + "%"); st.setProperty("--lit", t.lit + "%");
 }
 
 async function loadState() {
@@ -1395,8 +1396,11 @@ function wWorlds(nav, c) {
   const worldCard = (w, i) => {
     const name = h("input", { type: "text", value: w.name, onchange: async e => { w.name = e.target.value; await persist(); drawWiz(); } });
     const path = h("input", { type: "text", value: w.assets_path, onchange: e => { w.assets_path = e.target.value; persist(); check(); } });
-    const hue = h("select", { onchange: async e => { w.hue = +e.target.value; await persist(); drawWiz(); } },
-      HUES.map(([v, label]) => h("option", { value: v, selected: w.hue === v }, label)));
+    // all worlds side by side: planet + name, the chosen one lights up and the world card takes over its colour
+    const hue = h("div", { class: "worldpick", role: "radiogroup", "aria-label": "Farbe der Welt" }, WORLD_THEMES.map(t =>
+      h("button", { type: "button", class: "wp" + (w.hue === t.hue ? " on" : ""), role: "radio", "aria-checked": w.hue === t.hue ? "true" : "false", title: t.name,
+        style: `--c:hsl(${t.hue} ${t.sat}% ${t.lit}%)`, onclick: async () => { w.hue = t.hue; await persist(); drawWiz(); } },
+        planetSvg(t.hue, 40), t.name)));
     const st = statusEl(), fsBox = h("div");
     const check = async () => {
       const r = await api("/path/check", { json: { path: path.value } });
@@ -1415,7 +1419,7 @@ function wWorlds(nav, c) {
       } catch (e) { setStatus(st, false, e.message); }
     };
     if (w.assets_path) check();
-    return h("div", { class: "apirow w hue", style: `--c:${worldColor(w)};--h:${w.hue ?? 140}` },
+    return h("div", { class: "apirow w hue", style: `--c:${worldColor(w)};${hueVars(w)}` },
       h("div", { class: "row" }, h("span", { class: "swatch" }), h("h3", { class: "grow" }, "Welt ", i + 1),
         worlds.length > 1 ? h("button", { class: "btn sm danger", onclick: async () => { worlds.splice(i, 1); await persist(); drawWiz(); } }, "Entfernen") : null),
       h("label", { class: "f" }, "Name"), name,
@@ -1490,7 +1494,7 @@ function wAssign(nav, c) {
     }));
     fill(worldRow, worlds.map(w => {
       const mine = chips.filter(ch => placed(ch) && ch.obj.world === w.id);
-      const b = h("div", { class: "bubble world target hue", style: `--h:${w.hue ?? 140}`, title: "Hier ablegen" },
+      const b = h("div", { class: "bubble world target hue", style: hueVars(w), title: "Hier ablegen" },
         h("h4", {}, w.name, h("small", { style: "text-transform:none;letter-spacing:0;color:var(--muted)" }, `  ${w.assets_path}`)),
         mine.length ? h("div", { class: "chips2" }, mine.map(chipEl)) : h("div", { class: "hintline" }, "Chips hier hineinziehen"));
       dropOn(b, ch => place(ch, w.id), () => true);

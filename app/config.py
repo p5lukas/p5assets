@@ -72,7 +72,7 @@ def load() -> dict:
 
 
 # Farbton (HSL-Hue) pro Welt: Welt 1 standardmäßig grün, weitere automatisch andere Farben
-WORLD_HUES = [140, 205, 355, 30, 270, 320, 170, 55]
+WORLD_HUES = [140, 205, 355, 30, 270, 320, 170, 55, 240, 195]
 
 
 def normalize(cfg: dict, legacy_path: str | None = None) -> bool:

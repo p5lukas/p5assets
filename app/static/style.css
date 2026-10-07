@@ -1,11 +1,11 @@
 /* p5assets – Matrix theme. The accent colour comes from the active "world" (--accent). */
-:root{--h:140;--warn:#ffd24a;--bad:#ff4d5e;--r:6px;
+:root{--h:140;--sat:100%;--lit:50%;--warn:#ffd24a;--bad:#ff4d5e;--r:6px;
   --mono:ui-monospace,"JetBrains Mono","Fira Code","SF Mono",Menlo,Consolas,"Liberation Mono",monospace;color-scheme:dark}
 /* Die ganze Palette leitet sich aus dem Farbton --h der aktiven Welt ab (.hue = lokal anderer Farbton) */
 :root,.hue{
   --bg:hsl(var(--h) 80% 2%);--panel:hsl(var(--h) 70% 5%);--panel2:hsl(var(--h) 66% 8%);--line:hsl(var(--h) 50% 27%);
-  --text:hsl(var(--h) 100% 91%);--muted:hsl(var(--h) 30% 62%);--accent:hsl(var(--h) 100% 50%);--ok:var(--accent);
-  --on-accent:hsl(var(--h) 100% 6%);--faint:hsl(var(--h) 38% 38%);--faint2:hsl(var(--h) 42% 30%);
+  --text:hsl(var(--h) var(--sat) 91%);--muted:hsl(var(--h) 30% 62%);--accent:hsl(var(--h) var(--sat) var(--lit));--ok:var(--accent);
+  --on-accent:hsl(var(--h) var(--sat) 6%);--faint:hsl(var(--h) 38% 38%);--faint2:hsl(var(--h) 42% 30%);
   --glow:color-mix(in srgb,var(--accent) 45%,transparent);--dim:color-mix(in srgb,var(--accent) 14%,transparent);
 }
 *{box-sizing:border-box}
@@ -91,7 +91,7 @@ main{max-width:1500px;margin:auto;padding:22px}
 .poster .ph{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:12px;color:var(--faint);font-size:12px}
 .poster .ph b{display:block;font-size:34px;color:var(--faint2);font-weight:400}
 .badge{position:absolute;top:8px;left:8px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:#000c;backdrop-filter:blur(6px);border:1px solid var(--line)}
-.badge.bad{background:#7f1d2acc;color:#fff;border-color:#ff4d5e}.badge.ok{background:hsl(var(--h) 100% 10% / .85);color:var(--accent);border-color:var(--accent)}.badge.warn{background:#5c4300cc;color:var(--warn);border-color:var(--warn)}
+.badge.bad{background:#7f1d2acc;color:#fff;border-color:#ff4d5e}.badge.ok{background:hsl(var(--h) var(--sat) 10% / .85);color:var(--accent);border-color:var(--accent)}.badge.warn{background:#5c4300cc;color:var(--warn);border-color:var(--warn)}
 .badge.r{left:auto;right:8px}
 .card .t{margin-top:8px;font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .card .s{color:var(--muted);font-size:12px}
@@ -184,7 +184,7 @@ details.more-seasons .slots{padding:6px 0 20px}
 #toasts{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:300;display:flex;flex-direction:column;gap:8px;align-items:center}
 .toast{background:var(--panel2);border:1px solid var(--line);padding:10px 18px;border-radius:var(--r);box-shadow:0 10px 30px #000c;animation:slide .2s}
 .toast.bad{border-color:var(--bad)}.toast.ok{border-color:var(--accent);color:var(--accent)}
-#dropveil{position:fixed;inset:0;z-index:90;background:hsl(var(--h) 100% 6% / .9);display:none;place-items:center;text-align:center;backdrop-filter:blur(4px)}
+#dropveil{position:fixed;inset:0;z-index:90;background:hsl(var(--h) var(--sat) 6% / .9);display:none;place-items:center;text-align:center;backdrop-filter:blur(4px)}
 #dropveil.on{display:grid}
 #dropveil div{border:2px dashed var(--accent);border-radius:14px;padding:60px 70px;font-size:14px;box-shadow:0 0 50px var(--glow);color:var(--text)}
 #dropveil b{display:block;font-size:30px;margin-bottom:6px;color:var(--accent);text-shadow:0 0 18px var(--glow)}
@@ -192,9 +192,9 @@ details.more-seasons .slots{padding:6px 0 20px}
 .progress i{display:block;height:100%;background:var(--accent);box-shadow:0 0 10px var(--glow);transition:width .2s}
 
 /* matrix rain: replaces a poster */
-.rain{position:absolute;inset:0;z-index:5;background:hsl(var(--h) 100% 2% / .94);animation:rainbg 1.7s ease-in forwards;pointer-events:none}
+.rain{position:absolute;inset:0;z-index:5;background:hsl(var(--h) var(--sat) 2% / .94);animation:rainbg 1.7s ease-in forwards;pointer-events:none}
 .rain canvas{width:100%;height:100%;display:block}
-@keyframes rainbg{0%,45%{background:hsl(var(--h) 100% 2% / .94)}100%{background:hsl(var(--h) 100% 2% / 0);opacity:0}}
+@keyframes rainbg{0%,45%{background:hsl(var(--h) var(--sat) 2% / .94)}100%{background:hsl(var(--h) var(--sat) 2% / 0);opacity:0}}
 /* world change: full screen */
 .worldfx{position:fixed;inset:0;z-index:400;background:#000;pointer-events:all;animation:wfx 1.3s ease forwards}
 @keyframes wfx{0%{opacity:0}20%{opacity:1}76%{opacity:1}100%{opacity:0}}
@@ -235,7 +235,7 @@ details.more-seasons .slots{padding:6px 0 20px}
 .chip2.picked{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
 .chip2 small{color:var(--muted)}.chip2.picked small{color:inherit;opacity:.7}
 .bubble .hintline{color:var(--faint);font-size:12px}
-.swatch{width:18px;height:18px;border-radius:50%;background:hsl(var(--h) 100% 50%);box-shadow:0 0 10px var(--glow);flex:none}
+.swatch{width:18px;height:18px;border-radius:50%;background:hsl(var(--h) var(--sat) var(--lit));box-shadow:0 0 10px var(--glow);flex:none}
 
 /* misc */
 .btn.gear{font-size:22px;line-height:1;padding:5px 12px}
@@ -351,7 +351,7 @@ a.btn{text-decoration:none}
 .dlbar{margin-bottom:16px;gap:8px}
 .poster.selectable{outline:2px solid var(--line);outline-offset:2px}
 .poster.selected{outline-color:var(--accent);box-shadow:0 0 24px var(--glow)}
-.selmark{position:absolute;top:8px;right:8px;z-index:4;width:26px;height:26px;border-radius:6px;border:2px solid var(--accent);background:hsl(var(--h) 100% 6% / .85);color:var(--accent);display:grid;place-items:center;font-weight:800}
+.selmark{position:absolute;top:8px;right:8px;z-index:4;width:26px;height:26px;border-radius:6px;border:2px solid var(--accent);background:hsl(var(--h) var(--sat) 6% / .85);color:var(--accent);display:grid;place-items:center;font-weight:800}
 .selecting .poster .hover{display:none}
 
 /* mobile / touch */
@@ -440,3 +440,13 @@ header.top{padding-top:env(safe-area-inset-top)}
 .tpzone b{display:block;font-size:34px;font-weight:400;color:var(--faint2)}
 .tpzone small{display:block;color:var(--muted);margin-top:4px}
 .tpzone.dropping{border-color:var(--accent);box-shadow:0 0 28px var(--glow)}
+
+/* world picker (settings) */
+.worldpick{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:6px 0 4px}
+@media(max-width:560px){.worldpick{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.wp{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 6px 9px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--muted);font-size:12px;cursor:pointer;transition:.15s}
+.wp:hover{border-color:var(--c);color:var(--text)}
+.wp svg{transition:.2s}
+.wp:hover svg{transform:scale(1.12)}
+.wp.on{border-color:var(--c);color:var(--c);background:color-mix(in srgb,var(--c) 14%,var(--panel));box-shadow:0 0 18px color-mix(in srgb,var(--c) 35%,transparent)}
+.wp.on svg{transform:scale(1.18)}

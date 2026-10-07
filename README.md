@@ -53,7 +53,7 @@ Ein schlanker Docker-Container im Matrix-Look. Er vergleicht deine Bibliotheken 
 - Onboarding: Plex-Login (PIN) oder URL + Token, Bibliotheken, Sonarr/Radarr, Welten mit Assets-Ordnern, TMDb/TVDB/fanart.tv
 - **Welten** (z. B. HD und 4K): getrennte Bereiche mit eigenem Assets-Ordner, eigener Titelliste, eigenem Dashboard und
   **eigener Farbe** (die ganze Oberfläche färbt sich um). Bibliotheken und Sonarr-/Radarr-Instanzen ordnest du per
-  Drag & Drop in Bubbles einer Welt zu. Jede Farbe hat ihren eigenen kleinen Planeten in der Kopfzeile; der Wechsel ist eine kurze Wurmloch-Reise.
+  Drag & Drop in Bubbles einer Welt zu. Zehn Welten zur Auswahl (Matrix, Eis, Ozean, Nacht, Nebel, Neon, Magma, Sturm, Wüste, Silber), jede mit ihrem eigenen kleinen Planeten in der Kopfzeile; der Wechsel ist eine kurze Wurmloch-Reise.
 - **Sonarr & Radarr** (beliebig viele Instanzen): auch Titel und Staffeln, die noch nicht in Plex sind – Poster lassen sich schon im Voraus ablegen
 - **Überwachung sichtbar**: Titel aus Sonarr/Radarr zeigen „überwacht“, „ohne Datei“ oder „nicht erschienen“; Filter „Überwacht“ und „Überwacht, ohne Datei“; pro Instanz lassen sich nicht überwachte Titel ausblenden
 - **Coming-Soon-Poster**: Poster für Plex-Platzhalter mit `{edition-Coming Soon}` im Ordnernamen werden zusätzlich im echten Radarr-/Sonarr-Ordner abgelegt (pro Welt abschaltbar); andere Editionen bleiben getrennt
