@@ -69,3 +69,4 @@ Alle bisher gesammelten Punkte sind in Version 2 umgesetzt. Neue Beobachtungen b
 ## Weitere Beobachtungen
 - [x] Standard-Host-Port 8484 (Template, Compose, README)
 (hier sammeln wir, was dir beim Onboarding auffällt)
+- [ ] Suchfeld: statt `$`-Zeichen eine Lupe (oder etwas Passendes im Matrix-Look) als Symbol
