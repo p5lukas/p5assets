@@ -15,74 +15,113 @@ Ein schlanker Docker-Container im Matrix-Look. Er vergleicht deine Bibliotheken 
 
 <img src="docs/images/dashboard.png" alt="Dashboard" width="900">
 
+<sub>Alle Titel in den Bildern sind erfunden.</sub>
+
 </div>
 
 > *English in short:* p5assets is a self-hosted web UI that scans Plex (plus optional Sonarr/Radarr) for missing
 > posters and season posters, lets you replace them by drag & drop (single files, folders, ZIPs) and writes them with
 > Kometa-compatible names (`poster.jpg`, `Season01.jpg`, …). It supports multiple "worlds" (e.g. HD and 4K), per-world
-> language priorities, TMDb/TVDB/fanart.tv search and "Coming Soon" poster mirroring. Docker image:
-> `ghcr.io/p5lukas/p5assets:dev`, default port 8484.
+> language priorities, TMDb/TVDB/fanart.tv search, "Coming Soon" poster mirroring, an undo trash, quality checks and
+> Discord/Telegram/ntfy notifications. Docker image: `ghcr.io/p5lukas/p5assets:dev`, default port 8484.
 
-## Auf einen Blick
+## Funktionen
 
-- 🔎 **Findet Lücken** – Plex, Sonarr und Radarr werden zusammengeführt (über TMDb/TVDB/IMDb-IDs), fehlende Poster und Staffeln sofort sichtbar.
-- 🖼️ **Ersetzen per Drag & Drop** – einzelnes Bild, mehrere Dateien, ganze Ordner oder ZIPs.
-- 🏷️ **Kometa-konforme Benennung** – automatisch: `<Medienordner>/poster.jpg`, `Season00.jpg` … `Season50.jpg`.
-- 🌍 **Welten** – z. B. HD und 4K mit eigenem Assets-Ordner, eigener Farbe, eigener Sprachliste.
-- 🌐 **Online-Suche** – TMDb, TVDB und fanart.tv, gruppiert nach deiner Sprach-Priorität.
-- 🧠 **Intelligente Zuordnung** – Titel, Jahr und Staffel werden aus Datei- und Ordnernamen erkannt.
+### Lücken finden
+Plex, Sonarr und Radarr werden zusammengeführt (über TMDb/TVDB/IMDb-IDs). Reiter zeigen sofort, was zu tun ist:
+**Fehlende**, **In Plex, Poster fehlt**, **Vollständig**, **Coming Soon**, **Noch nicht in Plex** und **Schwache Poster**.
+Dazu eine Quellenauswahl, schnelle Suche, A–Z-Leiste und eine Abdeckungsanzeige mit kleinem Verlauf pro Scan.
+Große Bibliotheken sind kein Problem: mit über 6000 Titeln antworten die Listen in rund 30 ms.
 
-## So sieht es aus
+### Ersetzen per Drag & Drop
+Ein Bild auf eine Kachel, mehrere Dateien, ganze Ordner oder ZIPs irgendwo ins Fenster ziehen. p5assets erkennt Titel,
+Jahr und Staffel aus Datei- und Ordnernamen, zeigt die Zuordnung zur Kontrolle und benennt alles Kometa-konform
+(`<Medienordner>/poster.jpg`, `Season01.jpg` …). Neue Ordner landen dort, wo die anderen Titel schon liegen.
 
 <table>
 <tr>
-<td width="50%"><img src="docs/images/matrix-replace.gif" alt="Poster ersetzen"><br><sub>Poster ersetzen: Matrix-Regen nur dort, wo sich etwas ändert</sub></td>
-<td width="50%"><img src="docs/images/world-switch.gif" alt="Welt wechseln"><br><sub>Welt wechseln: HD ↔ 4K mit eigener Farbe</sub></td>
-</tr>
-<tr>
-<td><img src="docs/images/import-zip.gif" alt="Import per ZIP"><br><sub>ZIP oder Ordner ins Fenster ziehen: automatische Zuordnung</sub></td>
-<td><img src="docs/images/detail.png" alt="Detailansicht"><br><sub>Detailansicht für Poster und Staffeln</sub></td>
-</tr>
-<tr>
-<td><img src="docs/images/online-search.png" alt="Online-Suche"><br><sub>Online-Suche nach Sprachen gruppiert</sub></td>
-<td><img src="docs/images/logs.png" alt="Logs"><br><sub>Log-Seite mit Suche und Filter</sub></td>
+<td width="50%"><img src="docs/images/matrix-replace.gif" alt="Poster ersetzen"><br><sub>Staffelposter ergänzen – Matrix-Regen nur dort, wo sich etwas ändert</sub></td>
+<td width="50%"><img src="docs/images/import-zip.gif" alt="Import per ZIP"><br><sub>ZIP hochladen: automatische Zuordnung, Abdeckung steigt</sub></td>
 </tr>
 </table>
 
-## Funktionen im Detail
-- Onboarding: Plex-Login (PIN) oder URL + Token, Bibliotheken, Sonarr/Radarr, Welten mit Assets-Ordnern, TMDb/TVDB/fanart.tv
-- **Welten** (z. B. HD und 4K): getrennte Bereiche mit eigenem Assets-Ordner, eigener Titelliste, eigenem Dashboard und
-  **eigener Farbe** (die ganze Oberfläche färbt sich um). Bibliotheken und Sonarr-/Radarr-Instanzen ordnest du per
-  Drag & Drop in Bubbles einer Welt zu. Zehn Welten zur Auswahl (Matrix, Eis, Ozean, Nacht, Nebel, Neon, Magma, Sturm, Wüste, Silber), jede mit ihrem eigenen kleinen Planeten in der Kopfzeile; der Wechsel ist eine kurze Wurmloch-Reise.
-- **Sonarr & Radarr** (beliebig viele Instanzen): auch Titel und Staffeln, die noch nicht in Plex sind – Poster lassen sich schon im Voraus ablegen
-- **Überwachung sichtbar**: Titel aus Sonarr/Radarr tragen Tags wie „überwacht“, „ohne Datei“ oder „noch nicht erschienen“; der Reiter „Noch nicht in Plex“ sammelt sie; pro Instanz lassen sich nicht überwachte Titel ausblenden
-- **Coming-Soon-Poster**: Poster für Plex-Platzhalter mit `{edition-Coming Soon}` im Ordnernamen werden zusätzlich im echten Radarr-/Sonarr-Ordner abgelegt (pro Welt abschaltbar); andere Editionen bleiben getrennt
-- **Eigene Ordner**: Poster für Titel ablegen, die weder in Plex noch in Sonarr/Radarr stehen
-- Detailansicht mit Kacheln für Poster und **Season00 – Season50**, auch für Staffeln, die es noch nicht gibt
-- Vorhandene Poster per Drag & Drop auf eine andere Kachel **kopieren** (z. B. Staffel 1 → Staffel 2, automatisch umbenannt)
-- **„Auf alle …“**: ein vorhandenes Bild für mehrere oder alle Kacheln einer Serie setzen (z. B. `poster.jpg` → Season00 – Season50, oder Season01 → alle anderen Kacheln), alles Kometa-konform benannt
-- **Vorschau** vergrößert ein Asset und zeigt Quelle, Größe, Datum und Auflösung; Plex-Bilder (mit Overlays) erscheinen nur als gekennzeichnete Vorschau
-- Ersetzen per Drag & Drop: einzelnes Bild auf eine Kachel, **mehrere Bilder, ganze Ordner oder ZIPs** irgendwo ins Fenster
-- Automatische Zuordnung über Datei-/Ordnernamen (`Show (2020) - Season 2.jpg`, `Show/S01.png`, `poster.jpg` …)
-- Neue Titelordner landen dort, wo die anderen Titel schon liegen (z. B. `assets/4K-Serien/…` statt direkt in `assets/`): erkannt über die Bibliothek, einen gleich benannten Ordner, die Sonarr-/Radarr-Instanz oder den Typ
-- Kometa-konforme Benennung: `<Medienordner>/poster.jpg`, `Season00.jpg`, `Season01.jpg` … (oder flach mit `asset_folders: false`)
-- Online-Suche nach Postern (TMDb, TVDB, fanart.tv) mit Tabs je Anbieter, gruppiert nach deiner **Sprach-Prioritätsliste pro Welt** (z. B. Textless → Deutsch → English); Übernahme per Klick
-- **Log-Seite** (Terminal-Symbol `>_` in der Kopfzeile; bei neuen Warnungen/Fehlern leuchtet es auf und zeigt die Anzahl): Live-Log mit Suche, Level-Filter, Download und Leeren; geschrieben nach `/config/logs/p5assets.log`, Tokens und API-Keys werden nie protokolliert
-- Fußzeile mit Version, Branch, Commit und GitHub-Link
-- Dashboard mit Abdeckung in %, Reitern **Alle · Fehlende · Vollständig · Coming Soon · Noch nicht in Plex**, Quellenauswahl (auch „Alle Filmquellen / Serienquellen kombiniert“), schneller Suche und automatischem Hintergrund-Scan
-- **Coming Soon**: eigener Reiter für Titel, die in Plex schon als Coming-Soon-Platzhalter (`{edition-Coming Soon}`) erscheinen und zeitnah ein Poster brauchen
-- **A–Z-Leiste** (oben und unten, im Reiter „Alle“) für große Bibliotheken: `#` für Zahlen/Sonderzeichen, die Suche durchsucht weiter alle Titel
-- **Filme direkt auf dem Poster bearbeiten**: Ersetzen, Vorschau, Online suchen, Herunterladen und Löschen per Hover (am Touchscreen per Tippen). Titel, Jahr und Poster öffnen die Vorschau mit allen Infos – eine Detailansicht gibt es nur für Serien
-- **Set hochladen** (Ordner oder ZIP) direkt in der Serien-Detailansicht, mit Prüfdialog und fest gewählter Serie
-- **ThePosterDB**: Tab im Dialog „Online suchen“ und Button „ThePosterDB-Set“ – öffnet die Suche mit dem englischen Arr-Ordnernamen; das dort (angemeldet) heruntergeladene Poster oder Set legst du in p5assets ab
-- **Schnelle Listen**: Kacheln nutzen kleine, zwischengespeicherte Vorschaubilder (`/config/cache/thumbs`, max. 600 MB, automatisch bereinigt); die Vorschau und der Download liefern immer das Original
-- **Herunterladen** in Originalqualität: einzelne Poster oder eine Auswahl/alle einer Serie als ZIP
-- **Rückgängig**: ersetzte oder gelöschte Poster liegen 30 Tage im Papierkorb (`/config/trash`, höchstens 2 GB); nach jeder Aktion bietet ein Hinweis „Rückgängig“ an, das Symbol ↺ in der Kopfzeile öffnet die ganze Liste
-- **Aufräumen**: verwaiste Ordner (Poster, zu denen es weder in Plex noch in Sonarr/Radarr einen Titel gibt) finden und in den Papierkorb verschieben; Titel, die Sonarr/Radarr noch kennen, bleiben geschützt
-- **Schwache Poster**: Reiter für zu kleine oder nicht 2:3 große Bilder – die Schwellwerte wählst du selbst
-- **Abdeckungsverlauf**: kleine Kurve im Statistik-Block, ein Punkt pro Scan
-- **Als App**: auf dem iPhone/iPad über „Teilen → Zum Home-Bildschirm“ installierbar (Vollbild, eigenes Icon)
-- Für iPhone und iPad optimiert (kompakte Kopfleiste, große Tippflächen)
+### Filme und Serien
+<table>
+<tr>
+<td width="50%"><img src="docs/images/movie-actions.png" alt="Film-Aktionen"><br><sub>Filme direkt am Poster bearbeiten (am Touchscreen per Tippen)</sub></td>
+<td width="50%"><img src="docs/images/detail.png" alt="Serien-Detailansicht"><br><sub>Serien: Poster und Staffeln, <b>Set hochladen</b>, ThePosterDB-Link, ZIP-Download</sub></td>
+</tr>
+</table>
+
+- Kacheln für Poster und **Season00 – Season50**, auch für Staffeln, die es noch nicht gibt
+- Poster per Drag & Drop auf eine andere Kachel **kopieren**, oder mit **„Auf alle …“** auf mehrere Kacheln übertragen
+- **Herunterladen** in Originalqualität: einzelne Poster oder eine Auswahl als ZIP
+- **Eigene Ordner** für Titel, die weder in Plex noch in Sonarr/Radarr stehen
+
+### Online-Suche
+Poster von TMDb, TVDB und fanart.tv, gruppiert nach deiner **Sprach-Priorität pro Welt** (z. B. Textless → Deutsch → English),
+Übernahme per Klick. Für ThePosterDB öffnet ein Link die Suche mit dem passenden Namen; das dort heruntergeladene Poster
+oder Set legst du einfach in p5assets ab (kein Login, kein Auslesen der Seite).
+
+<img src="docs/images/online-search.png" alt="Online-Suche" width="560">
+
+### Welten (HD, 4K, …)
+Getrennte Bereiche mit eigenem Assets-Ordner, eigener Titelliste, eigenem Dashboard und **eigener Farbe**: zehn Welten
+zur Auswahl, jede mit eigenem Planeten in der Kopfzeile; der Wechsel ist eine kurze Wurmloch-Reise. Bibliotheken und
+Sonarr-/Radarr-Instanzen ordnest du den Welten per Drag & Drop zu.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/world-switch.gif" alt="Weltenwechsel"><br><sub>Weltenwechsel HD ↔ 4K</sub></td>
+<td width="50%"><img src="docs/images/settings-worlds.png" alt="Weltenauswahl"><br><sub>Zehn Welten mit eigenem Planeten</sub></td>
+</tr>
+</table>
+
+### Coming Soon
+Plex-Platzhalter mit `{edition-Coming Soon}` im Ordnernamen haben einen eigenen Reiter (auf Wunsch nur die ohne Poster).
+Ihre Poster werden zusätzlich im echten Radarr-/Sonarr-Ordner abgelegt (pro Welt abschaltbar), damit sie den Wechsel
+auf die echte Datei überleben. Andere Editionen bleiben getrennt.
+
+<img src="docs/images/coming-soon.png" alt="Coming Soon" width="560">
+
+### Qualität prüfen: Schwache Poster
+Der Reiter findet zu kleine oder nicht 2:3 große Bilder. Die Schwellwerte (Mindestbreite, Seitenverhältnis) wählst du selbst;
+die Bildgrößen werden im Hintergrund gelesen.
+
+<img src="docs/images/weak.png" alt="Schwache Poster" width="560">
+
+### Rückgängig & Aufräumen
+Ersetzte oder gelöschte Poster liegen **30 Tage im Papierkorb** (höchstens 2 GB). Nach jeder Aktion bietet ein Hinweis
+„Rückgängig“ an; das Symbol ↺ in der Kopfzeile öffnet die ganze Liste. **Verwaiste Ordner** (Poster ohne Titel in Plex,
+Sonarr/Radarr oder den eigenen Ordnern) lassen sich finden und in den Papierkorb verschieben; Titel, die Sonarr/Radarr
+noch kennen, bleiben geschützt.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/cleanup.png" alt="Papierkorb"><br><sub>Papierkorb mit Wiederherstellen</sub></td>
+<td width="50%"><img src="docs/images/orphans.png" alt="Verwaiste Ordner"><br><sub>Verwaiste Ordner aufräumen</sub></td>
+</tr>
+</table>
+
+### Benachrichtigungen
+Nach einem Scan meldet p5assets per **Discord, Telegram oder ntfy** – und nur bei drei Anlässen:
+neue Titel ohne Poster (Coming-Soon-Titel werden mitgezählt: „4 neue Titel ohne Poster, 2 davon Coming Soon“),
+Fehler beim Scan (einmal pro Fehler) und neue Einträge unter „In Plex, Poster fehlt“. Der erste Scan legt nur den
+Ausgangsstand fest. Einrichten im Onboarding (überspringbar) oder später in den Einstellungen, mit Testnachricht.
+
+<img src="docs/images/settings-notifications.png" alt="Benachrichtigungen" width="560">
+
+### Logs, Neuigkeiten, Mobil
+- **Log-Seite** (Symbol `>_`): Live-Log mit Suche, Level-Filter und Download. Bei neuen Warnungen oder Fehlern leuchtet das Symbol auf und zeigt die Anzahl. Tokens und API-Keys werden nie protokolliert.
+- **Neu in diesem Update**: nach einem Update zeigt p5assets, was neu ist, und bietet neue Funktionen direkt zum Einrichten an (später jederzeit über „Neuigkeiten“ in der Fußzeile).
+- **Als App** auf iPhone/iPad (Teilen → Zum Home-Bildschirm), mit kompakter Kopfleiste und großen Tippflächen.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/alert.png" alt="Log-Symbol mit Alarm"><br><sub>Log-Symbol mit Alarm und Hinweis im Dashboard</sub></td>
+<td width="50%"><img src="docs/images/mobile.png" alt="Mobile Ansicht"><br><sub>Mobil / iPhone</sub></td>
+</tr>
+</table>
 
 ## Schnellstart (Docker Compose)
 ```yaml
@@ -126,21 +165,22 @@ Solange p5assets in der Entwicklung ist, nutzen Template und Compose-Datei `:dev
 wird auf `:latest` (Branch `main`) umgestellt: im Container-Formular das Feld *Repository* auf
 `ghcr.io/p5lukas/p5assets:latest` ändern.
 
-### Privates GHCR-Paket in Unraid
-Solange das Paket privat ist, braucht Unraid einen Login bei ghcr.io:
-1. GitHub → *Settings → Developer settings → Personal access tokens → Tokens (classic)* → Token mit **nur** `read:packages`.
-2. Im Unraid-Terminal: `docker login ghcr.io -u p5lukas` (Token als Passwort eingeben).
-3. Damit der Login einen Neustart überlebt (Unraid leert `/root` beim Booten):
-   ```bash
-   mkdir -p /boot/config/p5assets && cp /root/.docker/config.json /boot/config/p5assets/docker-config.json
-   echo 'mkdir -p /root/.docker && cp /boot/config/p5assets/docker-config.json /root/.docker/config.json' >> /boot/config/go
-   ```
-   (Der Token liegt dann im Klartext auf dem USB-Stick – deshalb nur Leserechte vergeben.)
+> Ist das GHCR-Paket privat, braucht Unraid einen Login: `docker login ghcr.io -u p5lukas` mit einem Token, der **nur** `read:packages` darf.
 
 Der Build läuft per GitHub Action (`.github/workflows/docker.yml`) bei Push auf `dev` bzw. `main`.
 Dateien werden mit `PUID=99` / `PGID=100` (nobody/users) geschrieben.
 Updates: Container in Unraid mit *Force Update* aktualisieren.
 
+## Speicherbedarf in `/config`
+| Ordner | Inhalt | Größe |
+|---|---|---|
+| `config.json` | Einstellungen, Zugangsdaten (Token/API-Keys, nie im Log) | klein |
+| `cache/thumbs-v3` | Vorschaubilder für schnelle Listen | höchstens 600 MB, wird automatisch bereinigt |
+| `trash` | Papierkorb mit Rückgängig-Funktion | höchstens 2 GB, 30 Tage |
+| `cache/dims.json`, `history.json`, `logs` | Bildgrößen, Abdeckungsverlauf, Log | klein |
+
 ## Hinweis
-Es gibt keine eigene Authentifizierung – betreibe p5assets nur im Heimnetz oder hinter einem Reverse Proxy mit Login.
-Plex-Token und API-Keys liegen in `/config/config.json` und werden nie ins Log geschrieben.
+Es gibt keine eigene Anmeldung – betreibe p5assets nur im Heimnetz oder hinter einem Reverse Proxy mit Login.
+Plex-Token, API-Keys und Benachrichtigungs-Zugangsdaten liegen in `/config/config.json` und werden nie ins Log geschrieben.
+
+Die Tests (`pytest`) laufen in der GitHub-Action vor jedem Image-Bau.

@@ -9,7 +9,7 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/p5lukas/p5assets/issues</Support>
   <Project>https://github.com/p5lukas/p5assets</Project>
-  <Overview>Überwacht deine Plex-Bibliotheken (und optional Sonarr/Radarr) sowie die Kometa-Assets-Ordner auf fehlende Poster und Staffelcover (poster, Season00, Season01 …). Mehrere Welten (z. B. HD und 4K) mit eigenen Assets-Ordnern. Einzelne Bilder, ganze Ordner oder ZIPs per Drag &amp; Drop hochladen – die Dateien werden automatisch Kometa-konform benannt. Mit Onboarding und optionaler Online-Suche über TMDb, TVDB und fanart.tv.</Overview>
+  <Overview>Überwacht deine Plex-Bibliotheken (und optional Sonarr/Radarr) sowie die Kometa-Assets-Ordner auf fehlende Poster und Staffelcover (poster, Season00, Season01 …). Mehrere Welten (z. B. HD und 4K) mit eigenen Assets-Ordnern. Einzelne Bilder, ganze Ordner oder ZIPs per Drag &amp; Drop hochladen – die Dateien werden automatisch Kometa-konform benannt. Mit Onboarding, Online-Suche (TMDb, TVDB, fanart.tv), Papierkorb mit Rückgängig, Qualitätsprüfung und Benachrichtigungen per Discord, Telegram oder ntfy.</Overview>
   <Category>MediaApp:Other Tools:</Category>
   <WebUI>http://[IP]:[PORT:8080]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/p5lukas/p5assets/dev/unraid/p5assets.xml</TemplateURL>
@@ -22,7 +22,7 @@
   <DonateLink/>
   <Requires>Plex Media Server und Kometa. Jeder Assets-Ordner muss derselbe sein wie der Kometa-asset_directory und beschreibbar gemountet werden. Nur den Host-Port ändern, nicht den Container-Port 8080.</Requires>
   <Config Name="WebUI Port" Target="8080" Default="8484" Mode="tcp" Description="Host-Port der Weboberfläche (Standard 8484). Der Container-Port bleibt 8080." Type="Port" Display="always" Required="true" Mask="false">8484</Config>
-  <Config Name="Config" Target="/config" Default="/mnt/user/appdata/p5assets" Mode="rw" Description="Einstellungen (Plex-Token, API-Keys)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/p5assets</Config>
+  <Config Name="Config" Target="/config" Default="/mnt/user/appdata/p5assets" Mode="rw" Description="Einstellungen (Plex-Token, API-Keys), Vorschaubilder (bis 600 MB) und Papierkorb (bis 2 GB)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/p5assets</Config>
   <Config Name="Assets 1 (z. B. HD)" Target="/assets" Default="/mnt/user/appdata/kometa/config/assets" Mode="rw" Description="Kometa asset_directory der ersten Welt (z. B. HD). Muss derselbe Ordner sein, den Kometa verwendet." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/kometa/config/assets</Config>
   <Config Name="Assets 2 (z. B. 4K, optional)" Target="/assets-4k" Default="" Mode="rw" Description="Optional: asset_directory einer zweiten Welt (z. B. 4K). Leer lassen, wenn du nur eine Welt brauchst." Type="Path" Display="always" Required="false" Mask="false"></Config>
   <Config Name="Assets 3 (optional)" Target="/assets-3" Default="" Mode="rw" Description="Optional: asset_directory einer dritten Welt." Type="Path" Display="advanced" Required="false" Mask="false"></Config>
