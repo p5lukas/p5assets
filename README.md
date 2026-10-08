@@ -55,7 +55,7 @@ Ein schlanker Docker-Container im Matrix-Look. Er vergleicht deine Bibliotheken 
   **eigener Farbe** (die ganze Oberfläche färbt sich um). Bibliotheken und Sonarr-/Radarr-Instanzen ordnest du per
   Drag & Drop in Bubbles einer Welt zu. Zehn Welten zur Auswahl (Matrix, Eis, Ozean, Nacht, Nebel, Neon, Magma, Sturm, Wüste, Silber), jede mit ihrem eigenen kleinen Planeten in der Kopfzeile; der Wechsel ist eine kurze Wurmloch-Reise.
 - **Sonarr & Radarr** (beliebig viele Instanzen): auch Titel und Staffeln, die noch nicht in Plex sind – Poster lassen sich schon im Voraus ablegen
-- **Überwachung sichtbar**: Titel aus Sonarr/Radarr zeigen „überwacht“, „ohne Datei“ oder „nicht erschienen“; Filter „Überwacht“ und „Überwacht, ohne Datei“; pro Instanz lassen sich nicht überwachte Titel ausblenden
+- **Überwachung sichtbar**: Titel aus Sonarr/Radarr tragen Tags wie „überwacht“, „ohne Datei“ oder „noch nicht erschienen“; der Reiter „Noch nicht in Plex“ sammelt sie; pro Instanz lassen sich nicht überwachte Titel ausblenden
 - **Coming-Soon-Poster**: Poster für Plex-Platzhalter mit `{edition-Coming Soon}` im Ordnernamen werden zusätzlich im echten Radarr-/Sonarr-Ordner abgelegt (pro Welt abschaltbar); andere Editionen bleiben getrennt
 - **Eigene Ordner**: Poster für Titel ablegen, die weder in Plex noch in Sonarr/Radarr stehen
 - Detailansicht mit Kacheln für Poster und **Season00 – Season50**, auch für Staffeln, die es noch nicht gibt
@@ -78,7 +78,7 @@ Ein schlanker Docker-Container im Matrix-Look. Er vergleicht deine Bibliotheken 
 - **Schnelle Listen**: Kacheln nutzen kleine, zwischengespeicherte Vorschaubilder (`/config/cache/thumbs`, max. 600 MB, automatisch bereinigt); die Vorschau und der Download liefern immer das Original
 - **Herunterladen** in Originalqualität: einzelne Poster oder eine Auswahl/alle einer Serie als ZIP
 - **Rückgängig**: ersetzte oder gelöschte Poster liegen 30 Tage im Papierkorb (`/config/trash`, höchstens 2 GB); nach jeder Aktion bietet ein Hinweis „Rückgängig“ an, das Symbol ↺ in der Kopfzeile öffnet die ganze Liste
-- **Aufräumen**: verwaiste Ordner (Poster ohne zugehörigen Titel, oder von Titeln, die nur noch unüberwacht in Sonarr/Radarr stehen) finden und in den Papierkorb verschieben; Poster angekündigter, überwachter Titel bleiben geschützt
+- **Aufräumen**: verwaiste Ordner (Poster, zu denen es weder in Plex noch in Sonarr/Radarr einen Titel gibt) finden und in den Papierkorb verschieben; Titel, die Sonarr/Radarr noch kennen, bleiben geschützt
 - **Schwache Poster**: Reiter für zu kleine oder nicht 2:3 große Bilder – die Schwellwerte wählst du selbst
 - **Abdeckungsverlauf**: kleine Kurve im Statistik-Block, ein Punkt pro Scan
 - **Als App**: auf dem iPhone/iPad über „Teilen → Zum Home-Bildschirm“ installierbar (Vollbild, eigenes Icon)

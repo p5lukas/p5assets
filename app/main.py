@@ -760,9 +760,8 @@ async def trash_empty():
 def _orphans(world_id: str) -> tuple[dict, list[dict], str]:
     """Folders in the assets folder that hold poster/season files but belong to no title (any more).
 
-    Protected: everything that Plex, Sonarr/Radarr (monitored, or with files, or already in Plex) or an own folder still knows –
-    so posters of films/series that are announced but not released yet stay. Listed as "nicht überwacht": titles that exist
-    only in Sonarr/Radarr, are not monitored there, have no file and are not in Plex. Returns (world, folders, reason why not checked)."""
+    Orphan = the folder belongs to nothing that exists any more: not in Plex, not listed in Sonarr/Radarr (monitored or not –
+    announced titles that are not released yet stay protected) and not an own folder. Returns (world, folders, reason why not checked)."""
     w = _world(world_id)
     cfg = config.get()
     root = Path(w["assets_path"])
@@ -775,15 +774,9 @@ def _orphans(world_id: str) -> tuple[dict, list[dict], str]:
         return w, [], f"{', '.join(failed)} war beim letzten Scan nicht erreichbar – die Liste wäre unvollständig. Bitte erneut scannen."
     index = kometa.get_index(root, True, w.get("search_depth", 3))
     known: set[str] = set()
-    stale: set[str] = set()
     for it in scanner.STATE["items"]:
-        if it["world"] != w["id"]:
-            continue
-        names = {x.casefold() for x in [it["folder"], *(it.get("arr_folders") or []), *(it.get("mirror_folders") or [])] if x}
-        if not it["in_plex"] and not it.get("custom") and it.get("monitored") is False and it.get("has_files") is False:
-            stale.update(names)
-        else:
-            known.update(names)
+        if it["world"] == w["id"]:
+            known.update(x.casefold() for x in [it["folder"], *(it.get("arr_folders") or []), *(it.get("mirror_folders") or [])] if x)
     out = []
     for key, d in index.dirs.items():
         if key in known:
@@ -794,7 +787,7 @@ def _orphans(world_id: str) -> tuple[dict, list[dict], str]:
         except OSError:
             continue
         if files:   # a title folder (container folders like "Filme" hold only sub-folders)
-            out.append({"name": d.name, "path": str(d.relative_to(root)), "files": len(files), "reason": "nicht überwacht" if key in stale else "kein Titel",
+            out.append({"name": d.name, "path": str(d.relative_to(root)), "files": len(files),
                         "size": sum(f.stat().st_size for f in files), "mtime": int(max(f.stat().st_mtime for f in files))})
     return w, sorted(out, key=lambda o: o["name"].casefold())[:1000], ""
 
