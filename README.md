@@ -77,6 +77,11 @@ Ein schlanker Docker-Container im Matrix-Look. Er vergleicht deine Bibliotheken 
 - **ThePosterDB**: Tab im Dialog „Online suchen“ und Button „ThePosterDB-Set“ – öffnet die Suche mit dem englischen Arr-Ordnernamen; das dort (angemeldet) heruntergeladene Poster oder Set legst du in p5assets ab
 - **Schnelle Listen**: Kacheln nutzen kleine, zwischengespeicherte Vorschaubilder (`/config/cache/thumbs`, max. 600 MB, automatisch bereinigt); die Vorschau und der Download liefern immer das Original
 - **Herunterladen** in Originalqualität: einzelne Poster oder eine Auswahl/alle einer Serie als ZIP
+- **Rückgängig**: ersetzte oder gelöschte Poster liegen 30 Tage im Papierkorb (`/config/trash`, höchstens 2 GB); nach jeder Aktion bietet ein Hinweis „Rückgängig“ an, das Symbol ↺ in der Kopfzeile öffnet die ganze Liste
+- **Aufräumen**: verwaiste Ordner (Poster ohne zugehörigen Titel) finden und in den Papierkorb verschieben
+- **Schwache Poster**: Reiter für zu kleine oder nicht 2:3 große Bilder – die Schwellwerte wählst du selbst
+- **Abdeckungsverlauf**: kleine Kurve im Statistik-Block, ein Punkt pro Scan
+- **Als App**: auf dem iPhone/iPad über „Teilen → Zum Home-Bildschirm“ installierbar (Vollbild, eigenes Icon)
 - Für iPhone und iPad optimiert (kompakte Kopfleiste, große Tippflächen)
 
 ## Schnellstart (Docker Compose)

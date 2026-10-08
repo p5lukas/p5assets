@@ -7,7 +7,7 @@ from collections import Counter
 import time
 from pathlib import Path
 
-from . import arr, config, kometa, logs, providers, thumbs
+from . import arr, config, dims, history, kometa, logs, providers, thumbs, trash
 from .plex import Plex, PlexError
 
 STATE: dict = {
@@ -44,7 +44,11 @@ def _rel(p: Path, root: Path) -> str:
 
 def _slot_info(f: Path, root: Path) -> dict:
     st = f.stat()
-    return {"exists": True, "mtime": int(st.st_mtime), "size": st.st_size, "file": _rel(f, root), "path": str(f)}
+    out = {"exists": True, "mtime": int(st.st_mtime), "size": st.st_size, "file": _rel(f, root), "path": str(f)}
+    d = dims.peek(str(f), int(st.st_mtime), st.st_size)      # cached only: reading headers of thousands of files happens after the scan
+    if d:
+        out["w"], out["h"] = d
+    return out
 
 
 def build_slots(item: dict, index: kometa.AssetIndex, ignore_specials: bool) -> None:
@@ -259,6 +263,8 @@ async def scan() -> None:
                             items.append(custom_item(entry))
                     done = _finish(world, items, index, cfg["assets"]["ignore_specials"])
                     all_items.extend(done)
+                    history.record(world["id"], len(done), sum(len([s for s in i["slots"].values() if not s.get("extra")]) for i in done),
+                                   sum(i["missing"] for i in done))
                     log.info("Welt „%s“: %d Titel (%d aus Plex, %d nur Sonarr/Radarr/Ordner), %d Slots fehlen, Assets-Ordner %s",
                              world["name"], len(done), sum(1 for i in done if i["in_plex"]), sum(1 for i in done if not i["in_plex"]),
                              sum(i["missing"] for i in done), world["assets_path"])
@@ -273,11 +279,21 @@ async def scan() -> None:
                 log.warning("Scan: %s", w)
             log.info("Scan fertig: %d Titel in %.1f s", len(all_items), time.time() - t0)
             await asyncio.to_thread(thumbs.prune)
+            await asyncio.to_thread(trash.purge)
+            asyncio.create_task(_measure_later(all_items))
         except Exception as e:  # noqa: BLE001
             log.error("Scan fehlgeschlagen: %s", e, exc_info=not isinstance(e, PlexError))
             STATE.update(error=str(e) or e.__class__.__name__, progress="")
         finally:
             STATE["running"] = False
+
+
+async def _measure_later(items: list[dict]) -> None:
+    """Image sizes for the quality check, in the background (header reads, cached by file date)."""
+    try:
+        await asyncio.to_thread(dims.fill, items)
+    except Exception as e:  # noqa: BLE001
+        log.warning("Bildgrößen konnten nicht gelesen werden: %s", e)
 
 
 def _parent_of(it: dict, root: Path) -> Path | None:
@@ -333,6 +349,7 @@ def refresh_item(item_id: str) -> None:
         return
     index = kometa.get_index(Path(item["assets_path"]), cfg["assets"]["asset_folders"], item.get("search_depth", 3))
     build_slots(item, index, cfg["assets"]["ignore_specials"])
+    dims.fill([item], persist=False)      # only this title (a handful of files)
 
 
 def add_custom(entry: dict) -> dict:

@@ -211,6 +211,12 @@ def get_index(root: Path, folders: bool, depth: int = 3, fresh: bool = False) ->
     return idx
 
 
+def drop_indexes() -> None:
+    """Forget the cached indexes (after folders were moved around): the next access reads the folders again."""
+    with _INDEX_LOCK:
+        _INDEX_CACHE.clear()
+
+
 def find_image(directory: Path, stem: str) -> Path | None:
     try:
         for e in directory.iterdir():

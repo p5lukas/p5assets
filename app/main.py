@@ -18,7 +18,7 @@ from collections import Counter
 
 from pydantic import BaseModel
 
-from . import arr as arrmod, config, kometa, languages as langmod, logs, thumbs, version, plex as plexmod, providers, scanner, uploads
+from . import arr as arrmod, config, dims, history, kometa, languages as langmod, logs, thumbs, trash, version, plex as plexmod, providers, scanner, uploads
 from .plex import Plex, PlexError
 
 STATIC = Path(__file__).parent / "static"
@@ -137,14 +137,15 @@ async def _plex_push(it: dict, slots: list[str], data: bytes) -> str | None:
 
 
 async def _store(it: dict, slot: str, data: bytes) -> dict:
-    path = await asyncio.to_thread(uploads.write_asset, it, slot, data)
+    undo: dict = {}
+    path = (await asyncio.to_thread(uploads.write_assets, it, [slot], data, undo))[0]
     await asyncio.to_thread(scanner.refresh_item, it["id"])
     warn = await _plex_push(it, [slot], data)
     log.info("Gespeichert: %s / %s → %s%s", it["title"], slot, path,
              f" (+ Spiegel: {', '.join(it['mirror_folders'])})" if it.get("mirror_folders") else "")
     if warn:
         log.warning("Plex-Upload für %s / %s: %s", it["title"], slot, warn)
-    return {"ok": True, "path": str(path), "warning": warn, "item": _public_item(_item(it["id"]), True)}
+    return {"ok": True, "path": str(path), "warning": warn, "trash": undo.get("gid"), "item": _public_item(_item(it["id"]), True)}
 
 
 # --------------------------------------------------------------- state ---
@@ -344,10 +345,28 @@ async def status():
     return scanner.summary()
 
 
-def _scope_stats(items: list[dict]) -> dict:
+def _is_weak(it: dict, min_w: int, ratio: bool) -> bool:
+    """Quality check: an existing asset is too narrow and/or not 2:3 (user's choice). Unknown sizes never count."""
+    for sl in it["slots"].values():
+        if sl.get("extra") or not sl.get("exists") or not sl.get("w"):
+            continue
+        if min_w and sl["w"] < min_w:
+            return True
+        if ratio and abs(sl["w"] / sl["h"] - 2 / 3) > 0.04:
+            return True
+    return False
+
+
+def _scope_stats(items: list[dict], weak_w: int = 0, weak_r: bool = False) -> dict:
     """Numbers for the statistic block and the tab counters of one source selection."""
     c = Counter()
     for i in items:
+        for sl in i["slots"].values():
+            if sl.get("exists") and not sl.get("extra"):
+                c["dims_total"] += 1
+                c["dims_known"] += 1 if sl.get("w") else 0
+        if (weak_w or weak_r) and _is_weak(i, weak_w, weak_r):
+            c["weak"] += 1
         c["items"] += 1
         c["slots"] += sum(1 for s in i["slots"].values() if not s.get("extra"))
         c["missing_slots"] += i["missing"]
@@ -358,12 +377,14 @@ def _scope_stats(items: list[dict]) -> dict:
         c["plexmissing"] += 1 if i.get("missing_plex") else 0
     return {"items": c["items"], "slots": c["slots"], "missing": c["missing_slots"], "complete_items": c["complete"],
             "counts": {"all": c["items"], "missing": c["missing"], "complete": c["complete"],
-                       "comingsoon": c["comingsoon"], "notplex": c["notplex"], "plexmissing": c["plexmissing"]}}
+                       "comingsoon": c["comingsoon"], "notplex": c["notplex"], "plexmissing": c["plexmissing"], "weak": c["weak"]},
+            "dims": {"known": c["dims_known"], "total": c["dims_total"]}}
 
 
 @app.get("/api/items")
 async def items(world: str = "", q: str = "", filter: str = "all", library: str = "", source: str = "",
-                type: str = "", letter: str = "", nopost: bool = False, offset: int = 0, limit: int = Query(120, le=500)):
+                type: str = "", letter: str = "", nopost: bool = False, weak_w: int = 0, weak_r: bool = False,
+                offset: int = 0, limit: int = Query(120, le=500)):
     wid = _world(world)["id"]   # once – config.get() deep-copies the whole configuration
     res = [i for i in scanner.STATE["items"] if i["world"] == wid]
     if library:
@@ -372,7 +393,7 @@ async def items(world: str = "", q: str = "", filter: str = "all", library: str 
         res = [i for i in res if source in i["sources"]]
     if type:
         res = [i for i in res if i["type"] == type]
-    stats = _scope_stats(res)          # for the chosen source, independent of tab, letter and search
+    stats = _scope_stats(res, weak_w, weak_r)          # for the chosen source, independent of tab, letter and search
     if filter == "missing":
         res = [i for i in res if i["missing"]]
     elif filter == "complete":
@@ -386,6 +407,8 @@ async def items(world: str = "", q: str = "", filter: str = "all", library: str 
         if nopost:
             res = [i for i in res if not i["slots"].get("poster", {}).get("exists")]
         res.sort(key=lambda i: (bool(i["slots"].get("poster", {}).get("exists")), i["title"].casefold()))
+    elif filter == "weak":            # quality check: too small and/or not 2:3, thresholds chosen by the user
+        res = [i for i in res if _is_weak(i, weak_w, weak_r)]
     elif filter == "monitored":
         res = [i for i in res if i.get("monitored")]
     elif filter == "wanted":  # monitored in Sonarr/Radarr but no file yet ("missing")
@@ -607,11 +630,12 @@ async def copy_all(item_id: str, body: CopyAllBody):
     if not targets:
         return {"ok": True, "written": [], "skipped": skipped, "warning": None, "item": _public_item(it, True)}
     data = Path(src).read_bytes()
-    await asyncio.to_thread(uploads.write_assets, it, targets, data)
+    undo: dict = {}
+    await asyncio.to_thread(uploads.write_assets, it, targets, data, undo)
     log.info("Auf alle: %s / %s → %d Kacheln (%d übersprungen)", it["title"], body.source, len(targets), len(skipped))
     await asyncio.to_thread(scanner.refresh_item, it["id"])
     warn = await _plex_push(it, targets, data)
-    return {"ok": True, "written": targets, "skipped": skipped, "warning": warn, "item": _public_item(_item(it["id"]), True)}
+    return {"ok": True, "written": targets, "skipped": skipped, "warning": warn, "trash": undo.get("gid"), "item": _public_item(_item(it["id"]), True)}
 
 
 class UrlBody(BaseModel):
@@ -672,14 +696,125 @@ async def delete_slot(item_id: str, slot: str):
     it = _item(item_id)
     _slot_check(it, slot)
     path = it["slots"].get(slot, {}).get("path")
+    gid = None
     if path and Path(path).is_file():
+        gid = trash.begin("delete", item_id=it["id"], world=it["world"], title=it["title"], slot=slot, type=it["type"])
         for extra in uploads.mirror_files(it, slot):  # keep the Coming-Soon mirror folder in sync
-            extra.unlink(missing_ok=True)
+            trash.stash(gid, extra, move=True, label=slot)
             log.info("Gelöscht (Spiegel): %s / %s (%s)", it["title"], slot, extra)
-        Path(path).unlink()
+        trash.stash(gid, Path(path), move=True, label=slot)      # moved to the trash: can be undone for 30 days
         log.info("Gelöscht: %s / %s (%s)", it["title"], slot, path)
     await asyncio.to_thread(scanner.refresh_item, item_id)
-    return {"ok": True, "item": _public_item(_item(item_id), True)}
+    return {"ok": True, "trash": gid, "item": _public_item(_item(item_id), True)}
+
+
+# ------------------------------------------------- trash / orphans / history ---
+
+@app.get("/api/trash")
+async def trash_list():
+    return {"keep_days": trash.KEEP_DAYS, "groups": await asyncio.to_thread(trash.listing)}
+
+
+@app.post("/api/trash/{gid}/restore")
+async def trash_restore(gid: str):
+    try:
+        meta = await asyncio.to_thread(trash.restore, gid)
+    except FileNotFoundError:
+        raise HTTPException(404, "Eintrag nicht mehr vorhanden")
+    kometa.drop_indexes()
+    item = next((i for i in scanner.STATE["items"] if i["id"] == meta.get("item_id")), None)
+    if item:
+        await asyncio.to_thread(scanner.refresh_item, item["id"])
+    return {"ok": True, "item": _public_item(item, True) if item else None, "title": meta.get("title")}
+
+
+@app.get("/api/trash/{gid}/file/{n}")
+async def trash_file(gid: str, n: int):
+    """The stored old poster, for the thumbnail in the trash list."""
+    try:
+        meta = trash._load(gid)
+    except (FileNotFoundError, ValueError):
+        raise HTTPException(404)
+    f = next((x for x in meta["files"] if x["n"] == n and not x["dir"]), None)
+    p = trash._root() / gid / "data" / str(n)
+    if not f or not p.is_file() or Path(f["orig"]).suffix.lower() not in kometa.IMAGE_EXTS:
+        raise HTTPException(404)
+    out = await asyncio.to_thread(thumbs.get, p)
+    return FileResponse(out, media_type="image/jpeg" if out != p else None, headers={"Cache-Control": "private, max-age=3600"})
+
+
+@app.delete("/api/trash/{gid}")
+async def trash_remove(gid: str):
+    try:
+        trash.remove(gid)
+    except FileNotFoundError:
+        raise HTTPException(404, "Eintrag nicht mehr vorhanden")
+    return {"ok": True}
+
+
+@app.delete("/api/trash")
+async def trash_empty():
+    return {"ok": True, "removed": await asyncio.to_thread(trash.empty)}
+
+
+def _orphans(world_id: str) -> tuple[dict, list[dict]]:
+    """Folders in the assets folder that hold poster/season files but belong to no title (any more)."""
+    w = _world(world_id)
+    cfg = config.get()
+    root = Path(w["assets_path"])
+    if not cfg["assets"]["asset_folders"] or not root.is_dir():
+        return w, []
+    index = kometa.get_index(root, True, w.get("search_depth", 3))
+    known: set[str] = set()
+    for it in scanner.STATE["items"]:
+        if it["world"] == w["id"]:
+            known.update(x.casefold() for x in [it["folder"], *(it.get("arr_folders") or []), *(it.get("mirror_folders") or [])] if x)
+    out = []
+    for key, d in index.dirs.items():
+        if key in known:
+            continue
+        try:
+            files = [e for e in d.iterdir() if e.is_file() and e.suffix.lower() in kometa.IMAGE_EXTS
+                     and (e.stem.casefold() == "poster" or e.stem.casefold().startswith("season"))]
+        except OSError:
+            continue
+        if files:   # a title folder (container folders like "Filme" hold only sub-folders)
+            out.append({"name": d.name, "path": str(d.relative_to(root)), "files": len(files),
+                        "size": sum(f.stat().st_size for f in files), "mtime": int(max(f.stat().st_mtime for f in files))})
+    return w, sorted(out, key=lambda o: o["name"].casefold())[:1000]
+
+
+@app.get("/api/orphans")
+async def orphans(world: str = ""):
+    w, out = await asyncio.to_thread(_orphans, world)
+    return {"world": w["id"], "folders": bool(config.get()["assets"]["asset_folders"]), "orphans": out}
+
+
+class OrphanBody(BaseModel):
+    world: str = ""
+    paths: list[str]
+
+
+@app.post("/api/orphans/trash")
+async def orphans_trash(body: OrphanBody):
+    w, found = await asyncio.to_thread(_orphans, body.world)
+    allowed = {o["path"]: o for o in found}
+    root = Path(w["assets_path"])
+    moved = 0
+    gid = trash.begin("orphan", world=w["id"], title=f"{len(body.paths)} verwaiste Ordner", slot="")
+    for rel in body.paths:
+        if rel in allowed and (root / rel).is_dir():     # only folders that are really orphans, nothing outside the assets folder
+            trash.stash(gid, root / rel, move=True, label=allowed[rel]["name"])
+            moved += 1
+    trash.discard_if_empty(gid)
+    kometa.drop_indexes()
+    log.info("Verwaiste Ordner in den Papierkorb verschoben: %d", moved)
+    return {"ok": True, "moved": moved, "trash": gid if moved else None}
+
+
+@app.get("/api/history")
+async def coverage_history(world: str = "", days: int = 90):
+    return {"points": history.get(_world(world)["id"], days)}
 
 
 # ----------------------------------------------------------- import ---
@@ -831,6 +966,19 @@ async def log_clear(file: str = logs.LOG_NAME):
 @app.get("/")
 async def index():
     return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/manifest.webmanifest")
+async def manifest():
+    """Makes p5assets installable as an app on the home screen (iPhone/iPad: Share > Add to Home Screen)."""
+    return JSONResponse({
+        "name": "p5assets", "short_name": "p5assets", "description": "Fehlende Poster für Plex und Kometa finden und ersetzen",
+        "start_url": "/", "scope": "/", "display": "standalone", "orientation": "any", "lang": "de",
+        "background_color": "#02100a", "theme_color": "#02100a",
+        "icons": [{"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+                  {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+                  {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}],
+    }, media_type="application/manifest+json", headers={"Cache-Control": "public, max-age=3600"})
 
 
 @app.get("/favicon.ico")

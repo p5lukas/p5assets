@@ -131,3 +131,10 @@ Alle bisher gesammelten Punkte sind in Version 2 umgesetzt. Neue Beobachtungen b
 - [x] Dialog „Online suchen“, Tab ThePosterDB: Ablagefläche für Poster/Set entfernt (wie im Serien-Set-Fenster); das Fenster schließt nach Klick auf „Auf ThePosterDB suchen ↗“; Schritt 2 verweist auf „Ersetzen“/„Hochladen“ der Kachel bzw. Ziehen auf die Kachel.
 - [x] Umentschieden (Nutzer): bei FILMEN bleibt das Fenster im Tab ThePosterDB offen und hat wieder die Ablagefläche mit dem Button „Hochladen“ (guter Workflow für ein einzelnes Poster); bei SERIEN schließt das Fenster nach dem Öffnen von ThePosterDB und die Detailansicht ist wieder zu sehen.
 - [x] Farbauswahl in den Einstellungen als Weltenauswahl: zehn Welten (Matrix, Eis, Ozean, Nacht, Nebel, Neon, Magma, Sturm, Wüste, Silber) als Raster mit Planet und Name; Auswahl färbt das Welt-Fenster um. Farben augenschonend (gedämpfte Sättigung, Silber fast neutral).
+
+## Ideen (vom Nutzer gewählt)
+- [x] Rückgängig: ersetzte/gelöschte Poster 30 Tage im Papierkorb (`/config/trash`, max. 2 GB), Toast „Rückgängig“ nach jeder Aktion, Liste „Rückgängig & Aufräumen“ mit Vorschau, Wiederherstellen, Leeren
+- [x] Als App auf dem iPhone/iPad (Web-App-Manifest, Home-Bildschirm-Icon, Vollbild)
+- [x] Qualitäts-Check: Reiter „Schwache Poster“, Schwellwerte vom Nutzer wählbar (Breite unter 600–1500 px, Seitenverhältnis nicht 2:3)
+- [x] Verwaiste Ordner finden und nach Rückfrage in den Papierkorb verschieben
+- [x] Verlauf der Abdeckung: Kurve im Statistik-Block (ein Punkt pro Scan, 90 Tage)

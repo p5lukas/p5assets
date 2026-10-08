@@ -10,7 +10,7 @@ from pathlib import Path, PurePosixPath
 
 from PIL import Image, ImageOps
 
-from . import config, kometa
+from . import config, kometa, trash
 
 MAX_ZIP_ENTRIES = 5000
 MAX_ZIP_BYTES = 2 * 1024**3
@@ -52,7 +52,7 @@ def normalize_image(data: bytes, convert_to_jpg: bool) -> tuple[bytes, str]:
     return buf.getvalue(), ".jpg"
 
 
-def write_assets(item: dict, slots: list[str], data: bytes) -> list[Path]:
+def write_assets(item: dict, slots: list[str], data: bytes, undo: dict | None = None) -> list[Path]:
     """Store one image for several slots of a title (poster, Season00 …) in the assets folder of the item's
     world. Every file is named Kometa-conform; previous files of the same slot are replaced. Coming-Soon
     placeholders ({edition-Coming Soon}) are mirrored into the real Radarr/Sonarr folder as well. Returns the primary files."""
@@ -73,6 +73,11 @@ def write_assets(item: dict, slots: list[str], data: bytes) -> list[Path]:
     # the "where do new folders go" heuristic walks all titles – only needed for a title without a folder
     base = index.base_dir(item["folder"], root) if index.knows(item["folder"]) else (scanner.preferred_base(item) or root)
 
+    # everything this call replaces is kept in the trash for 30 days: one group = one undoable operation
+    gid = trash.begin("replace", item_id=item.get("id"), world=item.get("world"), title=item.get("title"), slot=", ".join(slots), type=item.get("type"))
+    if undo is not None:
+        undo["gid"] = gid
+
     def put(folder: str, folder_base: Path) -> list[Path]:
         existing = index.slots(folder)
         out: list[Path] = []
@@ -80,6 +85,11 @@ def write_assets(item: dict, slots: list[str], data: bytes) -> list[Path]:
             season = kometa.parse_slot_key(slot)
             target = kometa.asset_target(folder_base, folder, season, acfg["asset_folders"], ext)
             target.parent.mkdir(parents=True, exist_ok=True)
+            kept: set[Path] = set()
+            for cand in [existing.get(slot), *(target.with_suffix(e) for e in kometa.IMAGE_EXTS)]:
+                if cand and cand.is_file() and cand not in kept:
+                    kept.add(cand); trash.stash(gid, cand, move=False, label=slot)
+            trash.note_created(gid, target)
             tmp = target.with_name(f".{target.name}.{uuid.uuid4().hex[:6]}.tmp")
             tmp.write_bytes(body)
             tmp.replace(target)

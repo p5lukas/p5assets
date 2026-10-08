@@ -30,10 +30,22 @@ async function api(path, opts = {}) {
   return data;
 }
 
-function toast(msg, kind = "") {
-  const t = h("div", { class: "toast " + kind }, msg);
+function toast(msg, kind = "", action = null) {
+  const t = h("div", { class: "toast " + kind }, msg,
+    action ? h("button", { class: "tbtn", onclick: async () => { t.remove(); await action.fn(); } }, action.label) : null);
   $("#toasts").append(t);
-  setTimeout(() => t.remove(), kind === "bad" ? 6000 : 3200);
+  setTimeout(() => t.remove(), action ? 9000 : kind === "bad" ? 6000 : 3200);
+}
+/** "Ersetzt ✓ [Rückgängig]": the previous poster is in the trash for 30 days, one tap brings it back. */
+function undoToast(msg, r, draw) {
+  toast(msg, "ok", r && r.trash ? { label: "Rückgängig", fn: async () => {
+    try {
+      const res = await api(`/trash/${r.trash}/restore`, { method: "POST" });
+      toast("Wiederhergestellt ✓", "ok");
+      if (res.item) { S.rain.add(res.item.id + "|poster"); draw ? draw(res.item) : loadItems().then(renderGrid); }
+      else loadItems().then(renderGrid);
+    } catch (e) { toast(e.message, "bad"); }
+  } } : null);
 }
 const busy = async (btn, fn) => {
   const old = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="spin"></span>';
@@ -57,6 +69,7 @@ const ICONS = {
   file: [{ d: "M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" }, { d: "M14 2v6h6" }, { d: "M8 13h8" }, { d: "M8 17h6" }],
   search: [{ c: [11, 11, 8] }, { d: "M21 21l-4.3-4.3" }],
   download: [{ d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" }, { d: "M7 10l5 5 5-5" }, { d: "M12 15V3" }],
+  undo: [{ d: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" }, { d: "M3 3v5h5" }],
   trash: [{ d: "M3 6h18" }, { d: "M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" }, { d: "M10 11v6" }, { d: "M14 11v6" }, { d: "M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" }],
 };
 function icon(name, size = 18) {
@@ -72,9 +85,21 @@ function icon(name, size = 18) {
 }
 
 /* ------------------------------------------------------------ state --- */
-const S = { st: null, langs: [], items: [], total: 0, filter: "all", q: "", lib: "", letter: null, letters: {}, allTotal: 0, req: 0, pending: 0, ctl: null, stats: null, nopost: false, io: null, world: "", poll: null, step: "", reached: 0, rain: new Set(), view: "" };
+const S = { st: null, langs: [], items: [], total: 0, filter: "all", q: "", lib: "", letter: null, letters: {}, allTotal: 0, req: 0, pending: 0, ctl: null, stats: null, nopost: false, io: null, hist: [], dimTries: 0, world: "", poll: null, step: "", reached: 0, rain: new Set(), view: "" };
 const cfg = () => S.st.config;
 const curWorld = () => cfg().worlds.find(w => w.id === S.world) || cfg().worlds[0];
+const weakDefault = { wOn: true, w: 1000, rOn: true };
+const weakCfg = () => { try { return { ...weakDefault, ...JSON.parse(localStorage.getItem("p5weak") || "{}") }; } catch { return { ...weakDefault }; } };
+const saveWeak = v => { try { localStorage.setItem("p5weak", JSON.stringify(v)); } catch { /* private mode */ } };
+/** A poster is "weak" if it is narrower than the chosen width and/or not 2:3 (same rule as the server's). */
+function weakSlot(it) {
+  const c = weakCfg();
+  for (const [k, sl] of Object.entries(it.slots || {})) {
+    if (sl.extra || !sl.exists || !sl.w) continue;
+    if ((c.wOn && sl.w < c.w) || (c.rOn && Math.abs(sl.w / sl.h - 2 / 3) > 0.04)) return { key: k, w: sl.w, h: sl.h };
+  }
+  return null;
+}
 const scopeStats = () => S.stats || worldStats();
 const worldStats = () => (S.st.summary.worlds || {})[S.world] || { items: 0, slots: 0, missing: 0, complete_items: 0 };
 
@@ -94,6 +119,7 @@ async function loadState() {
 }
 async function savePatch(patch) { const r = await api("/config", { json: { patch } }); S.st.config = r; return r; }
 
+const weakParams = () => { const c = weakCfg(), p = {}; if (c.wOn) p.weak_w = c.w; if (c.rOn) p.weak_r = "1"; return p; };
 const AZ_MIN = 150;   // from this many titles on the list is split by first letter instead of one endless page
 async function loadItems(append = false) {
   // S.lib is "lib:<Plex library>" or "src:<Sonarr/Radarr instance | Eigener Ordner>"
@@ -109,7 +135,7 @@ async function loadItemsInner(append, id, q, sig) {
   // S.lib: "" = all | "type:movie|show" = all movie/series sources combined | "lib:<Plex library>" | "src:<Sonarr/Radarr instance | Eigener Ordner>"
   const scope = { type: S.lib.startsWith("type:") ? S.lib.slice(5) : "", library: S.lib.startsWith("lib:") ? S.lib.slice(4) : "", source: S.lib.startsWith("src:") ? S.lib.slice(4) : "" };
   const query = (letter, limit, offset) => new URLSearchParams({ world: S.world, q: S.q, filter: S.filter, letter, ...scope,
-    ...(S.filter === "comingsoon" && S.nopost ? { nopost: "1" } : {}), offset, limit });
+    ...(S.filter === "comingsoon" && S.nopost ? { nopost: "1" } : {}), ...weakParams(), offset, limit });
   const total = letters => Object.values(letters || {}).reduce((a, b) => a + b, 0);
   const useLetters = S.filter === "all" && !q;   // only the tab "Alle" is split by letter; the search always covers all titles
   let letter = useLetters ? (S.letter ?? "") : "";
@@ -137,7 +163,7 @@ function startPolling() {
     try {
       const was = S.st.summary.running;
       S.st.summary = await api("/status");
-      if (S.view === "dash") { updateHero(); if (was && !S.st.summary.running) { await loadItems(); renderGrid(); checkAlerts(); } }
+      if (S.view === "dash") { updateHero(); if (was && !S.st.summary.running) { S.dimTries = 0; await loadItems(); renderGrid(); checkAlerts(); loadHistory(); } }
       if (!S.st.summary.running) clearInterval(S.poll);
     } catch { /* ignore */ }
   }, 1500);
@@ -202,6 +228,72 @@ async function loadVersion() {
       v.commit_short ? link(`Commit ${v.commit_short}`, v.commit_url) : null,
       link("GitHub ↗", v.repo));
   } catch { /* footer is optional */ }
+}
+
+/* ----------------------------------------------- trash / orphans / cleanup --- */
+const fmtBytes = b => b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB";
+const fmtWhen = ts => new Date(ts * 1000).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+const REASON = { replace: "ersetzt", delete: "gelöscht", orphan: "verwaister Ordner", restore: "vor Wiederherstellung" };
+
+/** "Rückgängig & Aufräumen": the trash (replaced/deleted posters, 30 days) and folders that belong to no title any more. */
+function openCleanup() {
+  let tab = "trash";
+  const body = h("div"), tabs = h("div", { class: "tabs", style: "position:static" });
+  const m = modal("Rückgängig & Aufräumen", h("div", {}, tabs, body));
+  const refresh = () => { loadItems().then(renderGrid); api("/status").then(r => { S.st.summary = r; updateHero(); }); };
+
+  async function drawTrash() {
+    fill(body, h("div", { class: "empty", style: "padding:30px" }, h("span", { class: "spin" })));
+    const r = await api("/trash"), gs = r.groups;
+    const total = gs.reduce((a, g) => a + g.size, 0);
+    fill(body,
+      h("p", { class: "hint", style: "margin-top:0" }, `Ersetzte und gelöschte Poster bleiben ${r.keep_days} Tage hier (höchstens 2 GB). „Wiederherstellen“ legt das alte Bild zurück.`),
+      gs.length ? h("div", { class: "row wrap", style: "margin-bottom:10px" }, h("span", { class: "hint", style: "margin:0" }, `${gs.length} Einträge · ${fmtBytes(total)}`), h("span", { class: "spacer" }),
+        h("button", { class: "btn sm danger", onclick: async () => { if (!confirm("Papierkorb ganz leeren? Das kann nicht rückgängig gemacht werden.")) return; await api("/trash", { method: "DELETE" }); drawTrash(); } }, "Papierkorb leeren")) : null,
+      gs.length ? gs.map(g => {
+        const file = g.files.find(f => !f.dir);
+        const days = Math.max(0, Math.ceil((g.expires * 1000 - Date.now()) / 86400000));
+        const slots = (g.slot || "").split(", ").filter(Boolean).map(k => { try { return slotLabel(k, g.type || "show"); } catch { return k; } }).join(", ");
+        return h("div", { class: "trow" },
+          file ? h("img", { loading: "lazy", alt: "", src: `/api/trash/${g.id}/file/${file.n}` }) : h("div", { class: "noth" }, g.files.some(f => f.dir) ? "📁" : "＋"),
+          h("div", { class: "grow" }, h("b", {}, g.title || "—"), h("div", { class: "hint", style: "margin:0" }, [slots, REASON[g.reason] || g.reason].filter(Boolean).join(" · ")),
+            h("div", { class: "hint", style: "margin:0" }, `${fmtWhen(g.ts)} · ${fmtBytes(g.size)} · noch ${days} Tag${days === 1 ? "" : "e"}`)),
+          h("button", { class: "btn sm primary", onclick: async e => {
+            try { const res = await busy(e.currentTarget, () => api(`/trash/${g.id}/restore`, { method: "POST" })); toast("Wiederhergestellt ✓", "ok"); refresh(); drawTrash(); }
+            catch (err) { toast(err.message, "bad"); }
+          } }, "Wiederherstellen"),
+          h("button", { class: "btn sm danger", title: "Endgültig löschen", onclick: async () => { await api("/trash/" + g.id, { method: "DELETE" }); drawTrash(); } }, icon("trash", 14)));
+      }) : h("div", { class: "empty", style: "padding:30px" }, "Der Papierkorb ist leer."));
+  }
+
+  async function drawOrphans() {
+    fill(body, h("div", { class: "empty", style: "padding:30px" }, h("span", { class: "spin" }), " Suche verwaiste Ordner …"));
+    const r = await api("/orphans?world=" + encodeURIComponent(S.world));
+    if (!r.folders) { fill(body, h("div", { class: "empty" }, "Verwaiste Ordner lassen sich nur bei Ordner-Struktur (asset_folders) prüfen.")); return; }
+    const sel = new Set();
+    const list = h("div"), go = h("button", { class: "btn primary", disabled: true });
+    const sync = () => { go.textContent = `${sel.size} in den Papierkorb`; go.disabled = !sel.size; };
+    fill(list, r.orphans.map(o => h("label", { class: "trow orph" },
+      h("input", { type: "checkbox", onchange: e => { e.target.checked ? sel.add(o.path) : sel.delete(o.path); sync(); } }),
+      h("div", { class: "grow" }, h("b", {}, o.name), h("div", { class: "hint", style: "margin:0" }, `${o.path} · ${o.files} Datei${o.files === 1 ? "" : "en"} · ${fmtBytes(o.size)} · ${fmtWhen(o.mtime)}`)))));
+    go.onclick = async () => {
+      if (!confirm(`${sel.size} Ordner in den Papierkorb verschieben? Sie lassen sich dort 30 Tage lang wiederherstellen.`)) return;
+      const res = await busy(go, () => api("/orphans/trash", { json: { world: S.world, paths: [...sel] } }));
+      toast(`${res.moved} Ordner im Papierkorb`, "ok", res.trash ? { label: "Rückgängig", fn: async () => { await api(`/trash/${res.trash}/restore`, { method: "POST" }); toast("Wiederhergestellt ✓", "ok"); } } : null);
+      drawOrphans();
+    };
+    sync();
+    fill(body,
+      h("p", { class: "hint", style: "margin-top:0" }, `Ordner in „${curWorld().name}“, die Poster oder Staffelbilder enthalten, zu denen es aber keinen Titel in Plex, Sonarr/Radarr oder bei den eigenen Ordnern gibt (z. B. umbenannte oder entfernte Titel).`),
+      r.orphans.length ? [h("div", { class: "row wrap", style: "margin-bottom:8px" }, h("button", { class: "btn sm", onclick: () => { list.querySelectorAll("input").forEach(i => { i.checked = true; i.dispatchEvent(new Event("change")); }); } }, "Alle wählen"), h("span", { class: "spacer" }), go), list]
+        : h("div", { class: "empty", style: "padding:30px" }, "🎉 Keine verwaisten Ordner gefunden."));
+  }
+
+  const draw = () => {
+    fill(tabs, [["trash", "Rückgängig (Papierkorb)"], ["orphans", "Verwaiste Ordner"]].map(([k, label]) => h("button", { class: "tab" + (tab === k ? " on" : ""), onclick: () => { tab = k; draw(); } }, label)));
+    (tab === "trash" ? drawTrash : drawOrphans)().catch(e => fill(body, h("div", { class: "status bad" }, e.message)));
+  };
+  draw();
 }
 
 /* ------------------------------------------------------------ log alert --- */
@@ -338,12 +430,14 @@ function dashboard() {
       h("button", { class: "btn tb", title: "Einen Titel von Hand anlegen, der weder in Plex noch in Sonarr/Radarr steht", onclick: openCustom }, icon("folderplus"), h("span", { class: "lbl" }, "Titel anlegen")),
       h("span", { class: "vsep" }),
       h("button", { class: "btn tb", id: "scanbtn", title: "Plex, Sonarr/Radarr und die Assets-Ordner neu einlesen", onclick: doScan }, icon("sync"), h("span", { class: "lbl" }, "Scannen")),
+      h("button", { class: "btn tb icon", title: "Rückgängig & Aufräumen: Papierkorb (30 Tage) und verwaiste Ordner", onclick: openCleanup }, icon("undo", 20)),
       h("button", { class: "btn tb icon logbtn", id: "logbtn", title: "Logs", onclick: logsPage }, icon("terminal", 20), h("span", { class: "lbadge" })),
       h("button", { class: "btn tb icon", title: "Einstellungen", onclick: () => wizard(true) }, icon("gear", 20)),
     )),
     h("main", {}, h("div", { id: "hero" }), h("div", { id: "chips" }), h("div", { id: "az", class: "azbar" }), h("div", { id: "grid" }), h("div", { id: "az2", class: "azbar" })),
   );
   updateHero();
+  S.dimTries = 0; loadHistory();
   checkAlerts();
   loadItems().then(renderGrid);
   if (S.st.summary.running) startPolling();
@@ -354,7 +448,7 @@ function switchWorld(id) {
   if (id === S.world) return;
   const w = cfg().worlds.find(x => x.id === id);
   worldTransition(w, async () => {
-    S.world = id; S.filter = "all"; S.q = ""; S.lib = ""; S.letter = null; S.letters = {}; S.stats = null; S.nopost = false;
+    S.world = id; S.filter = "all"; S.q = ""; S.lib = ""; S.letter = null; S.letters = {}; S.stats = null; S.nopost = false; S.hist = [];
     try { localStorage.setItem("p5world", id); } catch { /* ignore */ }
     setAccent(); dashboard();
   });
@@ -384,7 +478,8 @@ function updateHero() {
     (s.warnings || []).map(w => h("div", { class: "status bad" }, "⚠ " + w)),
     h("div", { class: "stats" },
       stat(ws.items, "Titel"), stat(ws.slots - ws.missing, "Assets vorhanden", "ok"), stat(ws.missing, "Fehlen", ws.missing ? "bad" : "ok"),
-      stat(ws.complete_items, "Vollständig")));
+      stat(ws.complete_items, "Vollständig")),
+    sparkline());
   const sig = JSON.stringify([S.world, S.lib, c.libraries.map(l => [l.title, l.enabled, l.world]), c.arr.map(a => [a.name, a.world]), c.custom.length]);
   if (box.dataset.sig !== sig) { box.dataset.sig = sig; fill($("#hsrc"), sourceSelect()); }
   const hasSrc = !!$("#hsrc").firstChild;
@@ -393,6 +488,27 @@ function updateHero() {
   renderChips();
 }
 const stat = (n, label, cls = "") => h("div", { class: "stat " + cls }, h("b", {}, n ?? 0), h("span", {}, label));
+
+/** Coverage over time (one point per scan) of the world: a small line under the numbers. */
+async function loadHistory() {
+  try { S.hist = (await api("/history?world=" + encodeURIComponent(S.world) + "&days=90")).points; } catch { S.hist = []; }
+  if (S.view === "dash") updateHero();
+}
+function sparkline() {
+  const pts = (S.hist || []).filter(p => p[2] > 0).map(p => [p[0], Math.round((p[2] - p[3]) / p[2] * 1000) / 10]);
+  if (pts.length < 2) return null;
+  const W = 200, H = 34, t0 = pts[0][0], t1 = pts[pts.length - 1][0] || t0 + 1;
+  const lo = Math.min(...pts.map(p => p[1])), hi = Math.max(...pts.map(p => p[1])), span = Math.max(hi - lo, 2);
+  const xy = ([t, v]) => [4 + (t - t0) / Math.max(1, t1 - t0) * (W - 8), H - 5 - (v - lo) / span * (H - 10)];
+  const line = pts.map(p => xy(p).map(n => n.toFixed(1)).join(",")).join(" ");
+  const [lx, ly] = xy(pts[pts.length - 1]), first = pts[0][1], last = pts[pts.length - 1][1], diff = Math.round((last - first) * 10) / 10;
+  const days = Math.max(1, Math.round((t1 - t0) / 86400));
+  const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("width", W); svg.setAttribute("height", H); svg.setAttribute("class", "spark-svg");
+  svg.innerHTML = `<polyline points="${line} ${lx.toFixed(1)},${H} 4,${H}" fill="var(--dim)" stroke="none"/><polyline points="${line}" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="2.6" fill="var(--accent)"/>`;
+  return h("div", { class: "spark", title: `Abdeckung ${first}% → ${last}% in ${days} Tag${days === 1 ? "" : "en"} (ganze Welt, ein Punkt pro Scan)` },
+    svg, h("span", {}, `Abdeckung ${days} Tage: `, h("b", {}, `${last}%`), h("span", { class: diff >= 0 ? "up" : "down" }, ` ${diff >= 0 ? "▲" : "▼"} ${Math.abs(diff)}`)));
+}
 
 /** Source filter in the statistic block: all / all movie / all series sources (combined, every title counted once) /
  *  single Plex libraries / single Sonarr+Radarr instances. Ring, numbers and tab counters follow the selection. */
@@ -417,6 +533,21 @@ function sourceSelect() {
       groups.map(([label, os]) => label ? h("optgroup", { label }, os.map(opt)) : os.map(opt))));
 }
 
+/** The user decides what counts as weak: minimum width and/or aspect ratio. */
+function weakOptions() {
+  const c = weakCfg(), dm = (S.stats && S.stats.dims) || { known: 0, total: 0 };
+  const change = async patch => { saveWeak({ ...weakCfg(), ...patch }); renderChips(); await loadItems(); renderGrid(); };
+  if (dm.known < dm.total && S.dimTries < 8) {       // the sizes are read in the background after a scan: look again shortly
+    clearTimeout(S.dimTimer); S.dimTries++;
+    S.dimTimer = setTimeout(async () => { await loadItems(); renderGrid(); }, 4000);
+  }
+  return h("div", { class: "weakopts" },
+    h("label", { class: "opt compact" }, h("input", { type: "checkbox", checked: c.wOn, onchange: e => change({ wOn: e.target.checked }) }), "Breite unter",
+      h("select", { onchange: e => change({ w: +e.target.value, wOn: true }) }, [600, 800, 1000, 1200, 1500].map(v => h("option", { value: v, selected: v === c.w }, v + " px")))),
+    h("label", { class: "opt compact" }, h("input", { type: "checkbox", checked: c.rOn, onchange: e => change({ rOn: e.target.checked }) }), "Seitenverhältnis nicht 2:3"),
+    dm.known < dm.total ? h("span", { class: "hint" }, `Bildgrößen werden geprüft … ${dm.known} von ${dm.total}`) : null);
+}
+
 function renderChips() {
   const el = $("#chips"); if (!el) return;
   const c = cfg(), cnt = (S.stats && S.stats.counts) || {};
@@ -430,6 +561,8 @@ function renderChips() {
     chip("Vollständig", "complete", cnt.complete),
     cnt.comingsoon > 0 || S.filter === "comingsoon" ? chip("Coming Soon", "comingsoon", cnt.comingsoon, "Coming-Soon-Poster ({edition-Coming Soon}): in Plex schon sichtbar, brauchen zeitnah ein Poster") : null,
     hasExtra || cnt.notplex > 0 || S.filter === "notplex" ? chip("Noch nicht in Plex", "notplex", cnt.notplex, "Nur in Sonarr/Radarr bzw. als eigener Ordner: noch ohne Datei, nicht erschienen oder von Plex noch nicht eingelesen") : null,
+    chip("Schwache Poster", "weak", cnt.weak, "Bilder, die zu schmal sind oder nicht das Seitenverhältnis 2:3 haben (Schwellwerte wählst du selbst)"),
+    S.filter === "weak" ? weakOptions() : null,
     S.filter === "comingsoon" ? h("label", { class: "chip" + (S.nopost ? " on" : ""), style: "display:inline-flex;gap:8px;align-items:center;cursor:pointer" },
       h("input", { type: "checkbox", checked: S.nopost, style: "accent-color:var(--accent)", onchange: async e => { S.nopost = e.target.checked; renderChips(); await loadItems(); renderGrid(); } }), "nur ohne Poster") : null,
   );
@@ -560,6 +693,7 @@ function card(item) {
   box.title = metaText(item);
   if (!item.in_plex) box.append(h("span", { class: "badge warn b" }, notPlexLabel(item)));
   else if (item.coming_soon) box.append(h("span", { class: "badge warn b", title: "In Plex als Coming-Soon-Platzhalter sichtbar" }, "Coming Soon"));
+  if (S.filter === "weak") { const wk = weakSlot(item); if (wk) box.append(h("span", { class: "badge warn r", title: `${slotLabel(wk.key, item.type)}: ${wk.w} × ${wk.h} px` }, `${wk.w}×${wk.h}`)); }
   // a movie has one poster: no detail view, title/year and poster open the preview; the action buttons are built on first use
   const info = h("div", { class: "info", onclick: movie ? () => openPreview(item, "poster", changed) : null, title: movie ? "Vorschau öffnen" : null },
     h("div", { class: "t", title: item.title }, item.title),
@@ -692,7 +826,7 @@ async function openItem(id) {
       if (exists && !confirm(`${slotLabel(key, it.type)} ist schon belegt. Mit ${slotLabel(src.slot, it.type)} überschreiben?`)) return;
       try {
         const r = await api(`/items/${it.id}/${key}/copy`, { json: { source: src.slot } });
-        toast(`${slotLabel(src.slot, it.type)} → ${slotLabel(key, it.type)} kopiert ✓`, "ok");
+        undoToast(`${slotLabel(src.slot, it.type)} → ${slotLabel(key, it.type)} kopiert ✓`, r, draw);
         if (r.warning) toast("Plex: " + r.warning, "bad");
         S.rain.add(it.id + "|" + key); draw(r.item);
       } catch (err) { toast(err.message, "bad"); }
@@ -720,7 +854,7 @@ const downloadSlot = (it, key) => downloadUrl(`/api/download/${it.id}/${key}`);
 function slotActions(it, key, box, draw) {
   const exists = !!(it.slots[key] && it.slots[key].exists);
   const pick = () => pickFiles(files => uploadSlot(it, key, files, draw), false);
-  const del = async () => { if (confirm(`${slotLabel(key, it.type)} wirklich löschen?`)) { const r = await api(`/items/${it.id}/${key}`, { method: "DELETE" }); draw(r.item); } };
+  const del = async () => { if (confirm(`${slotLabel(key, it.type)} wirklich löschen?`)) { const r = await api(`/items/${it.id}/${key}`, { method: "DELETE" }); draw(r.item); undoToast("Gelöscht", r, draw); } };
   const ob = (label, fn, cls = "") => h("button", { class: "ov-btn " + cls, onclick: e => { e.stopPropagation(); box.classList.remove("show"); fn(); } }, label);
   return h("div", { class: "hover" },
     h("div", { class: "ovbtns" }, exists
@@ -770,7 +904,7 @@ function openPreview(it, key, draw) {
           draw && exists && it.type === "show" ? h("button", { class: "btn sm", onclick: () => { close(); openApplyAll(it, key, draw); } }, "Auf alle …") : null,
           draw && exists ? h("button", { class: "btn sm danger", onclick: async () => {
             if (!confirm(`${slotLabel(key, it.type)} wirklich löschen?`)) return;
-            close(); const r = await api(`/items/${it.id}/${key}`, { method: "DELETE" }); draw(r.item);
+            close(); const r = await api(`/items/${it.id}/${key}`, { method: "DELETE" }); draw(r.item); undoToast("Gelöscht", r, draw);
           } }, "Löschen") : null,
           it.custom && it.type === "movie" ? h("button", { class: "btn sm danger", title: "Entfernt nur den Eintrag, Dateien bleiben erhalten", onclick: async () => {
             if (!confirm("Eigenen Ordner aus der Liste entfernen? Die Dateien bleiben erhalten.")) return;
@@ -838,7 +972,7 @@ function openApplyAll(it, key, draw) {
     try {
       const r = await busy(go, () => api(`/items/${it.id}/copy-all`, { json: { source: key, targets, overwrite: opt.overwrite } }));
       m.close();
-      toast(`${r.written.length} Kachel${r.written.length === 1 ? "" : "n"} gesetzt ✓`, "ok");
+      undoToast(`${r.written.length} Kachel${r.written.length === 1 ? "" : "n"} gesetzt ✓`, r, draw);
       if (r.warning) toast("Plex: " + r.warning, "bad");
       r.written.forEach(t => S.rain.add(it.id + "|" + t));
       draw(r.item);
@@ -853,7 +987,7 @@ async function uploadSlot(it, slot, files, draw) {
   const fd = new FormData(); fd.append("file", imgs[0].file, imgs[0].file.name);
   try {
     const r = await api(`/items/${it.id}/${slot}/upload`, { method: "POST", body: fd });
-    toast("Ersetzt ✓", "ok"); if (r.warning) toast("Plex: " + r.warning, "bad");
+    undoToast("Ersetzt ✓", r, draw); if (r.warning) toast("Plex: " + r.warning, "bad");
     S.rain.add(it.id + "|" + slot);
     draw(r.item);
   } catch (e) { toast(e.message, "bad"); }
@@ -880,7 +1014,7 @@ async function searchOnline(it, slot, draw) {
     const pick = img => {
       const p = h("div", { class: "pick", title: "Übernehmen", onclick: async () => {
         p.classList.add("busy");
-        try { const res = await api(`/items/${it.id}/${slot}/url`, { json: { url: img.url } }); toast("Übernommen ✓", "ok"); m.close(); S.rain.add(it.id + "|" + slot); draw(res.item); }
+        try { const res = await api(`/items/${it.id}/${slot}/url`, { json: { url: img.url } }); undoToast("Übernommen ✓", res, draw); m.close(); S.rain.add(it.id + "|" + slot); draw(res.item); }
         catch (e) { p.classList.remove("busy"); toast(e.message, "bad"); }
       } }, h("img", { loading: "lazy", src: "/api/proxy?url=" + encodeURIComponent(img.preview || img.url) }),
         h("span", {}, img.source, img.width ? h("b", {}, `${img.width}×${img.height}`) : ""));
