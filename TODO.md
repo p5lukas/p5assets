@@ -159,3 +159,4 @@ Alle bisher gesammelten Punkte sind in Version 2 umgesetzt. Neue Beobachtungen b
 - [x] iPad/iPhone-App (Home-Bildschirm): kein Runterziehen zum Aktualisieren → eigene Pull-to-refresh-Geste am Seitenanfang und Fußzeilen-Link „Neu laden“.
 - [x] Papierkorb: Upload auf eine leere Kachel (vorher kein Bild) erscheint nicht mehr in der Wiederherstellen-Liste; das „Rückgängig“ direkt nach der Aktion funktioniert weiter.
 - [x] Verwaiste Ordner: „Alle wählen“ wird zu „Alle abwählen“ (ebenso bei der ZIP-Auswahl in der Serien-Detailansicht).
+- [x] iPhone 15 Pro: Kopfleiste (inkl. Suche) scrollt jetzt mit der Seite weg statt zu kleben; Kopfleiste ohne Unschärfe-Effekt (verwischter Rand oben). iPad bleibt unverändert (Leiste bleibt oben).
