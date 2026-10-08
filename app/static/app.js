@@ -275,7 +275,8 @@ function openCleanup(initial = "trash") {
     if (r.blocked) { fill(body, h("div", { class: "status bad" }, "⚠ " + r.blocked)); return; }
     const sel = new Set();
     const list = h("div"), go = h("button", { class: "btn primary", disabled: true });
-    const sync = () => { go.textContent = `${sel.size} in den Papierkorb`; go.disabled = !sel.size; };
+    const toggleAll = h("button", { class: "btn sm", onclick: () => { const all = sel.size === r.orphans.length; list.querySelectorAll("input").forEach(i => { i.checked = !all; i.dispatchEvent(new Event("change")); }); } }, "Alle wählen");
+    const sync = () => { go.textContent = `${sel.size} in den Papierkorb`; go.disabled = !sel.size; toggleAll.textContent = sel.size === r.orphans.length ? "Alle abwählen" : "Alle wählen"; };
     fill(list, r.orphans.map(o => h("label", { class: "trow orph" },
       h("input", { type: "checkbox", onchange: e => { e.target.checked ? sel.add(o.path) : sel.delete(o.path); sync(); } }),
       h("div", { class: "grow" }, h("b", {}, o.name), h("div", { class: "hint", style: "margin:0" }, `${o.path} · ${o.files} Datei${o.files === 1 ? "" : "en"} · ${fmtBytes(o.size)} · ${fmtWhen(o.mtime)}`)))));
@@ -288,7 +289,7 @@ function openCleanup(initial = "trash") {
     sync();
     fill(body,
       h("p", { class: "hint", style: "margin-top:0" }, `Ordner in „${curWorld().name}“ mit Postern oder Staffelbildern, zu denen es keinen Titel mehr gibt: weder in Plex noch in Sonarr/Radarr noch bei den eigenen Ordnern. Titel, die Sonarr oder Radarr noch kennen (auch angekündigte), bleiben geschützt.`),
-      r.orphans.length ? [h("div", { class: "row wrap", style: "margin-bottom:8px" }, h("button", { class: "btn sm", onclick: () => { list.querySelectorAll("input").forEach(i => { i.checked = true; i.dispatchEvent(new Event("change")); }); } }, "Alle wählen"), h("span", { class: "spacer" }), go), list]
+      r.orphans.length ? [h("div", { class: "row wrap", style: "margin-bottom:8px" }, toggleAll, h("span", { class: "spacer" }), go), list]
         : h("div", { class: "empty", style: "padding:30px" }, "🎉 Keine verwaisten Ordner gefunden."));
   }
 
@@ -810,7 +811,7 @@ async function openItem(id) {
     return h("div", { class: "dlbar row wrap" }, selMode ? null : upload, selMode ? null : tpdb,
       !have.length ? null : selMode ? [
         h("span", { class: "hint", style: "margin:0" }, `${sel.size} von ${have.length} ausgewählt – Kacheln antippen`),
-        h("button", { class: "btn sm", onclick: () => { have.forEach(k => sel.add(k)); draw(it); } }, "Alle wählen"),
+        h("button", { class: "btn sm", onclick: () => { if (sel.size === have.length) sel.clear(); else have.forEach(k => sel.add(k)); draw(it); } }, sel.size === have.length ? "Alle abwählen" : "Alle wählen"),
         h("button", { class: "btn sm primary", disabled: !sel.size, onclick: () => zip([...sel]) }, icon("download", 14), `Auswahl als ZIP (${sel.size})`),
         h("button", { class: "btn sm", onclick: () => { selMode = false; sel.clear(); draw(it); } }, "Fertig")]
       : [h("button", { class: "btn sm", title: "Poster in Originalqualität herunterladen", onclick: () => {
