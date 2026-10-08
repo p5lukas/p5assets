@@ -36,3 +36,13 @@ def test_invalid_id_rejected():
     import pytest
     with pytest.raises(ValueError):
         trash.restore("../etc")
+
+
+def test_created_only_group_is_not_listed_but_undoable(tmp_path):
+    f = tmp_path / "new.jpg"
+    gid = trash.begin("Poster hinzugefügt")
+    f.write_bytes(b"x")
+    trash.note_created(gid, f)
+    assert gid not in [g["id"] for g in trash.listing()]
+    trash.restore(gid)           # the "Rückgängig" notice still works
+    assert not f.exists()

@@ -83,7 +83,9 @@ def discard_if_empty(gid: str) -> None:
         pass
 
 
-def listing() -> list[dict]:
+def listing(everything: bool = False) -> list[dict]:
+    """Groups for the trash list. A group that only created new files (nothing was replaced) has nothing to bring back: it
+    stays reachable for the "Rückgängig" notice right after the action, but is not listed (``everything`` includes it)."""
     out = []
     if _root().is_dir():
         for d in _root().iterdir():
@@ -91,7 +93,7 @@ def listing() -> list[dict]:
                 m = json.loads((d / "meta.json").read_text("utf-8"))
             except (OSError, ValueError):
                 continue
-            if not m.get("files") and not m.get("created"):
+            if not m.get("files") and not (everything and m.get("created")):
                 continue
             m["size"] = sum(f.get("size", 0) for f in m["files"])
             m["expires"] = m["ts"] + KEEP_DAYS * 86400
@@ -138,12 +140,12 @@ def empty() -> int:
 
 def purge() -> None:
     """Older than 30 days go; the whole trash stays below the size limit (oldest first)."""
-    groups = listing()
+    groups = listing(everything=True)
     now = time.time()
     for g in groups:
         if g["expires"] < now:
             shutil.rmtree(_root() / g["id"], ignore_errors=True)
-    groups = [g for g in listing()]
+    groups = listing(everything=True)
     total = sum(g["size"] for g in groups)
     for g in sorted(groups, key=lambda m: m["ts"]):
         if total <= MAX_BYTES:

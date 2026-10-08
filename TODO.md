@@ -157,3 +157,4 @@ Alle bisher gesammelten Punkte sind in Version 2 umgesetzt. Neue Beobachtungen b
 - [x] Benachrichtigungen: Schalter zeigte „Aktiv“ auch im ausgeschalteten Zustand → jetzt „An“/„Aus“ mit Farbe und Rahmen je nach Zustand.
 - [x] README: Bild der Benachrichtigungen mit dem neuen An/Aus-Schalter neu aufgenommen.
 - [x] iPad/iPhone-App (Home-Bildschirm): kein Runterziehen zum Aktualisieren → eigene Pull-to-refresh-Geste am Seitenanfang und Fußzeilen-Link „Neu laden“.
+- [x] Papierkorb: Upload auf eine leere Kachel (vorher kein Bild) erscheint nicht mehr in der Wiederherstellen-Liste; das „Rückgängig“ direkt nach der Aktion funktioniert weiter.
