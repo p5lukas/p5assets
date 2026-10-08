@@ -49,8 +49,10 @@ class Redactor(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         try:
             cfg = config.get()
+            n = cfg.get("notify", {})
             secrets = [cfg["plex"]["token"], cfg["apis"]["tmdb"], cfg["apis"]["tvdb"], cfg["apis"]["tvdb_pin"], cfg["apis"]["fanart"],
-                       *[a.get("api_key", "") for a in cfg["arr"]]]
+                       *[a.get("api_key", "") for a in cfg["arr"]],
+                       n.get("discord", {}).get("webhook", ""), n.get("telegram", {}).get("token", ""), n.get("ntfy", {}).get("token", "")]
             msg = record.getMessage()
             for s in secrets:
                 if s and len(s) >= 4:

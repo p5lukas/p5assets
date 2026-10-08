@@ -1,0 +1,23 @@
+[
+  {"id": "notify-1", "version": "0.4.0", "title": "Benachrichtigungen",
+   "text": "p5assets meldet sich per Discord, Telegram oder ntfy, wenn es neue Titel ohne Poster gibt (Coming Soon markiert) oder ein Scan fehlschlägt.",
+   "action": {"label": "Jetzt einrichten", "target": "settings:notify"}},
+  {"id": "trash-1", "version": "0.4.0", "title": "Rückgängig & Papierkorb",
+   "text": "Ersetzte und gelöschte Poster bleiben 30 Tage im Papierkorb. Nach jeder Aktion erscheint „Rückgängig“, das Symbol ↺ in der Kopfzeile zeigt die ganze Liste.",
+   "action": {"label": "Papierkorb ansehen", "target": "cleanup:trash"}},
+  {"id": "orphans-1", "version": "0.4.0", "title": "Verwaiste Ordner aufräumen",
+   "text": "Findet Poster-Ordner, zu denen es weder in Plex noch in Sonarr/Radarr einen Titel gibt, und verschiebt sie nach Rückfrage in den Papierkorb.",
+   "action": {"label": "Jetzt prüfen", "target": "cleanup:orphans"}},
+  {"id": "weak-1", "version": "0.4.0", "title": "Schwache Poster",
+   "text": "Neuer Reiter für zu kleine oder nicht 2:3 große Poster. Die Schwellwerte wählst du selbst.",
+   "action": {"label": "Ausprobieren", "target": "tab:weak"}},
+  {"id": "history-1", "version": "0.4.0", "title": "Abdeckungsverlauf",
+   "text": "Im Statistik-Block zeigt eine kleine Kurve, wie sich die Abdeckung deiner Welt von Scan zu Scan entwickelt."},
+  {"id": "worlds-10", "version": "0.4.0", "title": "Zehn Welten zur Auswahl",
+   "text": "Die Farbe einer Welt wählst du jetzt aus einem Raster mit zehn Welten, jede mit eigenem Planeten – und der Wechsel ist eine kleine Reise durch ein Wurmloch.",
+   "action": {"label": "Welt auswählen", "target": "settings:worlds"}},
+  {"id": "app-1", "version": "0.4.0", "title": "p5assets als App",
+   "text": "Auf iPhone und iPad: Teilen → „Zum Home-Bildschirm“. p5assets startet dann im Vollbild mit eigenem Icon."},
+  {"id": "tpdb-1", "version": "0.4.0", "title": "ThePosterDB",
+   "text": "In der Online-Suche und in der Serien-Detailansicht öffnet p5assets die Suche auf ThePosterDB; das heruntergeladene Set legst du danach einfach hier ab."}
+]

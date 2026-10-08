@@ -226,6 +226,7 @@ async function loadVersion() {
     fill(foot, h("span", {}, "p5assets ", h("b", {}, v.version)),
       v.branch ? link(`Branch: ${v.branch}`, v.branch_url) : null,
       v.commit_short ? link(`Commit ${v.commit_short}`, v.commit_url) : null,
+      h("a", { href: "#", onclick: e => { e.preventDefault(); checkNews(true); } }, "Neuigkeiten"),
       link("GitHub ↗", v.repo));
   } catch { /* footer is optional */ }
 }
@@ -236,8 +237,8 @@ const fmtWhen = ts => new Date(ts * 1000).toLocaleString("de-DE", { day: "2-digi
 const REASON = { replace: "ersetzt", delete: "gelöscht", orphan: "verwaister Ordner", restore: "vor Wiederherstellung" };
 
 /** "Rückgängig & Aufräumen": the trash (replaced/deleted posters, 30 days) and folders that belong to no title any more. */
-function openCleanup() {
-  let tab = "trash";
+function openCleanup(initial = "trash") {
+  let tab = initial;
   const body = h("div"), tabs = h("div", { class: "tabs", style: "position:static" });
   const m = modal("Rückgängig & Aufräumen", h("div", {}, tabs, body));
   const refresh = () => { loadItems().then(renderGrid); api("/status").then(r => { S.st.summary = r; updateHero(); }); };
@@ -295,6 +296,34 @@ function openCleanup() {
     (tab === "trash" ? drawTrash : drawOrphans)().catch(e => fill(body, h("div", { class: "status bad" }, e.message)));
   };
   draw();
+}
+
+/* ------------------------------------------------------------ what's new --- */
+/** "Neu in diesem Update": entries from news.json that the user has not seen yet, each with an optional "set up / try" action. */
+async function checkNews(all = false) {
+  try {
+    const r = await api("/news"), list = all ? r.all : r.unseen;
+    if (!list.length) { if (all) toast("Keine Neuigkeiten", "ok"); return; }
+    openNews(list, all);
+  } catch { /* optional */ }
+}
+const markNewsSeen = ids => api("/news/seen", { json: { ids } }).catch(() => {});
+
+function openNews(list, all) {
+  const m = modal(all ? "Neuigkeiten" : "Neu in diesem Update", h("div", {},
+    all ? null : h("p", { class: "hint", style: "margin-top:0" }, "Das hat sich seit deinem letzten Besuch geändert. Wo es passt, kannst du es gleich ausprobieren oder einrichten."),
+    list.map(e => h("div", { class: "newsrow" },
+      h("div", { class: "grow" }, h("b", {}, e.title, e.seen ? h("span", { class: "tag", style: "margin-left:8px" }, "gesehen") : null), h("div", { class: "hint", style: "margin:3px 0 0" }, e.text)),
+      e.action ? h("button", { class: "btn sm primary", onclick: () => { m.close(); markNewsSeen([e.id]); runNewsAction(e.action.target); } }, e.action.label) : null))),
+    all ? null : [h("button", { class: "btn primary", onclick: () => { markNewsSeen(list.map(e => e.id)); m.close(); } }, "Alles gelesen"),
+      h("button", { class: "btn", onclick: () => m.close() }, "Später erinnern")]);
+}
+
+async function runNewsAction(target) {
+  const [kind, arg] = target.split(":");
+  if (kind === "settings") { await wizard(true); goStep(arg); }
+  else if (kind === "cleanup") openCleanup(arg);
+  else if (kind === "tab") { if (S.view !== "dash") dashboard(); S.filter = arg; renderChips(); await loadItems(); renderGrid(); }
 }
 
 /* ------------------------------------------------------------ log alert --- */
@@ -431,7 +460,7 @@ function dashboard() {
       h("button", { class: "btn tb", title: "Einen Titel von Hand anlegen, der weder in Plex noch in Sonarr/Radarr steht", onclick: openCustom }, icon("folderplus"), h("span", { class: "lbl" }, "Titel anlegen")),
       h("span", { class: "vsep" }),
       h("button", { class: "btn tb", id: "scanbtn", title: "Plex, Sonarr/Radarr und die Assets-Ordner neu einlesen", onclick: doScan }, icon("sync"), h("span", { class: "lbl" }, "Scannen")),
-      h("button", { class: "btn tb icon", title: "Rückgängig & Aufräumen: Papierkorb (30 Tage) und verwaiste Ordner", onclick: openCleanup }, icon("undo", 20)),
+      h("button", { class: "btn tb icon", title: "Rückgängig & Aufräumen: Papierkorb (30 Tage) und verwaiste Ordner", onclick: () => openCleanup() }, icon("undo", 20)),
       h("button", { class: "btn tb icon logbtn", id: "logbtn", title: "Logs", onclick: logsPage }, icon("terminal", 20), h("span", { class: "lbadge" })),
       h("button", { class: "btn tb icon", title: "Einstellungen", onclick: () => wizard(true) }, icon("gear", 20)),
     )),
@@ -440,6 +469,7 @@ function dashboard() {
   updateHero();
   S.dimTries = 0; loadHistory();
   checkAlerts();
+  if (!S.newsChecked) { S.newsChecked = true; setTimeout(checkNews, 1500); }
   loadItems().then(renderGrid);
   if (S.st.summary.running) startPolling();
   else if (!S.st.summary.scanned_at) doScan();
@@ -1304,9 +1334,9 @@ function reviewImport(res, onDone, fixed) {
 }
 
 /* ======================================================= wizard / setup === */
-const STEP_LABELS = { welcome: "Start", plex: "Plex", libs: "Bibliotheken", arr: "Sonarr/Radarr", worlds: "Welten", assign: "Zuordnung", apis: "Quellen", done: "Fertig" };
+const STEP_LABELS = { welcome: "Start", plex: "Plex", libs: "Bibliotheken", arr: "Sonarr/Radarr", worlds: "Welten", assign: "Zuordnung", apis: "Quellen", notify: "Benachrichtigungen", done: "Fertig" };
 // "Zuordnung" only exists when there is more than one world
-const stepList = () => ["welcome", "plex", "libs", "arr", "worlds", ...(cfg().worlds.length > 1 ? ["assign"] : []), "apis", "done"];
+const stepList = () => ["welcome", "plex", "libs", "arr", "worlds", ...(cfg().worlds.length > 1 ? ["assign"] : []), "apis", "notify", "done"];
 
 async function wizard(settings = false) {
   S.view = "wiz";
@@ -1336,7 +1366,7 @@ function drawWiz() {
     S.wizSettings ? h("button", { class: "btn ghost", onclick: closeSettings }, "Schließen") : null,
     h("span", { class: "spacer" }),
     h("button", { class: "btn primary", disabled, onclick: next || stepNext }, label));
-  const view = { welcome: wWelcome, plex: wPlex, libs: wLibs, arr: wArr, worlds: wWorlds, assign: wAssign, apis: wApis, done: wDone }[S.step];
+  const view = { welcome: wWelcome, plex: wPlex, libs: wLibs, arr: wArr, worlds: wWorlds, assign: wAssign, apis: wApis, notify: wNotify, done: wDone }[S.step];
   // labelled step navigation: in settings every step is reachable, during onboarding only the ones visited so far
   const shown = list.map((name, i) => ({ name, i })).filter(s => !(S.wizSettings && (s.name === "welcome" || s.name === "done")));
   fill(app, h("div", { class: "wiz" },
@@ -1668,6 +1698,43 @@ function wApis(nav, c) {
     row("tvdb", "TheTVDB", "https://thetvdb.com/dashboard/account/apikey", true),
     row("fanart", "fanart.tv", "https://fanart.tv/get-an-api-key/"),
     h("p", { class: "hint" }, "Die bevorzugte Sprache der Poster stellst du pro Welt unter „Welten“ ein."),
+    nav(null, "Weiter"));
+}
+
+/** Notifications after a scan: Discord, Telegram, ntfy. Only three events are reported (see the text), no further options. */
+function wNotify(nav, c) {
+  const n = c.notify;
+  const field = (ch, key, label, opts = {}) => {
+    const inp = h("input", { type: opts.secret ? "password" : "text", value: n[ch][key] || "", placeholder: opts.ph || "", autocomplete: "off", onchange: () => savePatch({ notify: { [ch]: { [key]: inp.value.trim() } } }) });
+    return [h("label", { class: "f" }, label), inp];
+  };
+  const card = (ch, name, how, fields) => {
+    const st = statusEl();
+    const on = h("input", { type: "checkbox", checked: !!n[ch].enabled, onchange: e => savePatch({ notify: { [ch]: { enabled: e.target.checked } } }) });
+    const test = h("button", { class: "btn", onclick: async e => {
+      const btn = e.currentTarget;
+      for (const i of btn.closest(".apirow").querySelectorAll("input")) i.dispatchEvent(new Event("change"));      // save what was typed last
+      try { await new Promise(r => setTimeout(r, 250)); await busy(btn, () => api("/notify/test", { json: { channel: ch } })); setStatus(st, true, "Testnachricht gesendet – schau in deinen Kanal"); }
+      catch (err) { setStatus(st, false, err.message); }
+    } }, "Testnachricht senden");
+    return h("div", { class: "apirow" }, h("div", { class: "row" }, h("h3", { class: "grow" }, name), h("label", { class: "switch", title: "Kanal aktivieren" }, h("span", {}, "Aktiv"), on, h("i"))),
+      h("details", { class: "how" }, h("summary", {}, "So richtest du es ein"), h("div", { class: "hint" }, how)),
+      fields, h("div", { class: "row", style: "margin-top:12px" }, test), st);
+  };
+  return h("div", {}, h("h1", {}, "Benachrichtigungen"),
+    h("p", { class: "lead" }, "Optional: p5assets meldet sich nach einem Scan, wenn es etwas Neues gibt. Du kannst diesen Schritt überspringen und später in den Einstellungen nachholen."),
+    h("div", { class: "status ok", style: "display:block;font-size:13px;line-height:1.7" }, "Es gibt genau drei Anlässe: ",
+      h("b", {}, "① neue Titel ohne Poster"), " (Coming-Soon-Titel sind markiert, alles in einer Nachricht), ", h("b", {}, "② Fehler beim Scan"), " (einmal pro Fehler) und ",
+      h("b", {}, "③ neue Einträge in „In Plex, Poster fehlt“"), ". Beim ersten Scan merkt sich p5assets nur den Ausgangsstand und schickt nichts."),
+    card("discord", "Discord", "Server-Einstellungen → Integrationen → Webhooks → „Neuer Webhook“ → „Webhook-URL kopieren“ und hier einfügen.",
+      field("discord", "webhook", "Webhook-URL", { secret: true, ph: "https://discord.com/api/webhooks/…" })),
+    card("telegram", "Telegram", "Schreibe dem @BotFather „/newbot“ und folge den Fragen: du bekommst den Bot-Token. Schreibe deinem neuen Bot eine Nachricht und rufe https://api.telegram.org/bot<TOKEN>/getUpdates auf: die Zahl bei „chat“ → „id“ ist deine Chat-ID.",
+      [field("telegram", "token", "Bot-Token", { secret: true, ph: "123456:ABC…" }), field("telegram", "chat_id", "Chat-ID", { ph: "z. B. 123456789" })]),
+    card("ntfy", "ntfy", "Installiere die ntfy-App, abonniere ein eigenes, schwer zu erratendes Topic und trage es hier ein. Eigener Server: Adresse ändern; geschütztes Topic: Zugangs-Token eintragen.",
+      [field("ntfy", "url", "Server", { ph: "https://ntfy.sh" }), field("ntfy", "topic", "Topic", { ph: "z. B. p5assets-mein-geheimes-topic" }), field("ntfy", "token", "Zugangs-Token (optional)", { secret: true })]),
+    h("div", { class: "apirow" }, h("h3", {}, "Link in der Nachricht (optional)"),
+      h("div", { class: "hint" }, "Adresse, unter der du p5assets im Heimnetz erreichst – wird als Link an die Nachricht gehängt."),
+      h("input", { type: "text", value: n.base_url || "", placeholder: "http://192.168.1.10:8484", onchange: e => savePatch({ notify: { base_url: e.target.value.trim() } }) })),
     nav(null, "Weiter"));
 }
 

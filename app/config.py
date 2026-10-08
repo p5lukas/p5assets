@@ -34,6 +34,15 @@ DEFAULTS: dict = {
     },
     "apis": {"tmdb": "", "tvdb": "", "tvdb_pin": "", "fanart": "", "language": "de"},
     "scan_interval_minutes": 60,
+    # Benachrichtigungen nach einem Scan (nur: Coming Soon / neu in „In Plex, Poster fehlt“ / Scan-Fehler)
+    "notify": {
+        "base_url": "",
+        "discord": {"enabled": False, "webhook": ""},
+        "telegram": {"enabled": False, "token": "", "chat_id": ""},
+        "ntfy": {"enabled": False, "url": "https://ntfy.sh", "topic": "", "token": ""},
+    },
+    "seen_news": [],        # IDs der „Neu in diesem Update“-Einträge, die der Nutzer schon gesehen hat
+    "config_version": 1,    # für künftige Umstellungen der Konfiguration
 }
 
 _lock = threading.RLock()
@@ -141,6 +150,7 @@ def update(patch: dict) -> dict:
 
 
 SECRET_PATHS = [("plex", "token"), ("apis", "tmdb"), ("apis", "tvdb"), ("apis", "tvdb_pin"), ("apis", "fanart")]
+NOTIFY_SECRETS = [("discord", "webhook"), ("telegram", "token"), ("ntfy", "token")]   # below cfg["notify"]
 MASK = "********"
 
 
@@ -152,6 +162,10 @@ def public(cfg: dict | None = None) -> dict:
         cfg[section][key] = MASK if val else ""
     for a in cfg.get("arr", []):
         a["api_key"] = MASK if a.get("api_key") else ""
+    for ch, key in NOTIFY_SECRETS:
+        sec = cfg.get("notify", {}).get(ch)
+        if sec is not None:
+            sec[key] = MASK if sec.get(key) else ""
     cfg.pop("client_id", None)
     return cfg
 
@@ -162,6 +176,9 @@ def strip_masked(patch: dict) -> dict:
     for section, key in SECRET_PATHS:
         if patch.get(section, {}).get(key) == MASK:
             patch[section].pop(key)
+    for ch, key in NOTIFY_SECRETS:
+        if (patch.get("notify", {}).get(ch) or {}).get(key) == MASK:
+            patch["notify"][ch].pop(key)
     if isinstance(patch.get("arr"), list):
         current = {a["id"]: a for a in load().get("arr", []) if a.get("id")}
         for a in patch["arr"]:

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
 import tempfile
@@ -18,7 +19,7 @@ from collections import Counter
 
 from pydantic import BaseModel
 
-from . import arr as arrmod, config, dims, history, kometa, languages as langmod, logs, thumbs, trash, version, plex as plexmod, providers, scanner, uploads
+from . import arr as arrmod, config, dims, history, kometa, languages as langmod, logs, notify, thumbs, trash, version, plex as plexmod, providers, scanner, uploads
 from .plex import Plex, PlexError
 
 STATIC = Path(__file__).parent / "static"
@@ -176,9 +177,36 @@ async def set_config(body: ConfigPatch):
     return config.public(config.update(patch))
 
 
+def _news() -> list[dict]:
+    try:
+        return json.loads((Path(__file__).parent / "news.json").read_text("utf-8"))
+    except (OSError, ValueError):
+        return []
+
+
+@app.get("/api/news")
+async def news():
+    """What is new since the user last looked: entries whose ID is not in ``seen_news`` (the first onboarding marks all as seen)."""
+    seen = set(config.get().get("seen_news") or [])
+    entries = _news()
+    return {"unseen": [e for e in entries if e["id"] not in seen], "all": [{**e, "seen": e["id"] in seen} for e in entries]}
+
+
+class NewsSeen(BaseModel):
+    ids: list[str]
+
+
+@app.post("/api/news/seen")
+async def news_seen(body: NewsSeen):
+    known = {e["id"] for e in _news()}
+    cur = list(config.get().get("seen_news") or [])
+    config.update({"seen_news": list(dict.fromkeys(cur + [i for i in body.ids if i in known]))})
+    return {"ok": True}
+
+
 @app.post("/api/onboarding/finish")
 async def finish_onboarding():
-    config.update({"onboarded": True})
+    config.update({"onboarded": True, "seen_news": [e["id"] for e in _news()]})   # a fresh install has nothing "new"
     log.info("Onboarding abgeschlossen")
     asyncio.create_task(scanner.scan())
     return {"ok": True}
@@ -820,6 +848,26 @@ async def orphans_trash(body: OrphanBody):
     kometa.drop_indexes()
     log.info("Verwaiste Ordner in den Papierkorb verschoben: %d", moved)
     return {"ok": True, "moved": moved, "trash": gid if moved else None}
+
+
+class NotifyTest(BaseModel):
+    channel: str
+
+
+@app.post("/api/notify/test")
+async def notify_test(body: NotifyTest):
+    """Sends a test message through ONE channel with the saved settings."""
+    if body.channel not in ("discord", "telegram", "ntfy"):
+        raise HTTPException(400, "Unbekannter Kanal")
+    if body.channel not in notify.channels():
+        raise HTTPException(400, "Kanal ist nicht aktiviert oder unvollständig eingerichtet")
+    title, text = notify.compose([{"title": "Beispiel-Film", "year": 2026, "world": "HD", "coming_soon": True},
+                                  {"title": "Beispiel-Serie", "year": 2025, "world": "HD", "coming_soon": False}], False,
+                                 (config.get()["notify"].get("base_url") or "").strip())
+    res = await notify.send_all("Testnachricht von p5assets", f"So sieht eine Benachrichtigung aus:\n\n{title}\n{text}", [body.channel])
+    if res[body.channel]:
+        raise HTTPException(502, res[body.channel])
+    return {"ok": True}
 
 
 @app.get("/api/history")

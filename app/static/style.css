@@ -474,3 +474,11 @@ header.top{padding-top:env(safe-area-inset-top)}
   .hero.hassrc .srccell{grid-column:1/-1;max-width:none}
   .hero.hassrc>.hint,.hero.hassrc>#hhint{grid-column:1/-1;text-align:left!important;white-space:normal!important;margin:0}
 }
+
+/* notifications step */
+details.how{margin:8px 0}details.how summary{cursor:pointer;color:var(--accent);font-size:13px}
+details.how .hint{margin:6px 0 0;line-height:1.6}
+
+/* what's new */
+.newsrow{display:flex;gap:14px;align-items:center;padding:11px 0;border-bottom:1px solid var(--line)}
+.newsrow:last-child{border-bottom:0}

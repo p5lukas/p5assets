@@ -7,7 +7,7 @@ from collections import Counter
 import time
 from pathlib import Path
 
-from . import arr, config, dims, history, kometa, logs, providers, thumbs, trash
+from . import arr, config, dims, history, kometa, logs, notify, providers, thumbs, trash
 from .plex import Plex, PlexError
 
 STATE: dict = {
@@ -283,9 +283,11 @@ async def scan() -> None:
             await asyncio.to_thread(thumbs.prune)
             await asyncio.to_thread(trash.purge)
             asyncio.create_task(_measure_later(all_items))
+            await notify.after_scan(all_items, cfg["worlds"], STATE["failed"], None)
         except Exception as e:  # noqa: BLE001
             log.error("Scan fehlgeschlagen: %s", e, exc_info=not isinstance(e, PlexError))
             STATE.update(error=str(e) or e.__class__.__name__, progress="")
+            await notify.after_scan([], cfg["worlds"], {}, STATE["error"])
         finally:
             STATE["running"] = False
 
