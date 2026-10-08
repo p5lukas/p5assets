@@ -1,3 +1,5 @@
+> Arbeitsregel (Nutzer): Tests künftig mit einer doppelt so großen Test-Bibliothek wie die echte Welt (echte HD-Welt ≈ 3200 Titel → Testumgebung ≈ 6500 Titel, mit großen Postern), damit Geschwindigkeit und Speicherbedarf unter Last geprüft sind.
+
 # p5assets – Ideen & Verbesserungen
 
 Alle bisher gesammelten Punkte sind in Version 2 umgesetzt. Neue Beobachtungen bitte unten eintragen.
