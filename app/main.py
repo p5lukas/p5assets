@@ -437,10 +437,6 @@ async def items(world: str = "", q: str = "", filter: str = "all", library: str 
         res.sort(key=lambda i: (bool(i["slots"].get("poster", {}).get("exists")), i["title"].casefold()))
     elif filter == "weak":            # quality check: too small and/or not 2:3, thresholds chosen by the user
         res = [i for i in res if _is_weak(i, weak_w, weak_r)]
-    elif filter == "monitored":
-        res = [i for i in res if i.get("monitored")]
-    elif filter == "wanted":  # monitored in Sonarr/Radarr but no file yet ("missing")
-        res = [i for i in res if i.get("monitored") and i.get("has_files") is False]
     if q:  # the search always looks at ALL titles of the world/filter, the A-Z letter does not apply
         nq, cq = kometa.normalize(q), q.casefold()
         res = [i for i in res if (nq and nq in i["_nt"]) or cq in i["_fl"]]

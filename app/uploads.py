@@ -14,6 +14,7 @@ from . import config, kometa, trash
 
 MAX_ZIP_ENTRIES = 5000
 MAX_ZIP_BYTES = 2 * 1024**3
+MAX_ENTRY_BYTES = 100 * 1024**2     # one image inside a zip (real size, not the declared one)
 MAX_IMAGE_PIXELS = 120_000_000
 Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
 
@@ -168,7 +169,11 @@ def stage_file(sid: str, filename: str, data: bytes) -> list[dict]:
             inner = safe_rel(info.filename)
             if not inner or _skip(inner) or Path(inner).suffix.lower() not in kometa.UPLOAD_EXTS:
                 continue
-            entries.append(_store(base, inner, zf.read(info)))
+            with zf.open(info) as fh:
+                blob = fh.read(MAX_ENTRY_BYTES + 1)
+            if len(blob) > MAX_ENTRY_BYTES:
+                continue
+            entries.append(_store(base, inner, blob))
         return entries
     if _skip(rel) or Path(rel).suffix.lower() not in kometa.UPLOAD_EXTS:
         return entries

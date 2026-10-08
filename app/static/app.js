@@ -1383,10 +1383,10 @@ function drawWiz() {
 function scanSig() {
   const c = cfg();
   return JSON.stringify({
-    plex: [c.plex.url, c.plex.server_name],
+    plex: [c.plex.url, c.plex.server_name, c.plex.token],
     libs: c.libraries.map(l => [l.key, l.enabled, l.world]),
     worlds: c.worlds.map(w => [w.id, w.assets_path, w.search_depth, w.mirror_coming_soon]),
-    arr: c.arr.map(a => [a.id, a.kind, a.name, a.url, a.world, a.hide_unmonitored]),
+    arr: c.arr.map(a => [a.id, a.kind, a.name, a.url, a.api_key, a.world, a.hide_unmonitored]),
     assets: [c.assets.asset_folders, c.assets.ignore_specials],
     custom: c.custom.length,
   });
