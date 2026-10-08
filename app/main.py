@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import re
@@ -13,7 +14,7 @@ from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from collections import Counter
 
@@ -1017,9 +1018,23 @@ async def log_clear(file: str = logs.LOG_NAME):
     return {"ok": True}
 
 
+def _asset_version() -> str:
+    """Changes whenever a file in static/ changes: the scripts/styles get ?v=… so a home-screen app never keeps old ones."""
+    h = hashlib.md5()
+    for f in sorted(STATIC.glob("*")):
+        if f.suffix in (".js", ".css", ".html"):
+            st = f.stat()
+            h.update(f"{f.name}{st.st_size}{int(st.st_mtime)}".encode())
+    return h.hexdigest()[:10]
+
+
 @app.get("/")
 async def index():
-    return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-cache"})
+    html = (STATIC / "index.html").read_text("utf-8")
+    v = _asset_version()
+    for name in ("style.css", "planets.js", "app.js"):
+        html = html.replace(f"/static/{name}", f"/static/{name}?v={v}")
+    return HTMLResponse(html, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 
 @app.get("/manifest.webmanifest")
@@ -1040,4 +1055,11 @@ async def favicon():
     return FileResponse(STATIC / "icon.png", media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
 
 
-app.mount("/static", StaticFiles(directory=STATIC), name="static")
+class _RevalidatingStatic(StaticFiles):
+    def file_response(self, *a, **kw):
+        r = super().file_response(*a, **kw)
+        r.headers["Cache-Control"] = "no-cache"      # always ask (ETag) – cheap, and new versions arrive immediately
+        return r
+
+
+app.mount("/static", _RevalidatingStatic(directory=STATIC), name="static")
