@@ -1710,14 +1710,18 @@ function wNotify(nav, c) {
   };
   const card = (ch, name, how, fields) => {
     const st = statusEl();
-    const on = h("input", { type: "checkbox", checked: !!n[ch].enabled, onchange: e => savePatch({ notify: { [ch]: { enabled: e.target.checked } } }) });
+    const state = h("span", { class: "state" }, n[ch].enabled ? "An" : "Aus");
+    const on = h("input", { type: "checkbox", checked: !!n[ch].enabled, onchange: e => {
+      const sw = e.target.closest(".switch"); state.textContent = e.target.checked ? "An" : "Aus"; sw.classList.toggle("on", e.target.checked);
+      savePatch({ notify: { [ch]: { enabled: e.target.checked } } });
+    } });
     const test = h("button", { class: "btn", onclick: async e => {
       const btn = e.currentTarget;
       for (const i of btn.closest(".apirow").querySelectorAll("input")) i.dispatchEvent(new Event("change"));      // save what was typed last
       try { await new Promise(r => setTimeout(r, 250)); await busy(btn, () => api("/notify/test", { json: { channel: ch } })); setStatus(st, true, "Testnachricht gesendet – schau in deinen Kanal"); }
       catch (err) { setStatus(st, false, err.message); }
     } }, "Testnachricht senden");
-    return h("div", { class: "apirow" }, h("div", { class: "row" }, h("h3", { class: "grow" }, name), h("label", { class: "switch", title: "Kanal aktivieren" }, h("span", {}, "Aktiv"), on, h("i"))),
+    return h("div", { class: "apirow" }, h("div", { class: "row" }, h("h3", { class: "grow" }, name), h("label", { class: "switch" + (n[ch].enabled ? " on" : ""), title: "Kanal ein- oder ausschalten" }, state, on, h("i"))),
       h("details", { class: "how" }, h("summary", {}, "So richtest du es ein"), h("div", { class: "hint" }, how)),
       fields, h("div", { class: "row", style: "margin-top:12px" }, test), st);
   };
