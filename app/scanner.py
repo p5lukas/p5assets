@@ -17,6 +17,7 @@ STATE: dict = {
     "error": None,
     "warnings": [],
     "progress": "",
+    "failed": {},       # world id -> names of Sonarr/Radarr instances that could not be read in the last scan
 }
 _lock = asyncio.Lock()
 log = logs.get("scan")
@@ -147,6 +148,7 @@ async def _arr_items(cfg: dict, world: dict, warnings: list[str]) -> list[dict]:
             out.extend(entries)
         except arr.ArrError as e:
             warnings.append(f"{inst['name']}: {e}")
+            STATE["failed"].setdefault(world["id"], []).append(inst["name"])   # their titles are missing from this scan
     return out
 
 
@@ -237,7 +239,7 @@ async def scan() -> None:
         return
     async with _lock:
         cfg = config.get()
-        STATE.update(running=True, error=None, warnings=[], progress="Starte Scan …")
+        STATE.update(running=True, error=None, warnings=[], progress="Starte Scan …", failed={})
         t0 = time.time()
         log.info("Scan gestartet (%d Welt(en))", len(cfg["worlds"]))
         try:

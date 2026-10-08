@@ -270,12 +270,14 @@ function openCleanup() {
     fill(body, h("div", { class: "empty", style: "padding:30px" }, h("span", { class: "spin" }), " Suche verwaiste Ordner …"));
     const r = await api("/orphans?world=" + encodeURIComponent(S.world));
     if (!r.folders) { fill(body, h("div", { class: "empty" }, "Verwaiste Ordner lassen sich nur bei Ordner-Struktur (asset_folders) prüfen.")); return; }
+    if (r.blocked) { fill(body, h("div", { class: "status bad" }, "⚠ " + r.blocked)); return; }
     const sel = new Set();
     const list = h("div"), go = h("button", { class: "btn primary", disabled: true });
     const sync = () => { go.textContent = `${sel.size} in den Papierkorb`; go.disabled = !sel.size; };
     fill(list, r.orphans.map(o => h("label", { class: "trow orph" },
       h("input", { type: "checkbox", onchange: e => { e.target.checked ? sel.add(o.path) : sel.delete(o.path); sync(); } }),
-      h("div", { class: "grow" }, h("b", {}, o.name), h("div", { class: "hint", style: "margin:0" }, `${o.path} · ${o.files} Datei${o.files === 1 ? "" : "en"} · ${fmtBytes(o.size)} · ${fmtWhen(o.mtime)}`)))));
+      h("div", { class: "grow" }, h("b", {}, o.name), h("div", { class: "hint", style: "margin:0" }, `${o.path} · ${o.files} Datei${o.files === 1 ? "" : "en"} · ${fmtBytes(o.size)} · ${fmtWhen(o.mtime)}`)),
+      h("span", { class: "tag " + (o.reason === "kein Titel" ? "bad" : "warn"), title: o.reason === "kein Titel" ? "Kein Titel in Plex, Sonarr/Radarr oder bei den eigenen Ordnern" : "Nur in Sonarr/Radarr, dort nicht mehr überwacht, ohne Datei und nicht in Plex" }, o.reason))));
     go.onclick = async () => {
       if (!confirm(`${sel.size} Ordner in den Papierkorb verschieben? Sie lassen sich dort 30 Tage lang wiederherstellen.`)) return;
       const res = await busy(go, () => api("/orphans/trash", { json: { world: S.world, paths: [...sel] } }));
@@ -284,7 +286,7 @@ function openCleanup() {
     };
     sync();
     fill(body,
-      h("p", { class: "hint", style: "margin-top:0" }, `Ordner in „${curWorld().name}“, die Poster oder Staffelbilder enthalten, zu denen es aber keinen Titel in Plex, Sonarr/Radarr oder bei den eigenen Ordnern gibt (z. B. umbenannte oder entfernte Titel).`),
+      h("p", { class: "hint", style: "margin-top:0" }, `Ordner in „${curWorld().name}“ mit Postern oder Staffelbildern, die zu nichts mehr gehören: kein Titel in Plex, Sonarr/Radarr oder bei den eigenen Ordnern, oder nur noch in Sonarr/Radarr, dort nicht mehr überwacht, ohne Datei und nicht in Plex. Poster von angekündigten, noch nicht erschienenen Titeln (überwacht) bleiben geschützt.`),
       r.orphans.length ? [h("div", { class: "row wrap", style: "margin-bottom:8px" }, h("button", { class: "btn sm", onclick: () => { list.querySelectorAll("input").forEach(i => { i.checked = true; i.dispatchEvent(new Event("change")); }); } }, "Alle wählen"), h("span", { class: "spacer" }), go), list]
         : h("div", { class: "empty", style: "padding:30px" }, "🎉 Keine verwaisten Ordner gefunden."));
   }

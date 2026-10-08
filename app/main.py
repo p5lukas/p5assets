@@ -757,18 +757,33 @@ async def trash_empty():
     return {"ok": True, "removed": await asyncio.to_thread(trash.empty)}
 
 
-def _orphans(world_id: str) -> tuple[dict, list[dict]]:
-    """Folders in the assets folder that hold poster/season files but belong to no title (any more)."""
+def _orphans(world_id: str) -> tuple[dict, list[dict], str]:
+    """Folders in the assets folder that hold poster/season files but belong to no title (any more).
+
+    Protected: everything that Plex, Sonarr/Radarr (monitored, or with files, or already in Plex) or an own folder still knows –
+    so posters of films/series that are announced but not released yet stay. Listed as "nicht überwacht": titles that exist
+    only in Sonarr/Radarr, are not monitored there, have no file and are not in Plex. Returns (world, folders, reason why not checked)."""
     w = _world(world_id)
     cfg = config.get()
     root = Path(w["assets_path"])
     if not cfg["assets"]["asset_folders"] or not root.is_dir():
-        return w, []
+        return w, [], ""
+    failed = scanner.STATE.get("failed", {}).get(w["id"], [])
+    if scanner.STATE.get("error") or not scanner.STATE.get("scanned_at"):
+        return w, [], "Der letzte Scan ist fehlgeschlagen oder fehlt – bitte zuerst erfolgreich scannen, sonst würden Titel fälschlich als verwaist gelten."
+    if failed:   # an unreachable Sonarr/Radarr would make all its titles look like orphans
+        return w, [], f"{', '.join(failed)} war beim letzten Scan nicht erreichbar – die Liste wäre unvollständig. Bitte erneut scannen."
     index = kometa.get_index(root, True, w.get("search_depth", 3))
     known: set[str] = set()
+    stale: set[str] = set()
     for it in scanner.STATE["items"]:
-        if it["world"] == w["id"]:
-            known.update(x.casefold() for x in [it["folder"], *(it.get("arr_folders") or []), *(it.get("mirror_folders") or [])] if x)
+        if it["world"] != w["id"]:
+            continue
+        names = {x.casefold() for x in [it["folder"], *(it.get("arr_folders") or []), *(it.get("mirror_folders") or [])] if x}
+        if not it["in_plex"] and not it.get("custom") and it.get("monitored") is False and it.get("has_files") is False:
+            stale.update(names)
+        else:
+            known.update(names)
     out = []
     for key, d in index.dirs.items():
         if key in known:
@@ -779,15 +794,15 @@ def _orphans(world_id: str) -> tuple[dict, list[dict]]:
         except OSError:
             continue
         if files:   # a title folder (container folders like "Filme" hold only sub-folders)
-            out.append({"name": d.name, "path": str(d.relative_to(root)), "files": len(files),
+            out.append({"name": d.name, "path": str(d.relative_to(root)), "files": len(files), "reason": "nicht überwacht" if key in stale else "kein Titel",
                         "size": sum(f.stat().st_size for f in files), "mtime": int(max(f.stat().st_mtime for f in files))})
-    return w, sorted(out, key=lambda o: o["name"].casefold())[:1000]
+    return w, sorted(out, key=lambda o: o["name"].casefold())[:1000], ""
 
 
 @app.get("/api/orphans")
 async def orphans(world: str = ""):
-    w, out = await asyncio.to_thread(_orphans, world)
-    return {"world": w["id"], "folders": bool(config.get()["assets"]["asset_folders"]), "orphans": out}
+    w, out, blocked = await asyncio.to_thread(_orphans, world)
+    return {"world": w["id"], "folders": bool(config.get()["assets"]["asset_folders"]), "orphans": out, "blocked": blocked}
 
 
 class OrphanBody(BaseModel):
@@ -797,7 +812,9 @@ class OrphanBody(BaseModel):
 
 @app.post("/api/orphans/trash")
 async def orphans_trash(body: OrphanBody):
-    w, found = await asyncio.to_thread(_orphans, body.world)
+    w, found, blocked = await asyncio.to_thread(_orphans, body.world)
+    if blocked:
+        raise HTTPException(409, blocked)
     allowed = {o["path"]: o for o in found}
     root = Path(w["assets_path"])
     moved = 0

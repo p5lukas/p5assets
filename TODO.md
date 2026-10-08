@@ -138,3 +138,4 @@ Alle bisher gesammelten Punkte sind in Version 2 umgesetzt. Neue Beobachtungen b
 - [x] Qualitäts-Check: Reiter „Schwache Poster“, Schwellwerte vom Nutzer wählbar (Breite unter 600–1500 px, Seitenverhältnis nicht 2:3)
 - [x] Verwaiste Ordner finden und nach Rückfrage in den Papierkorb verschieben
 - [x] Verlauf der Abdeckung: Kurve im Statistik-Block (ein Punkt pro Scan, 90 Tage)
+- [x] Verwaiste Ordner: Poster angekündigter, noch nicht erschienener (überwachter) Titel bleiben geschützt; als „nicht überwacht“ erscheinen nur Titel, die nur in Sonarr/Radarr stehen, dort nicht überwacht sind, keine Datei haben und nicht in Plex sind; ist beim letzten Scan eine Sonarr/Radarr-Instanz ausgefallen, wird die Liste nicht angezeigt (Schutz vor Fehlalarm).
