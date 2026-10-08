@@ -487,3 +487,12 @@ details.how .hint{margin:6px 0 0;line-height:1.6}
 .newsrow:last-child{border-bottom:0}
 
 #ptr{position:fixed;top:-48px;left:0;right:0;height:40px;z-index:80;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--accent);background:hsl(var(--h) var(--sat) 6% / .92);border-bottom:1px solid var(--line);transition:transform .15s;pointer-events:none}
+
+/* Home-screen app (status bar "black-translucent"): content may not scroll/shine under the iOS status bar (it is blurred there).
+   A solid bar covers the safe area, windows start below it. */
+body::before{content:"";position:fixed;top:0;left:0;right:0;height:env(safe-area-inset-top,0px);background:var(--bg);z-index:500;pointer-events:none}
+.modalwrap{padding-top:calc(env(safe-area-inset-top,0px) + 10px);padding-bottom:calc(env(safe-area-inset-bottom,0px) + 10px)}
+.modal{max-height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 24px)}
+.drawer{height:100dvh;padding-top:env(safe-area-inset-top,0px)}
+.drawer header{top:0}
+#toasts{bottom:calc(env(safe-area-inset-bottom,0px) + 12px)}
