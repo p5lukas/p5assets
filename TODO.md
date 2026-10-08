@@ -164,3 +164,4 @@ Alle bisher gesammelten Punkte sind in Version 2 umgesetzt. Neue Beobachtungen b
 - [x] iPhone: verschwommenes Logo oben links (Matrix-Icon war im Kleinformat nur Rauschen) → scharfes p5-Zeichen per CSS in der Kopfleiste. Kopfleiste: iPad bleibt oben stehen, iPhone scrollt mit (bei Bedarf wieder ändern).
 - [x] iPhone-Home-Bildschirm-App: Inhalt schien unscharf unter der Statusleiste durch, Fenster (Vorschau, Detailansicht) ragten oben hinein → feste Abdeckung der Statusleiste und Fenster beginnen unterhalb (Safe-Area oben/unten).
 - [x] iPhone-App: Vorschau-Fenster war höher als der sichtbare Bereich (vh statt dvh, Safe-Area nicht abgezogen) und oben abgeschnitten → Höhe mit dvh minus Statusleiste/Home-Leiste, sicher zentriert.
+- [x] iPhone-App: Statusleisten-Stil von „black-translucent“ auf „black“ → die Seite beginnt unterhalb der Statusleiste, iOS kann nichts mehr darunter verwischen (App einmal vom Home-Bildschirm löschen und neu hinzufügen).
