@@ -227,6 +227,7 @@ async function loadVersion() {
       v.branch ? link(`Branch: ${v.branch}`, v.branch_url) : null,
       v.commit_short ? link(`Commit ${v.commit_short}`, v.commit_url) : null,
       h("a", { href: "#", onclick: e => { e.preventDefault(); checkNews(true); } }, "Neuigkeiten"),
+      h("a", { href: "#", onclick: e => { e.preventDefault(); location.reload(); } }, "Neu laden"),
       link("GitHub ↗", v.repo));
   } catch { /* footer is optional */ }
 }
@@ -1748,5 +1749,28 @@ function wDone() {
     h("button", { class: "btn primary", onclick: async () => { await api("/onboarding/finish", { method: "POST" }); await loadState(); S.filter = "all"; dashboard(); } }, "Scan starten"),
     h("div", { style: "margin-top:16px" }, h("button", { class: "btn ghost", onclick: stepPrev }, "Zurück")));
 }
+
+/* ------------------------------------------- pull to refresh (home-screen app) --- */
+// An app added to the iPhone/iPad home screen has no browser pull-to-refresh: pulling down at the top reloads the page instead.
+(function pullToRefresh() {
+  const bar = h("div", { id: "ptr" }, "↓ Zum Aktualisieren ziehen");
+  document.body.appendChild(bar);
+  let y0 = null, dist = 0;
+  const THRESHOLD = 90;
+  const blocked = t => t.closest && t.closest(".drawer, .modalwrap, textarea, input, select");
+  addEventListener("touchstart", e => { y0 = (window.scrollY <= 0 && e.touches.length === 1 && !blocked(e.target)) ? e.touches[0].clientY : null; dist = 0; }, { passive: true });
+  addEventListener("touchmove", e => {
+    if (y0 == null) return;
+    dist = e.touches[0].clientY - y0;
+    if (dist <= 0 || window.scrollY > 0) { bar.style.transform = ""; return; }
+    const d = Math.min(dist / 2, THRESHOLD + 20);
+    bar.style.transform = `translateY(${d}px)`;
+    bar.textContent = d >= THRESHOLD / 2 + 10 ? "↑ Loslassen zum Aktualisieren" : "↓ Zum Aktualisieren ziehen";
+  }, { passive: true });
+  addEventListener("touchend", () => {
+    if (y0 != null && dist / 2 >= THRESHOLD / 2 + 10) { bar.textContent = "Lade neu …"; location.reload(); }
+    bar.style.transform = ""; y0 = null; dist = 0;
+  }, { passive: true });
+})();
 
 boot();
