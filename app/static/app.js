@@ -417,7 +417,7 @@ async function logsPage() {
 
   fill(app,
     h("header", { class: "top" }, h("div", { class: "in" },
-      h("div", { class: "logo" }, h("img", { class: "logoimg", src: "/static/icon.png", alt: "" }), h("span", {}, "logs", h("u", {}, "_"))),
+      h("div", { class: "logo" }, h("i", { class: "logomark", "aria-hidden": "true" }, "p5"), h("span", {}, "logs", h("u", {}, "_"))),
       h("div", { class: "spacer" }),
       h("button", { class: "btn tb", onclick: async () => { clearInterval(S.logTimer); await checkAlerts(true); dashboard(); } }, icon("back"), h("span", { class: "lbl" }, "Zurück zum Dashboard")),
       h("button", { class: "btn tb icon", title: "Einstellungen", onclick: async () => { clearInterval(S.logTimer); await checkAlerts(true); wizard(true); } }, icon("gear", 20)))),
@@ -453,7 +453,7 @@ function dashboard() {
   const ws = cfg().worlds;
   fill(app,
     h("header", { class: "top" }, h("div", { class: "in" },
-      h("div", { class: "logo" }, h("img", { class: "logoimg", src: "/static/icon.png", alt: "" }), h("span", {}, "assets", h("u", {}, "_"))),
+      h("div", { class: "logo" }, h("i", { class: "logomark", "aria-hidden": "true" }, "p5"), h("span", {}, "assets", h("u", {}, "_"))),
       ws.length > 1 ? h("div", { class: "worlds", title: "Welt wechseln" }, ws.map(w =>
         h("button", { class: w.id === S.world ? "on" : "", style: `--c:${worldColor(w)}`, title: w.name, onclick: () => switchWorld(w.id) }, planetSvg(w.hue ?? 140, 20), w.name))) : null,
       h("div", { class: "search" }, icon("search", 16), h("input", { type: "search", placeholder: "Titel suchen …", id: "q", value: S.q, autocomplete: "off", enterkeyhint: "search", oninput: debounce(async e => { S.q = e.target.value; await loadItems(); renderGrid(); }, 150) })),
@@ -1372,7 +1372,7 @@ function drawWiz() {
   // labelled step navigation: in settings every step is reachable, during onboarding only the ones visited so far
   const shown = list.map((name, i) => ({ name, i })).filter(s => !(S.wizSettings && (s.name === "welcome" || s.name === "done")));
   fill(app, h("div", { class: "wiz" },
-    h("div", { class: "logo" }, h("img", { class: "logoimg", src: "/static/icon.png", alt: "" }), h("span", {}, "assets", h("u", {}, "_"))),
+    h("div", { class: "logo" }, h("i", { class: "logomark", "aria-hidden": "true" }, "p5"), h("span", {}, "assets", h("u", {}, "_"))),
     h("nav", { class: "stepnav" }, shown.map((s, n) => {
       const reachable = S.wizSettings || s.i <= (S.reached || 0);
       return h("button", { class: (s.name === S.step ? "on " : "") + (s.i < idx ? "done" : ""), disabled: !reachable, title: reachable ? `Zu „${STEP_LABELS[s.name]}“ springen` : "Erst die vorherigen Schritte abschließen",

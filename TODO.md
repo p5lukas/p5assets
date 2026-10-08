@@ -161,3 +161,4 @@ Alle bisher gesammelten Punkte sind in Version 2 umgesetzt. Neue Beobachtungen b
 - [x] Verwaiste Ordner: „Alle wählen“ wird zu „Alle abwählen“ (ebenso bei der ZIP-Auswahl in der Serien-Detailansicht).
 - [x] iPhone 15 Pro: Kopfleiste (inkl. Suche) scrollt jetzt mit der Seite weg statt zu kleben; Kopfleiste ohne Unschärfe-Effekt (verwischter Rand oben). iPad bleibt unverändert (Leiste bleibt oben).
 - [x] Home-Bildschirm-App hielt alte CSS/JS im Cache (Änderungen kamen nicht an) → Skripte/Styles mit Versions-Parameter und Revalidierung ausgeliefert.
+- [x] iPhone: verschwommenes Logo oben links (Matrix-Icon war im Kleinformat nur Rauschen) → scharfes p5-Zeichen per CSS in der Kopfleiste. Kopfleiste: iPad bleibt oben stehen, iPhone scrollt mit (bei Bedarf wieder ändern).

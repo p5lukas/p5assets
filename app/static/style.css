@@ -244,7 +244,7 @@ details.more-seasons .slots{padding:6px 0 20px}
 .slot.copyover .poster{outline:2px dashed var(--accent);outline-offset:2px;box-shadow:0 0 28px var(--glow)}
 
 /* logo, online search tabs/groups, language list */
-.logoimg{width:34px;height:34px;border-radius:8px;box-shadow:0 0 14px var(--dim);filter:hue-rotate(calc(var(--h) * 1deg - 140deg))}
+.logomark{width:34px;height:34px;border:2px solid var(--accent);border-radius:8px;display:grid;place-items:center;font-style:normal;font-weight:800;font-size:16px;letter-spacing:-1px;color:var(--accent);box-shadow:0 0 10px var(--dim);flex:none}
 .tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;position:sticky;top:-20px;background:var(--panel);padding:6px 0;z-index:2}
 .tab{background:transparent;border:1px solid var(--line);border-radius:var(--r);padding:6px 12px;font-size:13px;color:var(--muted);display:inline-flex;gap:8px;align-items:center}
 .tab small{opacity:.8}
@@ -363,7 +363,7 @@ header.top{padding-top:env(safe-area-inset-top)}
   /* phone: the three-row header scrolls away with the page instead of covering a third of the screen */
   header.top{position:relative;backdrop-filter:none;background:hsl(var(--h) 80% 2%)}
   .top .in{padding:8px 12px;gap:8px}
-  .logo{font-size:17px}.logoimg{width:30px;height:30px}
+  .logo{font-size:17px}.logomark{width:30px;height:30px;font-size:14px}
   .top .in .search{order:20;flex:1 1 150px;max-width:none;min-width:0}
   .top .in .worlds{order:19}
   .top .in .spacer{flex:1 1 0}
