@@ -364,7 +364,6 @@ header.top{padding-top:env(safe-area-inset-top)}
   header.top{position:relative;backdrop-filter:none;background:hsl(var(--h) 80% 2%)}
   .top .in{padding:8px 12px;gap:8px}
   .logo{font-size:17px}.logomark{width:30px;height:30px;font-size:14px}
-  .top .in .search{order:20;flex:1 1 150px;max-width:none;min-width:0}
   .top .in .worlds{order:19}
   .top .in .spacer{flex:1 1 0}
   .vsep{display:none}
@@ -471,7 +470,6 @@ header.top{padding-top:env(safe-area-inset-top)}
 
 /* tablets: the search gets its own row, the statistic block wraps (more header buttons since the trash/undo icon) */
 @media(max-width:900px){
-  .top .in .search{order:20;flex:1 1 150px;max-width:none;min-width:0}
   .top .in .worlds{order:19}
   .hero.hassrc{grid-template-columns:auto 1fr}
   .hero.hassrc .srccell{grid-column:1/-1;max-width:none}
@@ -499,5 +497,18 @@ body::before{content:"";position:fixed;top:0;left:0;right:0;height:env(safe-area
 .lbox{max-height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 24px)}
 .modalwrap{align-items:safe center}
 
-/* Touch devices cannot pick whole folders: the extra button is for desktop browsers only */
-@media(hover:none){.folderpick{display:none}}
+
+
+/* upload group (desktop): label + two pickers; touch devices cannot pick whole folders and get the single button */
+.upgroup{display:flex;align-items:center;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.uplab{padding:0 12px;color:var(--muted);font-size:13px;white-space:nowrap}
+.upb{background:transparent;border:0;border-left:1px solid var(--line);padding:9px 12px;color:var(--text);display:grid;place-items:center;cursor:pointer}
+.upb:hover{background:var(--dim);color:var(--accent)}
+@media(hover:none){.upgroup{display:none}}
+@media(hover:hover){.uptouch{display:none}}
+/* tab row: categories left, global search right */
+.tabrow{display:flex;gap:12px;align-items:flex-start;margin-bottom:16px}
+.tabrow #chips{flex:1 1 auto;display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-width:0}
+.tabrow .search{flex:0 0 190px;max-width:none;min-width:0}
+@media(max-width:900px){.tabrow{flex-wrap:wrap}.tabrow .search{order:-1;flex:1 1 100%}}
+.lsearch{flex:0 1 220px;min-width:140px;max-width:none}.lsearch input{padding:6px 10px 6px 34px;font-size:13px}

@@ -241,35 +241,54 @@ const fmtBytes = b => b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max
 const fmtWhen = ts => new Date(ts * 1000).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 const REASON = { replace: "ersetzt", delete: "gelöscht", orphan: "verwaister Ordner", restore: "vor Wiederherstellung" };
 
+const normText = t => (t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+const LIST_SEARCH_MIN = 8;      // a search field is only worth it for longer lists
+/** Small search field for a list inside a window; calls onInput(normalized text) while typing. */
+function listSearch(onInput) {
+  const input = h("input", { type: "search", placeholder: "Suchen …", autocomplete: "off", enterkeyhint: "search", oninput: e => onInput(normText(e.target.value).trim()) });
+  return h("div", { class: "search lsearch" }, icon("search", 16), input);
+}
+
 /** "Papierkorb & Aufräumen": the trash (replaced/deleted posters, 30 days) and folders that belong to no title any more. */
 function openCleanup(initial = "trash") {
   let tab = initial;
   const body = h("div"), tabs = h("div", { class: "tabs", style: "position:static" });
   const m = modal("Papierkorb & Aufräumen", h("div", {}, tabs, body));
+  const slotNames = g => (g.slot || "").split(", ").filter(Boolean).map(k => { try { return slotLabel(k, g.type || "show"); } catch { return k; } }).join(", ");
   const refresh = () => { loadItems().then(renderGrid); api("/status").then(r => { S.st.summary = r; updateHero(); }); };
 
   async function drawTrash() {
     fill(body, h("div", { class: "empty", style: "padding:30px" }, h("span", { class: "spin" })));
     const r = await api("/trash"), gs = r.groups;
     const total = gs.reduce((a, g) => a + g.size, 0);
+    const list = h("div"), count = h("span", { class: "hint", style: "margin:0" });
+    const rowEl = g => {
+      const file = g.files.find(f => !f.dir);
+      const days = Math.max(0, Math.ceil((g.expires * 1000 - Date.now()) / 86400000));
+      const slots = slotNames(g);
+      return h("div", { class: "trow" },
+        file ? h("img", { loading: "lazy", alt: "", src: `/api/trash/${g.id}/file/${file.n}` }) : h("div", { class: "noth" }, g.files.some(f => f.dir) ? "📁" : "＋"),
+        h("div", { class: "grow" }, h("b", {}, g.title || "—"), h("div", { class: "hint", style: "margin:0" }, [slots, REASON[g.reason] || g.reason].filter(Boolean).join(" · ")),
+          h("div", { class: "hint", style: "margin:0" }, `${fmtWhen(g.ts)} · ${fmtBytes(g.size)} · noch ${pl(days, "Tag", "Tage")}`)),
+        h("button", { class: "btn sm primary", onclick: async e => {
+          try { await busy(e.currentTarget, () => api(`/trash/${g.id}/restore`, { method: "POST" })); toast("Wiederhergestellt ✓", "ok"); refresh(); drawTrash(); }
+          catch (err) { toast(err.message, "bad"); }
+        } }, "Wiederherstellen"),
+        h("button", { class: "btn sm danger", title: "Endgültig löschen", onclick: async () => { await api("/trash/" + g.id, { method: "DELETE" }); drawTrash(); } }, icon("trash", 14)));
+    };
+    const items = gs.map(g => ({ el: rowEl(g), hay: normText([g.title, slotNames(g), REASON[g.reason] || g.reason, ...g.files.map(f => f.orig)].join(" ")) }));
+    const apply = q => {
+      const vis = items.filter(i => !q || i.hay.includes(q));
+      fill(list, vis.length ? vis.map(i => i.el) : h("div", { class: "empty", style: "padding:30px" }, "Nichts gefunden."));
+      count.textContent = (q ? `${vis.length} von ${gs.length} ${gs.length === 1 ? "Eintrag" : "Einträgen"}` : pl(gs.length, "Eintrag", "Einträge")) + ` · ${fmtBytes(total)}`;
+    };
+    apply("");
     fill(body,
       h("p", { class: "hint", style: "margin-top:0" }, `Ersetzte und gelöschte Poster bleiben ${pl(r.keep_days, "Tag", "Tage")} hier (höchstens 2 GB). „Wiederherstellen“ legt das alte Bild zurück.`),
-      gs.length ? h("div", { class: "row wrap", style: "margin-bottom:10px" }, h("span", { class: "hint", style: "margin:0" }, `${pl(gs.length, "Eintrag", "Einträge")} · ${fmtBytes(total)}`), h("span", { class: "spacer" }),
+      gs.length ? h("div", { class: "row wrap", style: "margin-bottom:10px" }, count, h("span", { class: "spacer" }),
+        gs.length >= LIST_SEARCH_MIN ? listSearch(apply) : null,
         h("button", { class: "btn sm danger", onclick: async () => { if (!confirm("Papierkorb ganz leeren? Das kann nicht rückgängig gemacht werden.")) return; await api("/trash", { method: "DELETE" }); drawTrash(); } }, "Papierkorb leeren")) : null,
-      gs.length ? gs.map(g => {
-        const file = g.files.find(f => !f.dir);
-        const days = Math.max(0, Math.ceil((g.expires * 1000 - Date.now()) / 86400000));
-        const slots = (g.slot || "").split(", ").filter(Boolean).map(k => { try { return slotLabel(k, g.type || "show"); } catch { return k; } }).join(", ");
-        return h("div", { class: "trow" },
-          file ? h("img", { loading: "lazy", alt: "", src: `/api/trash/${g.id}/file/${file.n}` }) : h("div", { class: "noth" }, g.files.some(f => f.dir) ? "📁" : "＋"),
-          h("div", { class: "grow" }, h("b", {}, g.title || "—"), h("div", { class: "hint", style: "margin:0" }, [slots, REASON[g.reason] || g.reason].filter(Boolean).join(" · ")),
-            h("div", { class: "hint", style: "margin:0" }, `${fmtWhen(g.ts)} · ${fmtBytes(g.size)} · noch ${days} Tag${days === 1 ? "" : "e"}`)),
-          h("button", { class: "btn sm primary", onclick: async e => {
-            try { const res = await busy(e.currentTarget, () => api(`/trash/${g.id}/restore`, { method: "POST" })); toast("Wiederhergestellt ✓", "ok"); refresh(); drawTrash(); }
-            catch (err) { toast(err.message, "bad"); }
-          } }, "Wiederherstellen"),
-          h("button", { class: "btn sm danger", title: "Endgültig löschen", onclick: async () => { await api("/trash/" + g.id, { method: "DELETE" }); drawTrash(); } }, icon("trash", 14)));
-      }) : h("div", { class: "empty", style: "padding:30px" }, "Der Papierkorb ist leer."));
+      gs.length ? list : h("div", { class: "empty", style: "padding:30px" }, "Der Papierkorb ist leer."));
   }
 
   async function drawOrphans() {
@@ -279,21 +298,40 @@ function openCleanup(initial = "trash") {
     if (r.blocked) { fill(body, h("div", { class: "status bad" }, "⚠ " + r.blocked)); return; }
     const sel = new Set();
     const list = h("div"), go = h("button", { class: "btn primary", disabled: true });
-    const toggleAll = h("button", { class: "btn sm", onclick: () => { const all = sel.size === r.orphans.length; list.querySelectorAll("input").forEach(i => { i.checked = !all; i.dispatchEvent(new Event("change")); }); } }, "Alle wählen");
-    const sync = () => { go.textContent = `${sel.size} in den Papierkorb`; go.disabled = !sel.size; toggleAll.textContent = sel.size === r.orphans.length ? "Alle abwählen" : "Alle wählen"; };
-    fill(list, r.orphans.map(o => h("label", { class: "trow orph" },
-      h("input", { type: "checkbox", onchange: e => { e.target.checked ? sel.add(o.path) : sel.delete(o.path); sync(); } }),
-      h("div", { class: "grow" }, h("b", {}, o.name), h("div", { class: "hint", style: "margin:0" }, `${o.path} · ${pl(o.files, "Datei", "Dateien")} · ${fmtBytes(o.size)} · ${fmtWhen(o.mtime)}`)))));
+    let visible = [], filtered = false;
+    const items = r.orphans.map(o => {
+      const input = h("input", { type: "checkbox", onchange: e => { e.target.checked ? sel.add(o.path) : sel.delete(o.path); sync(); } });
+      return { o, input, hay: normText(o.name + " " + o.path),
+        el: h("label", { class: "trow orph" }, input,
+          h("div", { class: "grow" }, h("b", {}, o.name), h("div", { class: "hint", style: "margin:0" }, `${o.path} · ${pl(o.files, "Datei", "Dateien")} · ${fmtBytes(o.size)} · ${fmtWhen(o.mtime)}`))) };
+    });
+    const toggleAll = h("button", { class: "btn sm", onclick: () => {
+      const all = visible.length && visible.every(i => sel.has(i.o.path));
+      visible.forEach(i => { i.input.checked = !all; i.input.dispatchEvent(new Event("change")); });
+    } }, "Alle wählen");
+    const sync = () => {
+      go.textContent = `${sel.size} in den Papierkorb`; go.disabled = !sel.size;
+      const all = visible.length && visible.every(i => sel.has(i.o.path));
+      toggleAll.textContent = (filtered ? "Treffer " : "Alle ") + (all ? "abwählen" : "wählen");
+    };
+    const count = h("span", { class: "hint", style: "margin:0" });
+    const apply = q => {
+      filtered = !!q; visible = items.filter(i => !q || i.hay.includes(q));
+      fill(list, visible.length ? visible.map(i => i.el) : h("div", { class: "empty", style: "padding:30px" }, "Nichts gefunden."));
+      count.textContent = q ? `${visible.length} von ${items.length} ${items.length === 1 ? "Ordner" : "Ordnern"}` : pl(items.length, "Ordner", "Ordner");
+      sync();
+    };
     go.onclick = async () => {
       if (!confirm(`${pl(sel.size, "Ordner", "Ordner")} in den Papierkorb verschieben? ${sel.size === 1 ? "Er lässt" : "Sie lassen"} sich dort 30 Tage lang wiederherstellen.`)) return;
       const res = await busy(go, () => api("/orphans/trash", { json: { world: S.world, paths: [...sel] } }));
-      toast(`${res.moved} Ordner im Papierkorb`, "ok", res.trash ? { label: "Rückgängig", fn: async () => { await api(`/trash/${res.trash}/restore`, { method: "POST" }); toast("Wiederhergestellt ✓", "ok"); } } : null);
+      toast(`${pl(res.moved, "Ordner", "Ordner")} im Papierkorb`, "ok", res.trash ? { label: "Rückgängig", fn: async () => { await api(`/trash/${res.trash}/restore`, { method: "POST" }); toast("Wiederhergestellt ✓", "ok"); } } : null);
       drawOrphans();
     };
-    sync();
+    apply("");
     fill(body,
       h("p", { class: "hint", style: "margin-top:0" }, `Ordner in „${curWorld().name}“ mit Postern oder Staffelbildern, zu denen es keinen Titel mehr gibt: weder in Plex noch in Sonarr/Radarr. Titel, die Sonarr oder Radarr noch kennen (auch angekündigte), bleiben geschützt.`),
-      r.orphans.length ? [h("div", { class: "row wrap", style: "margin-bottom:8px" }, toggleAll, h("span", { class: "spacer" }), go), list]
+      r.orphans.length ? [h("div", { class: "row wrap", style: "margin-bottom:8px" }, toggleAll, count, h("span", { class: "spacer" }),
+          r.orphans.length >= LIST_SEARCH_MIN ? listSearch(apply) : null, go), list]
         : h("div", { class: "empty", style: "padding:30px" }, "🎉 Keine verwaisten Ordner gefunden."));
   }
 
@@ -460,17 +498,19 @@ function dashboard() {
       h("div", { class: "logo" }, h("i", { class: "logomark", "aria-hidden": "true" }, "p5"), h("span", {}, "assets", h("u", {}, "_"))),
       ws.length > 1 ? h("div", { class: "worlds", title: "Welt wechseln" }, ws.map(w =>
         h("button", { class: w.id === S.world ? "on" : "", style: `--c:${worldColor(w)}`, title: w.name, onclick: () => switchWorld(w.id) }, planetSvg(w.hue ?? 140, 20), w.name))) : null,
-      h("div", { class: "search" }, icon("search", 16), h("input", { type: "search", placeholder: "Titel suchen …", id: "q", value: S.q, autocomplete: "off", enterkeyhint: "search", oninput: debounce(async e => { S.q = e.target.value; await loadItems(); renderGrid(); }, 150) })),
       h("div", { class: "spacer" }),
-      h("button", { class: "btn tb", title: "Bilder oder ZIPs wählen – p5assets ordnet sie automatisch den Titeln zu. Ordner und Dateien kannst du auch einfach ins Fenster ziehen.", onclick: () => pickFiles(f => importFiles(f), true) }, icon("upload"), h("span", { class: "lbl" }, "Bilder hochladen")),
-      h("button", { class: "btn tb folderpick", title: "Ganzen Ordner wählen (oder einfach ins Fenster ziehen)", onclick: () => pickFiles(f => importFiles(f), true, true) }, icon("folder"), h("span", { class: "lbl" }, "Ordner")),
+      // desktop: one small group with two pickers (images/ZIP, whole folder); touch devices: the single normal button
+      h("div", { class: "upgroup" }, h("span", { class: "uplab" }, "Bilder hochladen:"),
+        h("button", { class: "upb", title: "Bilder oder ZIP wählen – p5assets ordnet sie automatisch den Titeln zu", "aria-label": "Bilder oder ZIP wählen", onclick: () => pickFiles(f => importFiles(f), true) }, icon("file", 18)),
+        h("button", { class: "upb", title: "Ordner wählen – oder Ordner und Dateien einfach ins Fenster ziehen", "aria-label": "Ordner wählen", onclick: () => pickFiles(f => importFiles(f), true, true) }, icon("folder", 18))),
+      h("button", { class: "btn tb uptouch", title: "Bilder oder ZIPs wählen – p5assets ordnet sie automatisch den Titeln zu", onclick: () => pickFiles(f => importFiles(f), true) }, icon("upload"), h("span", { class: "lbl" }, "Bilder hochladen")),
       h("span", { class: "vsep" }),
       h("button", { class: "btn tb", id: "scanbtn", title: "Plex, Sonarr/Radarr und die Assets-Ordner neu einlesen", onclick: doScan }, icon("sync"), h("span", { class: "lbl" }, "Scannen")),
       h("button", { class: "btn tb icon", title: "Papierkorb & Aufräumen: ersetzte Poster zurückholen (30 Tage) und verwaiste Ordner entfernen", onclick: () => openCleanup() }, icon("trash", 20)),
       h("button", { class: "btn tb icon logbtn", id: "logbtn", title: "Logs", onclick: logsPage }, icon("terminal", 20), h("span", { class: "lbadge" })),
       h("button", { class: "btn tb icon", title: "Einstellungen", onclick: () => wizard(true) }, icon("gear", 20)),
     )),
-    h("main", {}, h("div", { id: "hero" }), h("div", { id: "chips" }), h("div", { id: "az", class: "azbar" }), h("div", { id: "grid" }), h("div", { id: "az2", class: "azbar" })),
+    h("main", {}, h("div", { id: "hero" }), h("div", { id: "tabrow", class: "tabrow" }, h("div", { id: "chips" }), h("div", { class: "search" }, icon("search", 16), h("input", { type: "search", placeholder: "Titel suchen …", id: "q", value: S.q, autocomplete: "off", enterkeyhint: "search", oninput: debounce(async e => { S.q = e.target.value; await loadItems(); renderGrid(); }, 150) }))), h("div", { id: "az", class: "azbar" }), h("div", { id: "grid" }), h("div", { id: "az2", class: "azbar" })),
   );
   updateHero();
   S.dimTries = 0; loadHistory();

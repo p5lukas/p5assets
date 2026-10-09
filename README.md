@@ -30,11 +30,11 @@ Ein schlanker Docker-Container im Matrix-Look. Er vergleicht deine Bibliotheken 
 ### Lücken finden
 Plex, Sonarr und Radarr werden zusammengeführt (über TMDb/TVDB/IMDb-IDs). Reiter zeigen sofort, was zu tun ist:
 **Fehlende**, **In Plex, Poster fehlt**, **Vollständig**, **Coming Soon**, **Noch nicht in Plex** (Sonarr/Radarr kennen den Titel, Plex noch nicht) und **Schwache Poster**.
-Dazu eine Quellenauswahl, schnelle Suche, A–Z-Leiste und eine Abdeckungsanzeige mit kleinem Verlauf pro Scan.
+Dazu eine Quellenauswahl, schnelle Suche (rechts neben den Reitern), A–Z-Leiste und eine Abdeckungsanzeige mit kleinem Verlauf pro Scan.
 Große Bibliotheken sind kein Problem: mit über 6000 Titeln antworten die Listen in rund 30 ms.
 
 ### Ersetzen per Drag & Drop
-Ein Bild auf eine Kachel, mehrere Dateien, ganze Ordner oder ZIPs irgendwo ins Fenster ziehen – oder über „Bilder hochladen“ bzw. „Ordner“ auswählen (auf dem iPhone/iPad genügt „Bilder hochladen“, Ordner gehen dort als ZIP). p5assets erkennt Titel,
+Ein Bild auf eine Kachel, mehrere Dateien, ganze Ordner oder ZIPs irgendwo ins Fenster ziehen – – oder über „Bilder hochladen:“ in der Kopfzeile auswählen (Datei-/ZIP-Symbol oder Ordner-Symbol; auf iPhone und iPad gibt es einen einzelnen Knopf, Ordner gehen dort als ZIP). p5assets erkennt Titel,
 Jahr und Staffel aus Datei- und Ordnernamen, zeigt die Zuordnung zur Kontrolle und benennt alles Kometa-konform
 (`<Medienordner>/poster.jpg`, `Season01.jpg` …). Neue Ordner landen dort, wo die anderen Titel schon liegen.
 
