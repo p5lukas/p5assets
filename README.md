@@ -29,12 +29,12 @@ Ein schlanker Docker-Container im Matrix-Look. Er vergleicht deine Bibliotheken 
 
 ### Lücken finden
 Plex, Sonarr und Radarr werden zusammengeführt (über TMDb/TVDB/IMDb-IDs). Reiter zeigen sofort, was zu tun ist:
-**Fehlende**, **In Plex, Poster fehlt**, **Vollständig**, **Coming Soon**, **Noch nicht in Plex** und **Schwache Poster**.
+**Fehlende**, **In Plex, Poster fehlt**, **Vollständig**, **Coming Soon**, **Noch nicht in Plex** (Sonarr/Radarr kennen den Titel, Plex noch nicht) und **Schwache Poster**.
 Dazu eine Quellenauswahl, schnelle Suche, A–Z-Leiste und eine Abdeckungsanzeige mit kleinem Verlauf pro Scan.
 Große Bibliotheken sind kein Problem: mit über 6000 Titeln antworten die Listen in rund 30 ms.
 
 ### Ersetzen per Drag & Drop
-Ein Bild auf eine Kachel, mehrere Dateien, ganze Ordner oder ZIPs irgendwo ins Fenster ziehen. p5assets erkennt Titel,
+Ein Bild auf eine Kachel, mehrere Dateien, ganze Ordner oder ZIPs irgendwo ins Fenster ziehen – oder über „Bilder hochladen“ bzw. „Ordner“ auswählen (auf dem iPhone/iPad genügt „Bilder hochladen“, Ordner gehen dort als ZIP). p5assets erkennt Titel,
 Jahr und Staffel aus Datei- und Ordnernamen, zeigt die Zuordnung zur Kontrolle und benennt alles Kometa-konform
 (`<Medienordner>/poster.jpg`, `Season01.jpg` …). Neue Ordner landen dort, wo die anderen Titel schon liegen.
 
@@ -56,7 +56,6 @@ Jahr und Staffel aus Datei- und Ordnernamen, zeigt die Zuordnung zur Kontrolle u
 - Kacheln für Poster und **Season00 – Season50**, auch für Staffeln, die es noch nicht gibt
 - Poster per Drag & Drop auf eine andere Kachel **kopieren**, oder mit **„Auf alle …“** auf mehrere Kacheln übertragen
 - **Herunterladen** in Originalqualität: einzelne Poster oder eine Auswahl als ZIP
-- **Eigene Ordner** für Titel, die weder in Plex noch in Sonarr/Radarr stehen
 
 ### Online-Suche
 Poster von TMDb, TVDB und fanart.tv, gruppiert nach deiner **Sprach-Priorität pro Welt** (z. B. Textless → Deutsch → English),
@@ -90,10 +89,10 @@ die Bildgrößen werden im Hintergrund gelesen.
 
 <img src="docs/images/weak.png" alt="Schwache Poster" width="560">
 
-### Rückgängig & Aufräumen
+### Papierkorb & Aufräumen
 Ersetzte oder gelöschte Poster liegen **30 Tage im Papierkorb** (höchstens 2 GB). Nach jeder Aktion bietet ein Hinweis
-„Rückgängig“ an; das Symbol ↺ in der Kopfzeile öffnet die ganze Liste. **Verwaiste Ordner** (Poster ohne Titel in Plex,
-Sonarr/Radarr oder den eigenen Ordnern) lassen sich finden und in den Papierkorb verschieben; Titel, die Sonarr/Radarr
+„Rückgängig“ an; das Papierkorb-Symbol in der Kopfzeile öffnet die ganze Liste. **Verwaiste Ordner** (Poster ohne Titel in Plex,
+Sonarr/Radarr) lassen sich finden und in den Papierkorb verschieben; Titel, die Sonarr/Radarr
 noch kennen, bleiben geschützt.
 
 <table>
