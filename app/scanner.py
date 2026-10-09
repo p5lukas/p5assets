@@ -128,7 +128,7 @@ async def _plex_items(cfg: dict, world: dict, plex: Plex, warnings: list[str]) -
                 "year": md.get("year"), "folder": folder, "thumb": md.get("thumb", ""),
                 "ids": providers.ids_from_guids(md.get("Guid", [])),
                 "seasons": sorted(seasons_by_show.get(rk, []), key=lambda s: s["number"]),
-                "in_plex": True, "sources": ["Plex"], "custom": False,
+                "in_plex": True, "sources": ["Plex"],
             })
     return items
 
@@ -191,7 +191,7 @@ def _merge(plex_items: list[dict], arr_items: list[dict]) -> list[dict]:
             "rating_key": None, "library_title": "", "type": a["type"], "title": a["title"], "original_title": "",
             "year": a["year"], "folder": a["folder"], "thumb": "", "ids": dict(a["ids"]),
             "seasons": [{"number": n, "title": "", "rating_key": None, "thumb": ""} for n in a["seasons"]],
-            "in_plex": False, "sources": [a["source"]], "custom": False,
+            "in_plex": False, "sources": [a["source"]],
             "monitored": a["monitored"], "has_files": a["has_files"], "available": a["available"],
             "arr_folders": [a["folder"]] if a["folder"] else [],
         }
@@ -211,19 +211,10 @@ def _prep(it: dict) -> None:
     it["coming_soon"] = kometa.is_coming_soon(it["folder"])
 
 
-def custom_item(entry: dict) -> dict:
-    return {
-        "rating_key": None, "library_title": "", "type": entry["type"], "title": entry.get("title") or entry["folder"],
-        "original_title": "", "year": None, "folder": entry["folder"], "thumb": "", "ids": {}, "seasons": [],
-        "in_plex": False, "sources": ["Eigener Ordner"], "custom": True, "custom_id": entry["id"],
-    }
-
-
 def _finish(world: dict, items: list[dict], index: kometa.AssetIndex, ignore_specials: bool) -> list[dict]:
     seen: set[str] = set()
     for i, it in enumerate(items):
-        iid = f"{world['id']}-c{it['custom_id']}" if it["custom"] else _item_id(
-            world["id"], it["type"], it["folder"], it["rating_key"] or str(i))
+        iid = _item_id(world["id"], it["type"], it["folder"], it["rating_key"] or str(i))
         while iid in seen:
             iid += "x"
         seen.add(iid)
@@ -259,10 +250,6 @@ async def scan() -> None:
                     plex_items = await _plex_items(cfg, world, plex, warnings) if plex else []
                     arr_items = await _arr_items(cfg, world, warnings)
                     items = _merge(plex_items, arr_items)
-                    have = {(i["type"], i["folder"].casefold()) for i in items if i["folder"]}
-                    for entry in cfg["custom"]:
-                        if entry["world"] == world["id"] and (entry["type"], entry["folder"].casefold()) not in have:
-                            items.append(custom_item(entry))
                     done = _finish(world, items, index, cfg["assets"]["ignore_specials"])
                     all_items.extend(done)
                     history.record(world["id"], len(done), sum(len([s for s in i["slots"].values() if not s.get("extra")]) for i in done),
@@ -337,7 +324,7 @@ def preferred_base(item: dict) -> Path | None:
                     return d
         except OSError:
             pass
-    arr_sources = {x for x in item.get("sources", []) if x not in ("Plex", "Eigener Ordner")}
+    arr_sources = {x for x in item.get("sources", []) if x != "Plex"}
     if arr_sources:
         hit = most_common([i for i in others if arr_sources & set(i.get("sources", []))])
         if hit:
@@ -354,28 +341,6 @@ def refresh_item(item_id: str) -> None:
     index = kometa.get_index(Path(item["assets_path"]), cfg["assets"]["asset_folders"], item.get("search_depth", 3))
     build_slots(item, index, cfg["assets"]["ignore_specials"])
     dims.fill([item], persist=False)      # only this title (a handful of files)
-
-
-def add_custom(entry: dict) -> dict:
-    """Add a freely entered folder to the live state. Returns the item (existing one if the folder is known)."""
-    cfg = config.get()
-    world = next(w for w in cfg["worlds"] if w["id"] == entry["world"])
-    for it in STATE["items"]:
-        if it["world"] == world["id"] and it["type"] == entry["type"] and it["folder"].casefold() == entry["folder"].casefold():
-            return it
-    item = custom_item(entry)
-    index = kometa.get_index(Path(world["assets_path"]), cfg["assets"]["asset_folders"], world.get("search_depth", 3))
-    item.update(id=f"{world['id']}-c{entry['id']}", world=world["id"], assets_path=world["assets_path"],
-                search_depth=world.get("search_depth", 3), updated=0)
-    build_slots(item, index, cfg["assets"]["ignore_specials"])
-    _prep(item)
-    STATE["items"].append(item)
-    STATE["items"].sort(key=lambda i: i["title"].casefold())
-    return item
-
-
-def remove_item(item_id: str) -> None:
-    STATE["items"] = [i for i in STATE["items"] if i["id"] != item_id]
 
 
 def summary() -> dict:

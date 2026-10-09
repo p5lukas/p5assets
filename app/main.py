@@ -20,6 +20,7 @@ from collections import Counter
 
 from pydantic import BaseModel
 
+from .text import plural
 from . import arr as arrmod, config, dims, history, kometa, languages as langmod, logs, notify, thumbs, trash, version, plex as plexmod, providers, scanner, uploads
 from .plex import Plex, PlexError
 
@@ -71,7 +72,7 @@ def _item(item_id: str) -> dict:
 
 def _public_item(it: dict, full: bool = False) -> dict:
     out = {k: it[k] for k in ("id", "world", "type", "title", "year", "folder", "library_title", "missing",
-                              "updated", "in_plex", "sources", "custom", "dupes")}
+                              "updated", "in_plex", "sources", "dupes")}
     out["mirror_folders"] = it.get("mirror_folders") or []
     out["coming_soon"] = bool(it.get("coming_soon"))
     out["missing_plex"] = it.get("missing_plex", 0)
@@ -418,7 +419,7 @@ async def items(world: str = "", q: str = "", filter: str = "all", library: str 
     res = [i for i in scanner.STATE["items"] if i["world"] == wid]
     if library:
         res = [i for i in res if i["library_title"] == library]
-    if source:  # Sonarr/Radarr instance name or "Eigener Ordner"
+    if source:  # Sonarr/Radarr instance name
         res = [i for i in res if source in i["sources"]]
     if type:
         res = [i for i in res if i["type"] == type]
@@ -558,47 +559,6 @@ async def season_thumb(item_id: str, slot: str):
     thumb_path = it["thumb"] if season is None else next(
         (s["thumb"] for s in it["seasons"] if s["number"] == season), "")
     return await _plex_image(thumb_path)
-
-
-class CustomBody(BaseModel):
-    world: str
-    folder: str
-    type: str = "show"
-    title: str = ""
-
-
-@app.post("/api/custom")
-async def custom_add(body: CustomBody):
-    world = _world(body.world)
-    folder = body.folder.strip().strip("/\\")
-    if not folder or "/" in folder or "\\" in folder or folder in (".", ".."):
-        raise HTTPException(400, "Ungültiger Ordnername")
-    if body.type not in ("show", "movie"):
-        raise HTTPException(400, "Typ muss show oder movie sein")
-    cfg = config.get()
-    entry = next((c for c in cfg["custom"] if c["world"] == world["id"] and c["type"] == body.type
-                  and c["folder"].casefold() == folder.casefold()), None)
-    if not entry:
-        entry = {"id": uuid.uuid4().hex[:8], "world": world["id"], "folder": folder,
-                 "title": body.title.strip() or folder, "type": body.type}
-        cfg["custom"].append(entry)
-        config.save(cfg)
-    item = scanner.add_custom(entry)
-    log.info("Eigener Ordner angelegt: %s (%s, Welt %s)", folder, body.type, world["name"])
-    return {"item": _public_item(item, True)}
-
-
-@app.delete("/api/custom/{item_id}")
-async def custom_delete(item_id: str):
-    it = _item(item_id)
-    if not it.get("custom"):
-        raise HTTPException(400, "Nur eigene Ordner können entfernt werden (Dateien bleiben erhalten)")
-    cfg = config.get()
-    cfg["custom"] = [c for c in cfg["custom"] if c["id"] != it["custom_id"]]
-    config.save(cfg)
-    scanner.remove_item(item_id)
-    log.info("Eigener Ordner entfernt: %s (Dateien bleiben erhalten)", it["folder"])
-    return {"ok": True}
 
 
 @app.post("/api/items/{item_id}/{slot}/upload")
@@ -836,7 +796,7 @@ async def orphans_trash(body: OrphanBody):
     allowed = {o["path"]: o for o in found}
     root = Path(w["assets_path"])
     moved = 0
-    gid = trash.begin("orphan", world=w["id"], title=f"{len(body.paths)} verwaiste Ordner", slot="")
+    gid = trash.begin("orphan", world=w["id"], title=plural(len(body.paths), "verwaister Ordner", "verwaiste Ordner"), slot="")
     for rel in body.paths:
         if rel in allowed and (root / rel).is_dir():     # only folders that are really orphans, nothing outside the assets folder
             trash.stash(gid, root / rel, move=True, label=allowed[rel]["name"])

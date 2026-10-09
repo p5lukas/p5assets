@@ -7,7 +7,7 @@ from app import config, main, scanner
 def _item(i, title, **kw):
     base = {"id": f"w:{i}", "world": "hd", "title": title, "year": 2020, "type": "movie", "folder": f"{title} (2020)",
             "library_title": "Filme", "sources": ["Plex"], "letter": title[0].upper(), "_nt": title.lower(), "_fl": title.lower(),
-            "updated": 0, "custom": False, "dupes": [], "seasons": [], "ids": {}, "missing": False, "missing_plex": False, "in_plex": True, "coming_soon": False, "slots": {"poster": {"exists": True}}}
+            "updated": 0, "dupes": [], "seasons": [], "ids": {}, "missing": False, "missing_plex": False, "in_plex": True, "coming_soon": False, "slots": {"poster": {"exists": True}}}
     base.update(kw)
     return base
 
@@ -48,3 +48,11 @@ def test_trash_rejects_bad_ids(client):
     assert client.post("/api/trash/..%2Fetc/restore").status_code in (404, 405)
     assert client.post("/api/trash/does-not-exist/restore").status_code == 404
     assert client.delete("/api/trash/nope").status_code == 404
+
+
+def test_app_starts_and_serves_index():
+    """The whole app starts (lifespan, background loops) and the page is served with versioned assets."""
+    with TestClient(main.app) as c:
+        r = c.get("/")
+        assert r.status_code == 200 and "/static/app.js?v=" in r.text
+        assert c.get("/api/version").status_code == 200

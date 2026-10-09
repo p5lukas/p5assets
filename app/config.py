@@ -26,7 +26,6 @@ DEFAULTS: dict = {
     # [{id, kind: sonarr|radarr, name, url, api_key, world}]
     "arr": [],
     # frei eingegebene Ordner: [{id, world, folder, title, type}]
-    "custom": [],
     "assets": {
         "asset_folders": True,
         "convert_to_jpg": False,
@@ -115,15 +114,14 @@ def normalize(cfg: dict, legacy_path: str | None = None) -> bool:
         w.setdefault("assets_path", "")
     ids = {w["id"] for w in cfg["worlds"]}
     first = cfg["worlds"][0]["id"]
-    for item in list(cfg["libraries"]) + list(cfg["arr"]) + list(cfg["custom"]):
+    for item in list(cfg["libraries"]) + list(cfg["arr"]):
         if item.get("world") not in ids:
             item["world"] = first; changed = True
     for a in cfg["arr"]:
         if not a.get("id"):
             a["id"] = uuid.uuid4().hex[:8]; changed = True
-    for c in cfg["custom"]:
-        if not c.get("id"):
-            c["id"] = uuid.uuid4().hex[:8]; changed = True
+    if "custom" in cfg:      # "Titel anlegen" was removed: such folders now show up under "Verwaiste Ordner"
+        del cfg["custom"]; changed = True
     return changed
 
 

@@ -59,7 +59,7 @@ const slotLabel = (k, type) => k === "poster" ? (type === "movie" ? "Poster" : "
 /* ---------------------------------------------------------------- icons --- */
 const ICONS = {
   upload: [{ d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" }, { d: "M17 8l-5-5-5 5" }, { d: "M12 3v12" }],
-  folderplus: [{ d: "M12 10v6" }, { d: "M9 13h6" }, { d: "M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" }],
+  folder: [{ d: "M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z" }],
   // two arrows chasing each other in a circle (rotates while a scan is running)
   sync: [{ d: "M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" }, { d: "M21 3v5h-5" }, { d: "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" }, { d: "M8 16H3v5" }],
   terminal: [{ d: "M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" }, { d: "M6.5 9.5l3 2.5-3 2.5" }, { d: "M12.5 15.5h4.5", cls: "cur" }],
@@ -122,7 +122,7 @@ async function savePatch(patch) { const r = await api("/config", { json: { patch
 const weakParams = () => { const c = weakCfg(), p = {}; if (c.wOn) p.weak_w = c.w; if (c.rOn) p.weak_r = "1"; return p; };
 const AZ_MIN = 150;   // from this many titles on the list is split by first letter instead of one endless page
 async function loadItems(append = false) {
-  // S.lib is "lib:<Plex library>" or "src:<Sonarr/Radarr instance | Eigener Ordner>"
+  // S.lib is "lib:<Plex library>" or "src:<Sonarr/Radarr instance>"
   const id = ++S.req, q = S.q.trim();
   if (S.ctl) S.ctl.abort();                   // typing fast: the answer to an older keystroke is not needed any more
   const ctl = S.ctl = new AbortController(), sig = { signal: ctl.signal };
@@ -132,7 +132,7 @@ async function loadItems(append = false) {
   finally { S.pending--; }
 }
 async function loadItemsInner(append, id, q, sig) {
-  // S.lib: "" = all | "type:movie|show" = all movie/series sources combined | "lib:<Plex library>" | "src:<Sonarr/Radarr instance | Eigener Ordner>"
+  // S.lib: "" = all | "type:movie|show" = all movie/series sources combined | "lib:<Plex library>" | "src:<Sonarr/Radarr instance>"
   const scope = { type: S.lib.startsWith("type:") ? S.lib.slice(5) : "", library: S.lib.startsWith("lib:") ? S.lib.slice(4) : "", source: S.lib.startsWith("src:") ? S.lib.slice(4) : "" };
   const query = (letter, limit, offset) => new URLSearchParams({ world: S.world, q: S.q, filter: S.filter, letter, ...scope,
     ...(S.filter === "comingsoon" && S.nopost ? { nopost: "1" } : {}), ...weakParams(), offset, limit });
@@ -233,15 +233,19 @@ async function loadVersion() {
 }
 
 /* ----------------------------------------------- trash / orphans / cleanup --- */
+/** "1 Titel" / "3 Titel": the number with the right singular or plural form. */
+const pl = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+/** Verb form that goes with a count: "1 Kachel fehlt", "3 Kacheln fehlen". */
+const fehlt = n => n === 1 ? "fehlt" : "fehlen";
 const fmtBytes = b => b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB";
 const fmtWhen = ts => new Date(ts * 1000).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 const REASON = { replace: "ersetzt", delete: "gelöscht", orphan: "verwaister Ordner", restore: "vor Wiederherstellung" };
 
-/** "Rückgängig & Aufräumen": the trash (replaced/deleted posters, 30 days) and folders that belong to no title any more. */
+/** "Papierkorb & Aufräumen": the trash (replaced/deleted posters, 30 days) and folders that belong to no title any more. */
 function openCleanup(initial = "trash") {
   let tab = initial;
   const body = h("div"), tabs = h("div", { class: "tabs", style: "position:static" });
-  const m = modal("Rückgängig & Aufräumen", h("div", {}, tabs, body));
+  const m = modal("Papierkorb & Aufräumen", h("div", {}, tabs, body));
   const refresh = () => { loadItems().then(renderGrid); api("/status").then(r => { S.st.summary = r; updateHero(); }); };
 
   async function drawTrash() {
@@ -249,8 +253,8 @@ function openCleanup(initial = "trash") {
     const r = await api("/trash"), gs = r.groups;
     const total = gs.reduce((a, g) => a + g.size, 0);
     fill(body,
-      h("p", { class: "hint", style: "margin-top:0" }, `Ersetzte und gelöschte Poster bleiben ${r.keep_days} Tage hier (höchstens 2 GB). „Wiederherstellen“ legt das alte Bild zurück.`),
-      gs.length ? h("div", { class: "row wrap", style: "margin-bottom:10px" }, h("span", { class: "hint", style: "margin:0" }, `${gs.length} Einträge · ${fmtBytes(total)}`), h("span", { class: "spacer" }),
+      h("p", { class: "hint", style: "margin-top:0" }, `Ersetzte und gelöschte Poster bleiben ${pl(r.keep_days, "Tag", "Tage")} hier (höchstens 2 GB). „Wiederherstellen“ legt das alte Bild zurück.`),
+      gs.length ? h("div", { class: "row wrap", style: "margin-bottom:10px" }, h("span", { class: "hint", style: "margin:0" }, `${pl(gs.length, "Eintrag", "Einträge")} · ${fmtBytes(total)}`), h("span", { class: "spacer" }),
         h("button", { class: "btn sm danger", onclick: async () => { if (!confirm("Papierkorb ganz leeren? Das kann nicht rückgängig gemacht werden.")) return; await api("/trash", { method: "DELETE" }); drawTrash(); } }, "Papierkorb leeren")) : null,
       gs.length ? gs.map(g => {
         const file = g.files.find(f => !f.dir);
@@ -279,22 +283,22 @@ function openCleanup(initial = "trash") {
     const sync = () => { go.textContent = `${sel.size} in den Papierkorb`; go.disabled = !sel.size; toggleAll.textContent = sel.size === r.orphans.length ? "Alle abwählen" : "Alle wählen"; };
     fill(list, r.orphans.map(o => h("label", { class: "trow orph" },
       h("input", { type: "checkbox", onchange: e => { e.target.checked ? sel.add(o.path) : sel.delete(o.path); sync(); } }),
-      h("div", { class: "grow" }, h("b", {}, o.name), h("div", { class: "hint", style: "margin:0" }, `${o.path} · ${o.files} Datei${o.files === 1 ? "" : "en"} · ${fmtBytes(o.size)} · ${fmtWhen(o.mtime)}`)))));
+      h("div", { class: "grow" }, h("b", {}, o.name), h("div", { class: "hint", style: "margin:0" }, `${o.path} · ${pl(o.files, "Datei", "Dateien")} · ${fmtBytes(o.size)} · ${fmtWhen(o.mtime)}`)))));
     go.onclick = async () => {
-      if (!confirm(`${sel.size} Ordner in den Papierkorb verschieben? Sie lassen sich dort 30 Tage lang wiederherstellen.`)) return;
+      if (!confirm(`${pl(sel.size, "Ordner", "Ordner")} in den Papierkorb verschieben? ${sel.size === 1 ? "Er lässt" : "Sie lassen"} sich dort 30 Tage lang wiederherstellen.`)) return;
       const res = await busy(go, () => api("/orphans/trash", { json: { world: S.world, paths: [...sel] } }));
       toast(`${res.moved} Ordner im Papierkorb`, "ok", res.trash ? { label: "Rückgängig", fn: async () => { await api(`/trash/${res.trash}/restore`, { method: "POST" }); toast("Wiederhergestellt ✓", "ok"); } } : null);
       drawOrphans();
     };
     sync();
     fill(body,
-      h("p", { class: "hint", style: "margin-top:0" }, `Ordner in „${curWorld().name}“ mit Postern oder Staffelbildern, zu denen es keinen Titel mehr gibt: weder in Plex noch in Sonarr/Radarr noch bei den eigenen Ordnern. Titel, die Sonarr oder Radarr noch kennen (auch angekündigte), bleiben geschützt.`),
+      h("p", { class: "hint", style: "margin-top:0" }, `Ordner in „${curWorld().name}“ mit Postern oder Staffelbildern, zu denen es keinen Titel mehr gibt: weder in Plex noch in Sonarr/Radarr. Titel, die Sonarr oder Radarr noch kennen (auch angekündigte), bleiben geschützt.`),
       r.orphans.length ? [h("div", { class: "row wrap", style: "margin-bottom:8px" }, toggleAll, h("span", { class: "spacer" }), go), list]
         : h("div", { class: "empty", style: "padding:30px" }, "🎉 Keine verwaisten Ordner gefunden."));
   }
 
   const draw = () => {
-    fill(tabs, [["trash", "Rückgängig (Papierkorb)"], ["orphans", "Verwaiste Ordner"]].map(([k, label]) => h("button", { class: "tab" + (tab === k ? " on" : ""), onclick: () => { tab = k; draw(); } }, label)));
+    fill(tabs, [["trash", "Papierkorb"], ["orphans", "Verwaiste Ordner"]].map(([k, label]) => h("button", { class: "tab" + (tab === k ? " on" : ""), onclick: () => { tab = k; draw(); } }, label)));
     (tab === "trash" ? drawTrash : drawOrphans)().catch(e => fill(body, h("div", { class: "status bad" }, e.message)));
   };
   draw();
@@ -458,11 +462,11 @@ function dashboard() {
         h("button", { class: w.id === S.world ? "on" : "", style: `--c:${worldColor(w)}`, title: w.name, onclick: () => switchWorld(w.id) }, planetSvg(w.hue ?? 140, 20), w.name))) : null,
       h("div", { class: "search" }, icon("search", 16), h("input", { type: "search", placeholder: "Titel suchen …", id: "q", value: S.q, autocomplete: "off", enterkeyhint: "search", oninput: debounce(async e => { S.q = e.target.value; await loadItems(); renderGrid(); }, 150) })),
       h("div", { class: "spacer" }),
-      h("button", { class: "btn tb", title: "Bilder, Ordner oder ZIPs hochladen – p5assets ordnet sie automatisch den Titeln zu", onclick: () => pickFiles() }, icon("upload"), h("span", { class: "lbl" }, "Bilder hochladen")),
-      h("button", { class: "btn tb", title: "Einen Titel von Hand anlegen, der weder in Plex noch in Sonarr/Radarr steht", onclick: openCustom }, icon("folderplus"), h("span", { class: "lbl" }, "Titel anlegen")),
+      h("button", { class: "btn tb", title: "Bilder oder ZIPs wählen – p5assets ordnet sie automatisch den Titeln zu. Ordner und Dateien kannst du auch einfach ins Fenster ziehen.", onclick: () => pickFiles(f => importFiles(f), true) }, icon("upload"), h("span", { class: "lbl" }, "Bilder hochladen")),
+      h("button", { class: "btn tb folderpick", title: "Ganzen Ordner wählen (oder einfach ins Fenster ziehen)", onclick: () => pickFiles(f => importFiles(f), true, true) }, icon("folder"), h("span", { class: "lbl" }, "Ordner")),
       h("span", { class: "vsep" }),
       h("button", { class: "btn tb", id: "scanbtn", title: "Plex, Sonarr/Radarr und die Assets-Ordner neu einlesen", onclick: doScan }, icon("sync"), h("span", { class: "lbl" }, "Scannen")),
-      h("button", { class: "btn tb icon", title: "Rückgängig & Aufräumen: Papierkorb (30 Tage) und verwaiste Ordner", onclick: () => openCleanup() }, icon("undo", 20)),
+      h("button", { class: "btn tb icon", title: "Papierkorb & Aufräumen: ersetzte Poster zurückholen (30 Tage) und verwaiste Ordner entfernen", onclick: () => openCleanup() }, icon("trash", 20)),
       h("button", { class: "btn tb icon logbtn", id: "logbtn", title: "Logs", onclick: logsPage }, icon("terminal", 20), h("span", { class: "lbadge" })),
       h("button", { class: "btn tb icon", title: "Einstellungen", onclick: () => wizard(true) }, icon("gear", 20)),
     )),
@@ -513,7 +517,7 @@ function updateHero() {
       stat(ws.items, "Titel"), stat(ws.slots - ws.missing, "Assets vorhanden", "ok"), stat(ws.missing, "Fehlen", ws.missing ? "bad" : "ok"),
       stat(ws.complete_items, "Vollständig")),
     sparkline());
-  const sig = JSON.stringify([S.world, S.lib, c.libraries.map(l => [l.title, l.enabled, l.world]), c.arr.map(a => [a.name, a.world]), c.custom.length]);
+  const sig = JSON.stringify([S.world, S.lib, c.libraries.map(l => [l.title, l.enabled, l.world]), c.arr.map(a => [a.name, a.world])]);
   if (box.dataset.sig !== sig) { box.dataset.sig = sig; fill($("#hsrc"), sourceSelect()); }
   const hasSrc = !!$("#hsrc").firstChild;
   box.classList.toggle("hassrc", hasSrc);
@@ -540,7 +544,7 @@ function sparkline() {
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("width", W); svg.setAttribute("height", H); svg.setAttribute("class", "spark-svg");
   svg.innerHTML = `<polyline points="${line} ${lx.toFixed(1)},${H} 4,${H}" fill="var(--dim)" stroke="none"/><polyline points="${line}" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="2.6" fill="var(--accent)"/>`;
   return h("div", { class: "spark", title: `Abdeckung ${first}% → ${last}% in ${days} Tag${days === 1 ? "" : "en"} (ganze Welt, ein Punkt pro Scan)` },
-    svg, h("span", {}, `Abdeckung ${days} Tage: `, h("b", {}, `${last}%`), h("span", { class: diff >= 0 ? "up" : "down" }, ` ${diff >= 0 ? "▲" : "▼"} ${Math.abs(diff)}`)));
+    svg, h("span", {}, `Abdeckung ${pl(days, "Tag", "Tage")}: `, h("b", {}, `${last}%`), h("span", { class: diff >= 0 ? "up" : "down" }, ` ${diff >= 0 ? "▲" : "▼"} ${Math.abs(diff)}`)));
 }
 
 /** Source filter in the statistic block: all / all movie / all series sources (combined, every title counted once) /
@@ -548,13 +552,12 @@ function sparkline() {
 function sourceSelect() {
   const c = cfg();
   const libs = c.libraries.filter(l => l.enabled && l.world === S.world), arrs = c.arr.filter(a => a.world === S.world);
-  const custom = c.custom.some(x => x.world === S.world);
-  const hasMovie = libs.some(l => l.type === "movie") || arrs.some(a => a.kind === "radarr") || custom;
-  const hasShow = libs.some(l => l.type === "show") || arrs.some(a => a.kind === "sonarr") || custom;
+  const hasMovie = libs.some(l => l.type === "movie") || arrs.some(a => a.kind === "radarr");
+  const hasShow = libs.some(l => l.type === "show") || arrs.some(a => a.kind === "sonarr");
   const groups = [
     hasMovie && hasShow ? [null, [{ v: "type:movie", label: "Alle Filmquellen (kombiniert)" }, { v: "type:show", label: "Alle Serienquellen (kombiniert)" }]] : null,
     libs.length ? ["Plex-Bibliotheken", libs.map(l => ({ v: "lib:" + l.title, label: l.title }))] : null,
-    arrs.length || custom ? ["Sonarr / Radarr / Ordner", [...arrs.map(a => ({ v: "src:" + a.name, label: a.name })), ...(custom ? [{ v: "src:Eigener Ordner", label: "Eigene Ordner" }] : [])]] : null,
+    arrs.length ? ["Sonarr / Radarr", arrs.map(a => ({ v: "src:" + a.name, label: a.name }))] : null,
   ].filter(Boolean);
   const all = groups.flatMap(g => g[1]);
   if (S.lib && !all.some(o => o.v === S.lib)) S.lib = "";
@@ -584,7 +587,7 @@ function weakOptions() {
 function renderChips() {
   const el = $("#chips"); if (!el) return;
   const c = cfg(), cnt = (S.stats && S.stats.counts) || {};
-  const hasExtra = c.arr.some(a => a.world === S.world) || c.custom.some(x => x.world === S.world);
+  const hasExtra = c.arr.some(a => a.world === S.world);
   const chip = (label, key, n, title) => h("button", { class: "chip" + (S.filter === key ? " on" : ""), title, onclick: async () => { S.filter = key; renderChips(); await loadItems(); renderGrid(); } },
     label, n != null ? h("small", {}, n) : null);
   fill(el,
@@ -593,7 +596,7 @@ function renderChips() {
     chip("In Plex, Poster fehlt", "plexmissing", cnt.plexmissing, "In Plex vorhanden, aber bei Kometa fehlt ein Poster oder eine Staffel (ohne Titel, die nur in Sonarr/Radarr stehen)"),
     chip("Vollständig", "complete", cnt.complete),
     cnt.comingsoon > 0 || S.filter === "comingsoon" ? chip("Coming Soon", "comingsoon", cnt.comingsoon, "Coming-Soon-Poster ({edition-Coming Soon}): in Plex schon sichtbar, brauchen zeitnah ein Poster") : null,
-    hasExtra || cnt.notplex > 0 || S.filter === "notplex" ? chip("Noch nicht in Plex", "notplex", cnt.notplex, "Nur in Sonarr/Radarr bzw. als eigener Ordner: noch ohne Datei, nicht erschienen oder von Plex noch nicht eingelesen") : null,
+    hasExtra || cnt.notplex > 0 || S.filter === "notplex" ? chip("Noch nicht in Plex", "notplex", cnt.notplex, "Sonarr/Radarr kennen den Titel, in Plex ist er noch nicht (noch keine Datei, noch nicht erschienen oder noch nicht eingelesen)") : null,
     chip("Schwache Poster", "weak", cnt.weak, "Bilder, die zu schmal sind oder nicht das Seitenverhältnis 2:3 haben (Schwellwerte wählst du selbst)"),
     S.filter === "weak" ? weakOptions() : null,
     S.filter === "comingsoon" ? h("label", { class: "chip" + (S.nopost ? " on" : ""), style: "display:inline-flex;gap:8px;align-items:center;cursor:pointer" },
@@ -630,7 +633,7 @@ function renderGrid() {
     fill(g, h("div", { class: "empty" },
       S.st.summary.running ? h("h2", {}, "Scanne …") :
       S.filter === "missing" && !S.q && scopeStats().items ? [h("div", { class: "big" }, "🎉"), h("h2", {}, "Alles vollständig!"), "Für kein Poster oder keine Staffel fehlt etwas."] :
-      !worldStats().items ? [h("h2", {}, "Hier ist noch nichts"), "Ordne dieser Welt unter ⚙ Bibliotheken oder Sonarr/Radarr zu – oder lege mit „＋ Ordner“ einen eigenen Titel an."] :
+      !worldStats().items ? [h("h2", {}, "Hier ist noch nichts"), "Ordne dieser Welt unter ⚙ Bibliotheken oder Sonarr/Radarr zu."] :
       [h("h2", {}, "Nichts gefunden"), "Passe Filter oder Suche an – oder starte einen neuen Scan."]));
     return;
   }
@@ -679,25 +682,17 @@ function posterBox(item, slot, known = true) {
   return wrap;
 }
 
-/** Short label for titles that are not in Plex, based on what Sonarr/Radarr know about them. */
-function notPlexLabel(item) {
-  if (item.custom) return "Ordner";
-  if (item.monitored === false) return "nicht überwacht";
-  if (item.monitored && item.has_files === false) return item.available === false ? "nicht erschienen" : "ohne Datei";
-  return "nicht in Plex";
-}
+const NOT_IN_PLEX = "Noch nicht in Plex";   // one label for everything Sonarr/Radarr know but Plex does not have yet (no file, not released …)
 
 /** Status of a title as tag descriptors; the colour says what it means (ok = green, warn = yellow, bad = red). */
 function statusTags(it) {
   const t = [];
-  if (!it.in_plex) t.push({ text: "nicht in Plex", cls: "warn" });
+  if (!it.in_plex) t.push({ text: NOT_IN_PLEX, cls: "warn" });
   if (it.coming_soon) t.push({ text: "Coming Soon", cls: "warn" });
   if (it.monitored != null) {
     t.push(it.monitored ? { text: "überwacht", cls: "ok" } : { text: "nicht überwacht", cls: "" });
-    if (it.has_files === false) t.push({ text: "ohne Datei", cls: "warn" });
-    if (it.available === false) t.push({ text: "noch nicht erschienen", cls: "warn" });
   }
-  t.push(it.missing ? { text: `${it.missing} Kachel${it.missing === 1 ? "" : "n"} fehlen`, cls: "bad" } : { text: "vollständig", cls: "ok" });
+  t.push(it.missing ? { text: `${pl(it.missing, "Kachel", "Kacheln")} ${fehlt(it.missing)}`, cls: "bad" } : { text: "vollständig", cls: "ok" });
   return t;
 }
 const itemWorld = it => cfg().worlds.find(w => w.id === it.world);
@@ -722,15 +717,15 @@ function card(item) {
   const el = h("div", { class: "card" + (movie ? " movie" : ""), onclick: movie ? null : () => openItem(item.id) });
   const box = posterBox(item, "poster");
   const bad = item.missing;
-  box.append(h("span", { class: "badge " + (bad ? "bad" : "ok") }, bad ? `${bad} fehlt` : "✓"));
+  if (bad) box.append(h("span", { class: "badge bad" }, `${bad} ${fehlt(bad)}`));
   box.title = metaText(item);
-  if (!item.in_plex) box.append(h("span", { class: "badge warn b" }, notPlexLabel(item)));
+  if (!item.in_plex) box.append(h("span", { class: "badge warn b", title: "Sonarr/Radarr kennen den Titel, in Plex ist er noch nicht" }, NOT_IN_PLEX));
   else if (item.coming_soon) box.append(h("span", { class: "badge warn b", title: "In Plex als Coming-Soon-Platzhalter sichtbar" }, "Coming Soon"));
   if (S.filter === "weak") { const wk = weakSlot(item); if (wk) box.append(h("span", { class: "badge warn r", title: `${slotLabel(wk.key, item.type)}: ${wk.w} × ${wk.h} px` }, `${wk.w}×${wk.h}`)); }
   // a movie has one poster: no detail view, title/year and poster open the preview; the action buttons are built on first use
   const info = h("div", { class: "info", onclick: movie ? () => openPreview(item, "poster", changed) : null, title: movie ? "Vorschau öffnen" : null },
     h("div", { class: "t", title: item.title }, item.title),
-    h("div", { class: "s" }, [item.year, item.type === "show" ? `${item.season_count} Staffeln` : "Film"].filter(Boolean).join(" · ")));
+    h("div", { class: "s" }, [item.year, item.type === "show" ? pl(item.season_count, "Staffel", "Staffeln") : "Film"].filter(Boolean).join(" · ")));
   function changed(it) {
     const i = S.items.findIndex(x => x.id === it.id);
     if (i >= 0) { S.items[i] = it; el.replaceWith(card(it)); }
@@ -787,10 +782,6 @@ async function openItem(id) {
           (it.mirror_folders || []).length ? h("div", { class: "hint", style: "margin:2px 0" }, "Zusätzlich gespeichert in: ", it.mirror_folders.map(f => h("code", {}, f)),
             h("span", { class: "tag ok", style: "margin-left:8px", title: "Coming-Soon-Platzhalter: Poster werden auch im echten Film-Ordner abgelegt" }, "Coming Soon gespiegelt")) : null,
           metaGroups(it)),
-        it.custom ? h("button", { class: "btn sm danger", title: "Entfernt nur den Eintrag, Dateien bleiben erhalten", onclick: async () => {
-          if (!confirm("Eigenen Ordner aus der Liste entfernen? Die Dateien bleiben erhalten.")) return;
-          await api("/custom/" + it.id, { method: "DELETE" }); close(); toast("Entfernt", "ok");
-        } }, "Eintrag entfernen") : null,
       ),
       h("div", { class: "body" },
         !it.folder ? h("div", { class: "status bad" }, "Für diesen Titel ist kein Ordnername bekannt – Upload nicht möglich.") : null,
@@ -827,9 +818,8 @@ async function openItem(id) {
   function slotView(it, key, known) {
     const sl = it.slots[key], exists = !!(sl && sl.exists);
     const box = posterBox(it, key, known);
-    if (known) box.append(h("span", { class: "badge " + (exists ? "ok" : "bad") }, exists ? "vorhanden" : "fehlt"));
-    else if (exists) box.append(h("span", { class: "badge ok" }, "vorhanden"));
-    if (sl && sl.only_arr) box.append(h("span", { class: "badge warn b", title: "Diese Staffel kennt bisher nur Sonarr – in Plex gibt es sie noch nicht" }, "noch nicht in Plex"));
+    if (known && !exists) box.append(h("span", { class: "badge bad" }, "fehlt"));      // a poster that is there needs no tag
+    if (sl && sl.only_arr) box.append(h("span", { class: "badge warn b", title: "Diese Staffel kennt bisher nur Sonarr – in Plex gibt es sie noch nicht" }, NOT_IN_PLEX));
     const pick = () => pickFiles(files => uploadSlot(it, key, files, draw), false);
     box.append(slotActions(it, key, box, draw));
     const el = h("div", { class: "slot" }, box, h("div", { class: "lab" }, slotLabel(key, it.type)));
@@ -938,11 +928,7 @@ function openPreview(it, key, draw) {
           draw && exists ? h("button", { class: "btn sm danger", onclick: async () => {
             if (!confirm(`${slotLabel(key, it.type)} wirklich löschen?`)) return;
             close(); const r = await api(`/items/${it.id}/${key}`, { method: "DELETE" }); draw(r.item); undoToast("Gelöscht", r, draw);
-          } }, "Löschen") : null,
-          it.custom && it.type === "movie" ? h("button", { class: "btn sm danger", title: "Entfernt nur den Eintrag, Dateien bleiben erhalten", onclick: async () => {
-            if (!confirm("Eigenen Ordner aus der Liste entfernen? Die Dateien bleiben erhalten.")) return;
-            await api("/custom/" + it.id, { method: "DELETE" }); close(); toast("Entfernt", "ok"); await loadItems(); renderGrid();
-          } }, "Eintrag entfernen") : null),
+          } }, "Löschen") : null),
         !it.folder ? h("div", { class: "status bad" }, "Für diesen Titel ist kein Ordnername bekannt – Upload nicht möglich.") : null)));
   const onKey = e => { if (e.key === "Escape") close(); };
   function close() { wrap.remove(); document.removeEventListener("keydown", onKey); }
@@ -968,7 +954,7 @@ function openApplyAll(it, key, draw) {
     const { targets, overwritten } = compute();
     summary.className = "status" + (targets.length ? " ok" : "");
     summary.textContent = targets.length
-      ? `${targets.length} Kachel${targets.length === 1 ? "" : "n"} werden mit „${label}“ gefüllt${overwritten.length ? `, davon ${overwritten.length} überschrieben` : ""}.`
+      ? `${pl(targets.length, "Kachel", "Kacheln")} ${targets.length === 1 ? "wird" : "werden"} mit „${label}“ gefüllt${overwritten.length ? `, davon ${overwritten.length} überschrieben` : ""}.`
       : "Keine Kachel zu füllen – passe die Auswahl an.";
     go.disabled = !targets.length;
   };
@@ -990,7 +976,7 @@ function openApplyAll(it, key, draw) {
       h("img", { src: `/api/thumb/${it.id}/${key}?v=${it.slots[key].mtime}`, alt: "", style: "width:64px;border-radius:6px;border:1px solid var(--line)" }),
       h("div", { class: "hint" }, "Das Bild wird kopiert und jede Kopie Kometa-konform benannt (poster, Season00, Season01 …). Das Original bleibt unverändert.")),
     h("label", { class: "f" }, "Welche Kacheln?"),
-    radio("range", "known", "Nur vorhandene Kacheln dieser Serie", `${known} weitere Kachel${known === 1 ? "" : "n"} (Poster + bekannte Staffeln laut Plex/Sonarr)`, opt.range === "known", v => { opt.range = v; }),
+    radio("range", "known", "Nur vorhandene Kacheln dieser Serie", `${pl(known, "weitere Kachel", "weitere Kacheln")} (Poster + bekannte Staffeln laut Plex/Sonarr)`, opt.range === "known", v => { opt.range = v; }),
     allRow,
     key !== "poster" ? check("Serienposter einbeziehen", null, opt.poster, v => { opt.poster = v; }) : null,
     check("Specials (Season00) einbeziehen", null, opt.specials, v => { opt.specials = v; }),
@@ -1001,11 +987,11 @@ function openApplyAll(it, key, draw) {
     [go, h("button", { class: "btn", onclick: () => m.close() }, "Abbrechen")]);
   go.onclick = async () => {
     const { targets, overwritten } = compute();
-    if (overwritten.length && !confirm(`${overwritten.length} bereits belegte Kachel(n) werden überschrieben. Fortfahren?`)) return;
+    if (overwritten.length && !confirm(`${pl(overwritten.length, "bereits belegte Kachel", "bereits belegte Kacheln")} ${overwritten.length === 1 ? "wird" : "werden"} überschrieben. Fortfahren?`)) return;
     try {
       const r = await busy(go, () => api(`/items/${it.id}/copy-all`, { json: { source: key, targets, overwrite: opt.overwrite } }));
       m.close();
-      undoToast(`${r.written.length} Kachel${r.written.length === 1 ? "" : "n"} gesetzt ✓`, r, draw);
+      undoToast(`${pl(r.written.length, "Kachel", "Kacheln")} gesetzt ✓`, r, draw);
       if (r.warning) toast("Plex: " + r.warning, "bad");
       r.written.forEach(t => S.rain.add(it.id + "|" + t));
       draw(r.item);
@@ -1134,25 +1120,6 @@ function openPosterDbSet(it, draw) {
   const m = modal(`ThePosterDB durchsuchen – Set für ${it.title}`, posterDbPanel(it, null, draw, () => m.close()));
 }
 
-/* ---------------------------------------------------- custom folder --- */
-function openCustom() {
-  const folder = h("input", { type: "text", placeholder: "z. B. Meine Serie (2024)" });
-  const title = h("input", { type: "text", placeholder: "Anzeigename (optional)" });
-  const type = h("select", {}, h("option", { value: "show" }, "Serie (Poster + Staffeln)"), h("option", { value: "movie" }, "Film (nur Poster)"));
-  const st = h("div", { class: "status" });
-  const go = h("button", { class: "btn primary", onclick: async e => {
-    try {
-      const r = await busy(e.currentTarget, () => api("/custom", { json: { world: S.world, folder: folder.value, type: type.value, title: title.value } }));
-      m.close(); await loadItems(); renderGrid(); api("/status").then(s => { S.st.summary = s; updateHero(); });
-      if (r.item.type === "movie") openPreview(r.item, "poster", it => { loadItems().then(renderGrid); }); else openItem(r.item.id);
-    } catch (err) { st.className = "status bad"; st.textContent = "⚠ " + err.message; }
-  } }, "Anlegen");
-  const m = modal("Eigener Ordner", h("div", {},
-    h("p", { class: "hint" }, "Für Titel, die weder in Plex noch in Sonarr/Radarr stehen. Der Ordnername muss genau so heißen, wie Kometa ihn erwartet (gleich wie der Medienordner)."),
-    h("label", { class: "f" }, "Ordnername"), folder, h("label", { class: "f" }, "Typ"), type, h("label", { class: "f" }, "Anzeigename"), title, st), go);
-  folder.focus();
-}
-
 /* ================================================== files / drag & drop === */
 let dragDepth = 0;
 const hasFiles = e => e.dataTransfer && [...e.dataTransfer.types].includes("Files");
@@ -1201,13 +1168,6 @@ async function collectFiles(dt) {
 }
 
 function pickFiles(cb, multiple = true, directory = false) {
-  if (!cb) {
-    const m = modal("Hochladen", h("div", { class: "row wrap" },
-      h("button", { class: "btn primary", onclick: () => { m.close(); pickFiles(f => importFiles(f), true); } }, "Bilder / ZIP wählen"),
-      h("button", { class: "btn", onclick: () => { m.close(); pickFiles(f => importFiles(f), true, true); } }, "Ordner wählen"),
-      h("p", { class: "hint", style: "width:100%" }, "Oder ziehe Dateien, Ordner und ZIPs einfach irgendwo ins Fenster.")));
-    return;
-  }
   const inp = $("#picker");
   inp.value = ""; inp.multiple = multiple;
   inp.webkitdirectory = directory;
@@ -1221,7 +1181,7 @@ function pickSet(cb) {
   const m = modal("Set hochladen", h("div", {},
     h("p", { class: "hint", style: "margin-top:0" }, "Alle Bilder gehören zu dieser Serie. p5assets erkennt Poster und Staffeln an den Dateinamen und benennt sie Kometa-konform."),
     h("div", { class: "row wrap" },
-      h("button", { class: "btn primary", onclick: () => { m.close(); pickFiles(cb, true, true); } }, icon("folderplus", 16), "Ordner wählen"),
+      h("button", { class: "btn primary", onclick: () => { m.close(); pickFiles(cb, true, true); } }, icon("folder", 16), "Ordner wählen"),
       h("button", { class: "btn", onclick: () => { m.close(); pickFiles(cb, true); } }, icon("upload", 16), "ZIP / Bilder wählen"))));
 }
 
@@ -1232,7 +1192,7 @@ async function importFiles(files, itemId, onDone, item, review) {
   if (itemId) fd.append("item_id", itemId); else fd.append("world", S.world);
   files.forEach(f => fd.append("files", f.file, f.path));
   const bar = h("i", { style: "width:0%" });
-  const m = modal("Lade hoch …", h("div", {}, h("p", {}, `${files.length} Datei(en) werden übertragen`), h("div", { class: "progress" }, bar)));
+  const m = modal("Lade hoch …", h("div", {}, h("p", {}, `${pl(files.length, "Datei", "Dateien")} ${files.length === 1 ? "wird" : "werden"} übertragen`), h("div", { class: "progress" }, bar)));
   let res;
   try {
     res = await new Promise((resolve, reject) => {
@@ -1253,7 +1213,7 @@ async function importFiles(files, itemId, onDone, item, review) {
   if (review && item) return reviewImport(res, onDone, item);   // "Set hochladen": always the review dialog, series fixed
   if (itemId && allSet && !twice) {
     const clash = item ? [...new Set(used)].filter(k => item.slots[k] && item.slots[k].exists) : [];
-    if (clash.length && !confirm(`${clash.length} Kachel${clash.length === 1 ? " ist" : "n sind"} schon belegt (${clash.slice(0, 6).map(k => slotLabel(k, "show")).join(", ")}${clash.length > 6 ? " …" : ""}) und ${clash.length === 1 ? "wird" : "werden"} überschrieben. Fortfahren?`)) {
+    if (clash.length && !confirm(`${pl(clash.length, "Kachel", "Kacheln")} ${clash.length === 1 ? "ist" : "sind"} schon belegt (${clash.slice(0, 6).map(k => slotLabel(k, "show")).join(", ")}${clash.length > 6 ? " …" : ""}) und ${clash.length === 1 ? "wird" : "werden"} überschrieben. Fortfahren?`)) {
       api("/import/" + res.session, { method: "DELETE" }).catch(() => {});
       return;
     }
@@ -1267,7 +1227,7 @@ async function applyImport(sid, entries, onDone) {
   if (!assignments.length) { api("/import/" + sid, { method: "DELETE" }); return; }
   try {
     const r = await api(`/import/${sid}/apply`, { json: { assignments } });
-    if (r.done.length) toast(`${r.done.length} Asset(s) gespeichert ✓`, "ok");
+    if (r.done.length) toast(`${pl(r.done.length, "Asset", "Assets")} gespeichert ✓`, "ok");
     r.failed.forEach(f => toast(f.error, "bad"));
     r.done.filter(d => d.warning).forEach(d => toast("Plex: " + d.warning, "bad"));
     assignments.forEach(a => S.rain.add(a.item_id + "|" + a.slot));
@@ -1326,7 +1286,7 @@ function reviewImport(res, onDone, fixed) {
     refreshBtn();
   }
   draw();
-  const m = modal(`${rows.length} Bilder erkannt`, h("div", {},
+  const m = modal(`${pl(rows.length, "Bild", "Bilder")} erkannt`, h("div", {},
     h("p", { class: "hint" }, fixed ? `Alle Bilder gehören zu „${fixed.title}“. Die Zuordnung zu Poster und Staffeln erkennt p5assets an den Dateinamen – prüfe oder ändere sie. Die Dateien werden Kometa-konform benannt (poster, Season01 …).`
       : "Zuordnung automatisch anhand von Datei- und Ordnernamen (nur Titel dieser Welt). Prüfe oder ändere sie – die Dateien werden Kometa-konform benannt (poster, Season01 …)."), list),
     [apply, h("button", { class: "btn", onclick: () => { api("/import/" + res.session, { method: "DELETE" }); m.close(); } }, "Abbrechen"),
@@ -1390,7 +1350,6 @@ function scanSig() {
     worlds: c.worlds.map(w => [w.id, w.assets_path, w.search_depth, w.mirror_coming_soon]),
     arr: c.arr.map(a => [a.id, a.kind, a.name, a.url, a.api_key, a.world, a.hide_unmonitored]),
     assets: [c.assets.asset_folders, c.assets.ignore_specials],
-    custom: c.custom.length,
   });
 }
 
@@ -1573,7 +1532,7 @@ function wWorlds(nav, c) {
       const r = await api("/path/check", { json: { path: path.value } });
       if (!r.exists) setStatus(st, false, "Ordner existiert nicht (im Container gemountet?)");
       else if (!r.writable) setStatus(st, false, "Ordner ist nicht beschreibbar");
-      else setStatus(st, true, `Ordner bereit (${r.entries} Einträge)`);
+      else setStatus(st, true, `Ordner bereit (${pl(r.entries, "Eintrag", "Einträge")})`);
       return r.exists && r.writable;
     };
     checks.push(async () => { w.assets_path = path.value; w.name = name.value; return check(); });
@@ -1671,7 +1630,7 @@ function wAssign(nav, c) {
   draw();
   const unplaced = () => chips.filter(ch => !placed(ch)).length;
   const next = () => {
-    if (unplaced() && !confirm(`${unplaced()} Eintrag/Einträge sind noch nicht zugeordnet und landen in „${worlds[0].name}“. Fortfahren?`)) return;
+    if (unplaced() && !confirm(`${pl(unplaced(), "Eintrag ist", "Einträge sind")} noch nicht zugeordnet und ${unplaced() === 1 ? "landet" : "landen"} in „${worlds[0].name}“. Fortfahren?`)) return;
     persist(); stepNext();
   };
   return h("div", {}, h("h1", {}, "Zuordnung"),

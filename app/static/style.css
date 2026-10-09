@@ -498,3 +498,6 @@ body::before{content:"";position:fixed;top:0;left:0;right:0;height:env(safe-area
 #toasts{bottom:calc(env(safe-area-inset-bottom,0px) + 12px)}
 .lbox{max-height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 24px)}
 .modalwrap{align-items:safe center}
+
+/* Touch devices cannot pick whole folders: the extra button is for desktop browsers only */
+@media(hover:none){.folderpick{display:none}}
