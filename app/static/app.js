@@ -1319,9 +1319,13 @@ function checkSet(t, rows) {
   lines.push({ cls: posterMissing ? "bad" : "ok", text: posterMissing ? `Serienposter ${posterExists ? "fehlt im Set (im Assets-Ordner ist eins vorhanden)" : "fehlt im Set"}.` : "Serienposter ist enthalten." });
   if (known.some(s => s.n === 0)) lines.push({ cls: "", text: has(0) ? "Specials sind enthalten." : "Specials sind nicht im Set (optional)." });
   if (early.length) lines.push({ cls: "", text: `${seasonList(early)} ${early.length === 1 ? "gibt" : "geben"} es in Plex noch nicht – wird vorab abgelegt.` });
+  const bySlot = {};
+  rows.forEach(r => { (bySlot[r.slot] = bySlot[r.slot] || []).push(r.name.split("/").pop()); });
+  const dups = Object.entries(bySlot).filter(([, names]) => names.length > 1);
+  if (dups.length) lines.push({ cls: "bad", text: `Doppelt belegt – ${dups.map(([k, names]) => `${slotLabel(k, "show")}: ${names.join(" und ")}`).join("; ")}. Bei einem der Bilder das Häkchen entfernen (eine Kachel kann nur ein Bild haben).` });
   const replaced = rows.filter(r => t.slots[r.slot] && t.slots[r.slot].exists).length;
   if (replaced) lines.push({ cls: "warn", text: `${replaced === 1 ? "Ein vorhandenes Bild wird" : `${replaced} vorhandene Bilder werden`} ersetzt.` });
-  return { ok: !missing.length && !posterMissing, lines };
+  return { ok: !missing.length && !posterMissing && !dups.length, dups: dups.length, lines };
 }
 
 function reviewImport(res, onDone, fixed) {
@@ -1331,7 +1335,11 @@ function reviewImport(res, onDone, fixed) {
   const list = h("div"), summary = h("div");
   const count = () => rows.filter(r => r.use && r.item_id).length;
   const apply = h("button", { class: "btn primary" });
-  const refreshBtn = () => { const n = count(); apply.textContent = `${pl(n, "Asset", "Assets")} übernehmen`; apply.disabled = !n; };
+  let dupBlock = false;     // two files for the same tile: the review must be fixed first (a tile holds one image)
+  const refreshBtn = () => {
+    const n = count(); apply.textContent = `${pl(n, "Asset", "Assets")} übernehmen`; apply.disabled = !n || dupBlock;
+    apply.title = dupBlock ? "Erst die doppelt belegten Kacheln auflösen: bei einem der Bilder das Häkchen entfernen" : "";
+  };
   const ensureTarget = async id => { if (!targets[id]) { try { targets[id] = await api("/items/" + id); } catch { /* the check is optional */ } } };
 
   const fixedSlots = () => fixed ? ["poster", ...Array.from({ length: (fixed.max_season ?? 50) + 1 }, (_, n) => "season-" + n), ...Object.keys(fixed.slots).filter(k => !/^season-\d+$/.test(k) && k !== "poster")]
@@ -1384,17 +1392,22 @@ function reviewImport(res, onDone, fixed) {
       else if (t) movies.push(r); else loose.push(r);
     }
     const checks = [...series].map(([id, rs]) => ({ id, rs, t: targets[id], chk: checkSet(targets[id], rs.filter(r => r.use)) }));
-    const okN = checks.filter(c => c.chk.ok).length;
-    fill(summary, checks.length > 1 ? h("div", { class: "setsum" }, h("b", {}, pl(checks.length, "Serie", "Serien") + ":"),
-      h("span", { class: "pill ok" }, `${okN} vollständig`), checks.length - okN ? h("span", { class: "pill warn" }, `${checks.length - okN} unvollständig`) : null) : null);
+    const dupN = checks.filter(c => c.chk.dups).length, okN = checks.filter(c => c.chk.ok).length, incN = checks.length - okN - dupN;
+    const movieDup = movies.some(r => r.use && dups[r.item_id + "|" + r.slot] > 1);
+    dupBlock = Object.values(dups).some(n => n > 1);
+    fill(summary,
+      checks.length > 1 ? h("div", { class: "setsum" }, h("b", {}, pl(checks.length, "Serie", "Serien") + ":"),
+        h("span", { class: "pill ok" }, `${okN} vollständig`), incN ? h("span", { class: "pill warn" }, `${incN} unvollständig`) : null,
+        dupN ? h("span", { class: "pill bad" }, `${dupN} mit doppelt belegten Kacheln`) : null) : null,
+      dupBlock ? h("div", { class: "status bad", style: "margin-bottom:10px" }, "⚠ Eine Kachel kann nur ein Bild haben: Bei doppelt belegten Bildern (rot markiert) bitte ein Häkchen entfernen oder eine andere Kachel wählen.") : null);
     const group = (title, pillEl, open, body, lines) => h("details", { class: "impgroup", open },
       h("summary", {}, h("b", {}, title), h("span", { class: "grow" }), pillEl),
       lines ? h("ul", { class: "setcheck" }, lines.map(l => h("li", { class: l.cls }, l.text))) : null, body);
     fill(list,
       checks.map(c => group(`${c.t.title}${c.t.year ? ` (${c.t.year})` : ""} · ${pl(c.rs.length, "Bild", "Bilder")}`,
-        h("span", { class: "pill " + (c.chk.ok ? "ok" : "warn") }, c.chk.ok ? "Set vollständig" : "unvollständig"),
+        h("span", { class: "pill " + (c.chk.dups ? "bad" : c.chk.ok ? "ok" : "warn") }, c.chk.dups ? "doppelt belegt" : c.chk.ok ? "Set vollständig" : "unvollständig"),
         checks.length === 1 || !c.chk.ok, c.rs.map(r => buildRow(r, dups)), c.chk.lines)),
-      movies.length ? group(`Filme · ${pl(movies.length, "Bild", "Bilder")}`, null, true, movies.map(r => buildRow(r, dups))) : null,
+      movies.length ? group(`Filme · ${pl(movies.length, "Bild", "Bilder")}`, movieDup ? h("span", { class: "pill bad" }, "doppelt belegt") : null, true, movies.map(r => buildRow(r, dups))) : null,
       loose.length ? group(`${checks.length || movies.length ? "Nicht zugeordnet" : "Bilder"} · ${pl(loose.length, "Bild", "Bilder")}`, loose.some(r => r.kind !== "ignore") ? h("span", { class: "pill warn" }, "bitte Titel wählen") : null, true, loose.map(r => buildRow(r, dups))) : null);
     refreshBtn();
   }
