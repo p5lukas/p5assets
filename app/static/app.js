@@ -241,12 +241,20 @@ const fmtBytes = b => b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max
 const fmtWhen = ts => new Date(ts * 1000).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 const REASON = { replace: "ersetzt", delete: "gelöscht", orphan: "verwaister Ordner", restore: "vor Wiederherstellung" };
 
+/** "✕" that clears a search field with one tap (only visible while there is text); Esc in the field does the same. */
+function clearBtn(input) {
+  const btn = h("button", { type: "button", class: "sclear", "aria-label": "Suche leeren", title: "Suche leeren", hidden: !input.value,
+    onclick: () => { input.value = ""; input.dispatchEvent(new Event("input", { bubbles: true })); btn.hidden = true; input.focus(); } }, "✕");
+  input.addEventListener("input", () => { btn.hidden = !input.value; });
+  input.addEventListener("keydown", e => { if (e.key === "Escape" && input.value) { e.stopPropagation(); btn.click(); } });
+  return btn;
+}
 const normText = t => (t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 const LIST_SEARCH_MIN = 8;      // a search field is only worth it for longer lists
 /** Small search field for a list inside a window; calls onInput(normalized text) while typing. */
 function listSearch(onInput) {
   const input = h("input", { type: "search", placeholder: "Suchen …", autocomplete: "off", enterkeyhint: "search", oninput: e => onInput(normText(e.target.value).trim()) });
-  return h("div", { class: "search lsearch" }, icon("search", 16), input);
+  return h("div", { class: "search lsearch" }, icon("search", 16), input, clearBtn(input));
 }
 
 /** "Papierkorb & Aufräumen": the trash (replaced/deleted posters, 30 days) and folders that belong to no title any more. */
@@ -477,7 +485,7 @@ async function logsPage() {
             await api(`/logs?file=${encodeURIComponent(st.file)}`, { method: "DELETE" }); await load(false); toast("Log geleert", "ok");
           } }, icon("trash", 16), "Clear")),
         h("div", { class: "row wrap", style: "align-items:flex-end;margin-top:16px;border-top:1px solid var(--line);padding-top:14px" },
-          h("div", { class: "grow", style: "min-width:240px" }, h("label", { class: "f", style: "margin-top:0" }, "Logs durchsuchen"), q),
+          h("div", { class: "grow", style: "min-width:240px" }, h("label", { class: "f", style: "margin-top:0" }, "Logs durchsuchen"), h("div", { class: "clearwrap" }, q, clearBtn(q))),
           h("div", {}, h("label", { class: "f", style: "margin-top:0" }, "Nach Level filtern"), chips))),
       h("div", { class: "logcard", style: "padding:0;margin-top:18px" },
         h("div", { class: "row loghead" }, title, h("div", { class: "spacer" }), count, liveBadge),
@@ -491,6 +499,7 @@ async function logsPage() {
 /* ========================================================== dashboard === */
 function dashboard() {
   S.view = "dash";
+  const qInput = h("input", { type: "search", placeholder: "Titel suchen …", id: "q", value: S.q, autocomplete: "off", enterkeyhint: "search", "aria-label": "Titel suchen", oninput: debounce(async e => { S.q = e.target.value; await loadItems(); renderGrid(); }, 150) });
   setAccent();
   const ws = cfg().worlds;
   fill(app,
@@ -510,7 +519,7 @@ function dashboard() {
       h("button", { class: "btn tb icon logbtn", id: "logbtn", title: "Logs", onclick: logsPage }, icon("terminal", 20), h("span", { class: "lbadge" })),
       h("button", { class: "btn tb icon", title: "Einstellungen", onclick: () => wizard(true) }, icon("gear", 20)),
     )),
-    h("main", {}, h("div", { id: "hero" }), h("div", { id: "tabrow", class: "tabrow" }, h("div", { id: "chips" }), h("div", { class: "search" }, icon("search", 16), h("input", { type: "search", placeholder: "Titel suchen …", id: "q", value: S.q, autocomplete: "off", enterkeyhint: "search", oninput: debounce(async e => { S.q = e.target.value; await loadItems(); renderGrid(); }, 150) }))), h("div", { id: "az", class: "azbar" }), h("div", { id: "grid" }), h("div", { id: "az2", class: "azbar" })),
+    h("main", {}, h("div", { id: "hero" }), h("div", { id: "tabrow", class: "tabrow" }, h("div", { id: "chips" }), h("div", { class: "search" }, icon("search", 16), qInput, clearBtn(qInput))), h("div", { id: "az", class: "azbar" }), h("div", { id: "grid" }), h("div", { id: "az2", class: "azbar" })),
   );
   updateHero();
   S.dimTries = 0; loadHistory();
