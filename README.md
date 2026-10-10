@@ -187,6 +187,7 @@ Updates: Container in Unraid mit *Force Update* aktualisieren.
 ## Hinweis
 Es gibt keine eigene Anmeldung – betreibe p5assets nur im Heimnetz oder hinter einem Reverse Proxy mit Login.
 Plex-Token, API-Keys und Benachrichtigungs-Zugangsdaten liegen in `/config/config.json` und werden nie ins Log geschrieben.
+Verbindungen zu Plex, Sonarr und Radarr im Heimnetz akzeptieren selbstsignierte Zertifikate (üblich bei `https://` im LAN); die Online-Suche und Benachrichtigungen im Internet nutzen die normale Zertifikatsprüfung.
 
 Die Tests (`pytest`) laufen in der GitHub-Action vor jedem Image-Bau.
 
