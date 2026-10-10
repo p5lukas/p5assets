@@ -1439,57 +1439,45 @@ function reviewImport(res, onDone, fixed) {
 
 /* ======================================================= wizard / setup === */
 /* ============================================================ login === */
-const FINGER = {
-  tip: ["   ___   ", "  |   |  ", "  |   |  ", "  |   |  "],
-  hand: [" __|   |__ ", "|  _____  |", "|  |   |  |", " \\ |___| / ", "  \\_____/  "],
-};
-/** Fun message after a wrong password (terminal look, own ASCII drawing): never blocks input, vanishes by itself. */
+/** Fun line after a wrong password: typed letter by letter in red under the password field (terminal look); takes no focus, blocks nothing. */
 let funTimer = null;
-function funMessage() {
-  const old = $("#fun"); if (old) old.remove(); clearInterval(funTimer);
-  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const art = h("pre", { class: "funart", "aria-hidden": "true" }), typed = h("span", { "aria-live": "polite" }), cur = h("u", {}, "_");
-  const box = h("div", { id: "fun", class: "fun" }, h("div", { class: "funhead" }, "root@p5assets:~"),
-    h("div", { class: "funbody" }, art, h("div", { class: "funtext" }, h("div", { class: "funerr" }, "> ACCESS DENIED"), h("div", {}, typed, cur))));
-  document.body.append(box);
-  const text = "Ah ah ah, you didn’t write the magic word!";
-  const offsets = [0, -2, 0, 2], draw = f => { const pad = " ".repeat(Math.max(0, 2 + offsets[f % 4])); art.textContent = [...FINGER.tip.map(l => pad + l), ...FINGER.hand.map(l => "  " + l)].join("\n"); };
-  draw(0);
-  if (reduce) { typed.textContent = text; funTimer = setTimeout(() => box.remove(), 4500); return; }
-  let i = 0, f = 0;
-  funTimer = setInterval(() => {
-    f++; draw(f); if (i < text.length) typed.textContent = text.slice(0, i += 2);
-    if (f > 24) { clearInterval(funTimer); box.classList.add("out"); setTimeout(() => box.remove(), 300); }
-  }, 170);
+function funLine(el) {
+  clearInterval(funTimer);
+  const text = "> Ah ah ah, you didn’t write the magic word!", typed = h("span", {}), cur = h("u", {});
+  fill(el, typed, cur);
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) { typed.textContent = text; cur.remove(); return; }
+  let i = 0;
+  funTimer = setInterval(() => { typed.textContent = text.slice(0, ++i); if (i >= text.length) clearInterval(funTimer); }, 32);
 }
 
 function showLogin(note) {
   if (S.view === "login") return;
   S.view = "login";
   clearInterval(S.logTimer); clearInterval(S.poll); clearTimeout(S.dimTimer);
-  document.querySelectorAll(".modalwrap, .scrim, #fun").forEach(el => el.remove());
+  document.querySelectorAll(".modalwrap, .scrim").forEach(el => el.remove());
   $("#foot").replaceChildren();
   try { const hue = +localStorage.getItem("p5hue"); const t = themeOf(Number.isFinite(hue) && hue >= 0 ? hue : 140), st = document.documentElement.style;
     st.setProperty("--h", hue >= 0 ? hue : 140); st.setProperty("--sat", t.sat + "%"); st.setProperty("--lit", t.lit + "%"); } catch { /* default colour */ }
   const user = h("input", { type: "text", name: "username", autocomplete: "username", autocapitalize: "none", spellcheck: false, "aria-label": "Benutzername", required: true });
-  const pass = h("input", { type: "password", name: "password", autocomplete: "current-password", "aria-label": "Passwort", required: true });
+  const pass = h("input", { type: "password", name: "password", autocomplete: "current-password", "aria-label": "Passwort", required: true, oninput: () => { clearInterval(funTimer); funEl.replaceChildren(); } });
   const remember = h("input", { type: "checkbox", checked: true, style: "accent-color:var(--accent)" });
   const err = h("div", { class: "status bad", role: "alert", hidden: true });
+  const funEl = h("div", { class: "funline", "aria-live": "polite" });
   const go = h("button", { class: "btn primary", type: "submit", style: "width:100%;justify-content:center" }, "Anmelden");
   const form = h("form", { class: "logincard", onsubmit: async e => {
     e.preventDefault(); err.hidden = true; go.disabled = true;
     try {
       await api("/auth/login", { json: { username: user.value, password: pass.value, remember: remember.checked } });
-      S.view = ""; $("#fun") && $("#fun").remove(); app.replaceChildren(); boot();
+      S.view = ""; clearInterval(funTimer); app.replaceChildren(); boot();
     } catch (ex) {
       err.hidden = false; err.textContent = "⚠ " + ex.message; go.disabled = false;
-      if (!/Zu viele/.test(ex.message)) { pass.value = ""; pass.focus(); if (S.auth && S.auth.fun !== false) funMessage(); }     // focus stays in the field: type again right away
+      if (!/Zu viele/.test(ex.message)) { pass.value = ""; pass.focus(); if (S.auth && S.auth.fun !== false) funLine(funEl); }     // focus stays in the field: type again right away
     }
   } },
     h("div", { class: "logo" }, h("i", { class: "logomark", "aria-hidden": "true" }, "p5"), h("span", {}, "assets", h("u", {}, "_"))),
     h("h1", {}, "Anmeldung"), note ? h("p", { class: "hint" }, note) : h("p", { class: "hint" }, "Bitte melde dich an, um p5assets zu nutzen."),
-    h("label", { class: "f" }, "Benutzername"), user, h("label", { class: "f" }, "Passwort"), pass,
-    h("label", { class: "opt compact", style: "margin:14px 0" }, remember, "Angemeldet bleiben (30 Tage)"),
+    h("label", { class: "f" }, "Benutzername"), user, h("label", { class: "f" }, "Passwort"), pass, funEl,
+    h("label", { class: "opt compact", style: "margin:6px 0 14px" }, remember, "Angemeldet bleiben (30 Tage)"),
     err, go,
     h("details", { class: "how", style: "margin-top:18px" }, h("summary", {}, "Passwort vergessen?"), h("div", { class: "hint" },
       "Das geht nur mit Zugriff auf den Server. Eine dieser Möglichkeiten:",
@@ -1540,7 +1528,7 @@ function wAuth(nav) {
         try { await busy(e.currentTarget, () => api("/auth/change", { json })); toast("Gespeichert ✓ – andere Geräte müssen sich neu anmelden", "ok"); [cur.i, np.i, np2.i].forEach(i => { i.value = ""; }); await reload(); }
         catch (err) { setStatus(st, false, err.message); }
       } }, "Speichern")), st),
-    h("div", { class: "apirow" }, h("div", { class: "row" }, h("div", { class: "grow" }, h("h3", {}, "Spaß-Meldung bei falschem Passwort"), h("div", { class: "hint" }, "Eine kleine Terminal-Einblendung nach einem Fehlversuch. Sie stört die Eingabe nicht.")),
+    h("div", { class: "apirow" }, h("div", { class: "row" }, h("div", { class: "grow" }, h("h3", {}, "Spaß-Meldung bei falschem Passwort"), h("div", { class: "hint" }, "Ein getippter Spruch in Rot unter dem Passwortfeld nach einem Fehlversuch. Er stört die Eingabe nicht.")),
       h("label", { class: "switch" + (fun ? " on" : "") }, state, funSw, h("i")))),
     h("div", { class: "row wrap", style: "margin:14px 0" }, h("button", { class: "btn", onclick: async () => { await api("/auth/logout", { method: "POST" }); location.reload(); } }, "Abmelden")),
     h("details", { class: "how" }, h("summary", {}, "Anmeldung ausschalten"), h("div", { class: "apirow" }, off.el,
