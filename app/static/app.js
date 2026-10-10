@@ -682,6 +682,8 @@ function renderGrid() {
     fill(g, h("div", { class: "empty" },
       S.st.summary.running ? h("h2", {}, "Scanne …") :
       S.filter === "missing" && !S.q && scopeStats().items ? [h("div", { class: "big" }, "🎉"), h("h2", {}, "Alles vollständig!"), "Es fehlt kein Poster und keine Staffel."] :
+      !worldStats().items && S.st.summary.error ? [h("h2", {}, "Der Scan ist fehlgeschlagen"), "Details stehen oben und im Log. Prüfe die Verbindung zu Plex, Sonarr und Radarr und starte dann einen neuen Scan.",
+        h("div", { style: "margin-top:14px" }, h("button", { class: "btn primary", onclick: doScan }, "Erneut scannen"))] :
       !worldStats().items ? [h("h2", {}, "Hier ist noch nichts"), "Ordne dieser Welt unter ⚙ Bibliotheken oder Sonarr/Radarr zu."] :
       [h("h2", {}, "Nichts gefunden"), "Passe Filter oder Suche an – oder starte einen neuen Scan."]));
     return;
