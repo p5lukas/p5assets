@@ -875,7 +875,12 @@ async def import_files(request: Request):
             slot = "poster" if s["kind"] == "poster" else kometa.slot_key(s["season"])
             if kometa.slot_allowed(fixed["type"], set(fixed["slots"]), slot):
                 s["item_id"], s["slot"], s["item_title"], s["item_year"] = fixed["id"], slot, fixed["title"], fixed["year"]
-    return {"session": sid, "entries": suggestions, "errors": errors, "world": world}
+    by_id = {i["id"]: i for i in pool}
+    if fixed:
+        by_id[fixed["id"]] = fixed
+    # what the review dialog needs to check a set for completeness: the known seasons (Plex/Sonarr) and which tiles already exist
+    targets = {e["item_id"]: _public_item(by_id[e["item_id"]], True) for e in suggestions if e.get("item_id") in by_id}
+    return {"session": sid, "entries": suggestions, "errors": errors, "world": world, "targets": targets}
 
 
 @app.get("/api/import/{sid}/{fid}")

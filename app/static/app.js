@@ -1277,58 +1277,127 @@ async function applyImport(sid, entries, onDone) {
   } catch (e) { toast(e.message, "bad"); }
 }
 
+/** "Staffeln 1–3, 5" / "Staffel 3" / "Specials, Staffel 2": readable list of season numbers (0 = Specials). */
+function seasonList(nums) {
+  const sorted = [...new Set(nums)].sort((a, b) => a - b), ns = sorted.filter(n => n > 0), parts = [];
+  for (let i = 0; i < ns.length;) {
+    let j = i; while (j + 1 < ns.length && ns[j + 1] === ns[j] + 1) j++;
+    parts.push(j - i >= 2 ? `${ns[i]}–${ns[j]}` : ns.slice(i, j + 1).join(", ")); i = j + 1;
+  }
+  const out = [];
+  if (sorted.includes(0)) out.push("Specials");
+  if (ns.length) out.push(`${ns.length === 1 ? "Staffel" : "Staffeln"} ${parts.join(", ")}`);
+  return out.join(" und ");
+}
+
+/** Is a set complete? Compares the files of ONE series with the seasons Plex (and Sonarr) know. `t` = public item, `rows` = used rows. */
+function checkSet(t, rows) {
+  const inSet = new Set(rows.map(r => r.slot));
+  const known = Object.entries(t.slots).filter(([k, v]) => /^season-\d+$/.test(k) && !v.extra).map(([k, v]) => ({ n: +k.split("-")[1], exists: !!v.exists, arr: !!v.only_arr || !t.in_plex }));
+  const plexNums = known.filter(s => !s.arr && s.n > 0).map(s => s.n), arrNums = known.filter(s => s.arr && s.n > 0).map(s => s.n);
+  const relevant = t.in_plex ? plexNums : arrNums;            // what the set should cover (everything Plex has; for titles not in Plex: what Sonarr knows)
+  const has = n => inSet.has("season-" + n), existing = n => known.some(s => s.n === n && s.exists);
+  const missing = relevant.filter(n => !has(n)), covered = relevant.filter(has);
+  const existsNote = miss => {      // missing in the set, but the tile already has an image in the assets folder
+    const ex = miss.filter(existing);
+    if (!ex.length) return "";
+    return ex.length === miss.length ? ` – im Assets-Ordner ${miss.length === 1 ? "ist sie" : "sind sie"} schon vorhanden` : ` – ${seasonList(ex)} ${ex.length === 1 && ex[0] > 0 ? "ist" : "sind"} schon im Assets-Ordner vorhanden`;
+  };
+  const posterMissing = !inSet.has("poster"), posterExists = !!(t.slots.poster && t.slots.poster.exists);
+  const early = [...arrNums.filter(has), ...rows.map(r => r.slot).filter(k => /^season-\d+$/.test(k) && !known.some(s => "season-" + s.n === k)).map(k => +k.split("-")[1])].filter(n => n > 0);
+  const lines = [];
+  lines.push({ cls: "", text: t.in_plex
+    ? `Plex kennt ${pl(plexNums.length, "Staffel", "Staffeln")}${arrNums.length ? `, Sonarr kennt zusätzlich ${seasonList(arrNums)}` : ""}.`
+    : `Noch nicht in Plex – Sonarr kennt ${pl(arrNums.length, "Staffel", "Staffeln")}.` });
+  lines.push({ cls: missing.length ? "bad" : "ok", text: relevant.length
+    ? `Das Set deckt ${covered.length} von ${pl(relevant.length, "Staffel", "Staffeln")} ab${missing.length ? ` – es ${missing.length === 1 ? "fehlt" : "fehlen"}: ${seasonList(missing)}${existsNote(missing)}` : ""}.`
+    : "Keine Staffeln bekannt – nur das Serienposter lässt sich prüfen." });
+  lines.push({ cls: posterMissing ? "bad" : "ok", text: posterMissing ? `Serienposter ${posterExists ? "fehlt im Set (im Assets-Ordner ist eins vorhanden)" : "fehlt im Set"}.` : "Serienposter ist enthalten." });
+  if (known.some(s => s.n === 0)) lines.push({ cls: "", text: has(0) ? "Specials sind enthalten." : "Specials sind nicht im Set (optional)." });
+  if (early.length) lines.push({ cls: "", text: `${seasonList(early)} ${early.length === 1 ? "gibt" : "geben"} es in Plex noch nicht – wird vorab abgelegt.` });
+  const replaced = rows.filter(r => t.slots[r.slot] && t.slots[r.slot].exists).length;
+  if (replaced) lines.push({ cls: "warn", text: `${replaced === 1 ? "Ein vorhandenes Bild wird" : `${replaced} vorhandene Bilder werden`} ersetzt.` });
+  return { ok: !missing.length && !posterMissing, lines };
+}
+
 function reviewImport(res, onDone, fixed) {
   const rows = res.entries.map(e => ({ ...e, use: !!e.item_id && e.kind !== "ignore" }));
-  const list = h("div");
+  const targets = { ...(res.targets || {}) };
+  if (fixed && !targets[fixed.id]) targets[fixed.id] = fixed;
+  const list = h("div"), summary = h("div");
   const count = () => rows.filter(r => r.use && r.item_id).length;
   const apply = h("button", { class: "btn primary" });
-  const refreshBtn = () => { const n = count(); apply.textContent = `${n} Asset${n === 1 ? "" : "s"} übernehmen`; apply.disabled = !n; };
+  const refreshBtn = () => { const n = count(); apply.textContent = `${pl(n, "Asset", "Assets")} übernehmen`; apply.disabled = !n; };
+  const ensureTarget = async id => { if (!targets[id]) { try { targets[id] = await api("/items/" + id); } catch { /* the check is optional */ } } };
 
   const fixedSlots = () => fixed ? ["poster", ...Array.from({ length: (fixed.max_season ?? 50) + 1 }, (_, n) => "season-" + n), ...Object.keys(fixed.slots).filter(k => !/^season-\d+$/.test(k) && k !== "poster")]
     .map(k => ({ slot: k, label: slotLabel(k, fixed.type) })) : null;
   const dupSlots = () => { const c = {}; rows.filter(r => r.use && r.item_id).forEach(r => { c[r.slot] = (c[r.slot] || 0) + 1; }); return c; };
 
+  function buildRow(r, dups) {
+    const t = r.item_id ? targets[r.item_id] : null;
+    const sel = h("select", { onchange: e => { r.slot = e.target.value; draw(); } });
+    const fillSlots = opts => fill(sel, opts.map(o => h("option", { value: o.slot, selected: o.slot === r.slot }, o.label)));
+    const input = h("input", { type: "text", placeholder: "Titel suchen …", value: r.item_id ? `${r.item_title}${r.item_year ? " (" + r.item_year + ")" : ""}` : "" });
+    const list2 = h("div", { class: "list", hidden: true });
+    if (fixed && r.item_id) fillSlots(fixedSlots());
+    else if (r.item_id) {
+      fillSlots([{ slot: r.slot, label: slotLabel(r.slot, t ? t.type : "show") }]);
+      api(`/slots?world=${res.world}&q=` + encodeURIComponent(r.item_title || "")).then(os => { const o = os.find(x => x.id === r.item_id); if (o) fillSlots(o.slots); });
+    }
+    input.oninput = debounce(async () => {
+      const opts = await api(`/slots?world=${res.world}&q=` + encodeURIComponent(input.value));
+      list2.hidden = !opts.length;
+      fill(list2, opts.map(o => h("div", { onclick: async () => {
+        r.item_id = o.id; r.item_title = o.title; r.item_year = o.year; r.use = true;
+        const want = r.kind === "poster" ? "poster" : r.season != null ? "season-" + r.season : "poster";
+        r.slot = o.slots.some(s => s.slot === want) ? want : "poster";
+        list2.hidden = true; await ensureTarget(o.id); draw();
+      } }, `${o.title}${o.year ? " (" + o.year + ")" : ""} `, h("span", { class: "pill" }, o.type === "movie" ? "Film" : "Serie"))));
+    }, 200);
+    input.onblur = () => setTimeout(() => (list2.hidden = true), 150);
+    const chk = h("input", { type: "checkbox", checked: r.use, title: "Übernehmen", onchange: e => { r.use = e.target.checked; draw(); } });
+    const pills = [];
+    if (r.use && t && t.slots[r.slot] && t.slots[r.slot].exists) pills.push(h("span", { class: "pill warn", title: "Für diese Kachel gibt es schon ein Bild" }, "ersetzt vorhandenes Bild"));
+    if (r.use && r.item_id && dups[r.item_id + "|" + r.slot] > 1) pills.push(h("span", { class: "pill bad", title: "Mehrere Dateien für dieselbe Kachel – nur die letzte bleibt" }, "doppelt belegt"));
+    return h("div", { class: "imp" + (r.use ? "" : " skip") },
+      h("img", { src: `/api/import/${res.session}/${r.id}`, loading: "lazy" }),
+      h("div", { class: "fn" }, r.name, r.kind === "ignore" ? h("div", {}, h("span", { class: "pill bad" }, "Hintergrund/Banner – ignoriert")) : null),
+      fixed && r.item_id
+        ? h("div", { class: "c3 fixedtitle" }, h("b", {}, fixed.title + (fixed.year ? ` (${fixed.year})` : "")), h("span", { class: "pill ok" }, "diese Serie"), pills)
+        : h("div", { class: "ac c3" }, input, list2, pills.length ? h("div", { class: "pills" }, pills) : null),
+      h("div", { class: "c4" }, sel), chk);
+  }
+
   function draw() {
-    const dups = dupSlots();
-    fill(list, rows.map(r => {
-      const sel = h("select", { onchange: e => { r.slot = e.target.value; if (fixed) draw(); } });
-      const fillSlots = opts => fill(sel, opts.map(o => h("option", { value: o.slot, selected: o.slot === r.slot }, o.label)));
-      const input = h("input", { type: "text", placeholder: "Titel suchen …", value: r.item_id ? `${r.item_title}${r.item_year ? " (" + r.item_year + ")" : ""}` : "" });
-      const list2 = h("div", { class: "list", hidden: true });
-      if (fixed && r.item_id) fillSlots(fixedSlots());
-      else if (r.item_id) {
-        fillSlots([{ slot: r.slot, label: slotLabel(r.slot, "show") }]);
-        api(`/slots?world=${res.world}&q=` + encodeURIComponent(r.item_title || "")).then(os => { const o = os.find(x => x.id === r.item_id); if (o) fillSlots(o.slots); });
-      }
-      input.oninput = debounce(async () => {
-        const opts = await api(`/slots?world=${res.world}&q=` + encodeURIComponent(input.value));
-        list2.hidden = !opts.length;
-        fill(list2, opts.map(o => h("div", { onclick: () => {
-          r.item_id = o.id; r.item_title = o.title; r.item_year = o.year; r.use = true;
-          const want = r.kind === "poster" ? "poster" : r.season != null ? "season-" + r.season : "poster";
-          r.slot = o.slots.some(s => s.slot === want) ? want : "poster";
-          input.value = `${o.title}${o.year ? " (" + o.year + ")" : ""}`; list2.hidden = true; fillSlots(o.slots); chk.checked = true; row.classList.remove("skip"); refreshBtn();
-        } }, `${o.title}${o.year ? " (" + o.year + ")" : ""} `, h("span", { class: "pill" }, o.type === "movie" ? "Film" : "Serie"))));
-      }, 200);
-      input.onblur = () => setTimeout(() => (list2.hidden = true), 150);
-      const chk = h("input", { type: "checkbox", checked: r.use, title: "Übernehmen", onchange: e => { r.use = e.target.checked; row.classList.toggle("skip", !r.use); refreshBtn(); if (fixed) draw(); } });
-      const row = h("div", { class: "imp" + (r.use ? "" : " skip") },
-        h("img", { src: `/api/import/${res.session}/${r.id}`, loading: "lazy" }),
-        h("div", { class: "fn" }, r.name, r.kind === "ignore" ? h("div", {}, h("span", { class: "pill bad" }, "Hintergrund/Banner – ignoriert")) : null),
-        fixed && r.item_id
-          ? h("div", { class: "c3 fixedtitle" }, h("b", {}, fixed.title + (fixed.year ? ` (${fixed.year})` : "")), h("span", { class: "pill ok" }, "diese Serie"),
-              r.use && fixed.slots[r.slot] && fixed.slots[r.slot].exists ? h("span", { class: "pill warn", title: "Für diese Kachel gibt es schon ein Bild" }, "ersetzt vorhandenes Bild") : null,
-              r.use && dups[r.slot] > 1 ? h("span", { class: "pill bad", title: "Mehrere Dateien für dieselbe Kachel – nur die letzte bleibt" }, "doppelt belegt") : null)
-          : h("div", { class: "ac c3" }, input, list2),
-        h("div", { class: "c4" }, sel), chk);
-      return row;
-    }));
+    const dups = {};
+    rows.filter(r => r.use && r.item_id).forEach(r => { const k = r.item_id + "|" + r.slot; dups[k] = (dups[k] || 0) + 1; });
+    // groups: one per series (with the completeness check), movies, and everything without a title
+    const series = new Map(), movies = [], loose = [];
+    for (const r of rows) {
+      const t = r.item_id ? targets[r.item_id] : null;
+      if (t && t.type === "show") { if (!series.has(r.item_id)) series.set(r.item_id, []); series.get(r.item_id).push(r); }
+      else if (t) movies.push(r); else loose.push(r);
+    }
+    const checks = [...series].map(([id, rs]) => ({ id, rs, t: targets[id], chk: checkSet(targets[id], rs.filter(r => r.use)) }));
+    const okN = checks.filter(c => c.chk.ok).length;
+    fill(summary, checks.length > 1 ? h("div", { class: "setsum" }, h("b", {}, pl(checks.length, "Serie", "Serien") + ":"),
+      h("span", { class: "pill ok" }, `${okN} vollständig`), checks.length - okN ? h("span", { class: "pill warn" }, `${checks.length - okN} unvollständig`) : null) : null);
+    const group = (title, pillEl, open, body, lines) => h("details", { class: "impgroup", open },
+      h("summary", {}, h("b", {}, title), h("span", { class: "grow" }), pillEl),
+      lines ? h("ul", { class: "setcheck" }, lines.map(l => h("li", { class: l.cls }, l.text))) : null, body);
+    fill(list,
+      checks.map(c => group(`${c.t.title}${c.t.year ? ` (${c.t.year})` : ""} · ${pl(c.rs.length, "Bild", "Bilder")}`,
+        h("span", { class: "pill " + (c.chk.ok ? "ok" : "warn") }, c.chk.ok ? "Set vollständig" : "unvollständig"),
+        checks.length === 1 || !c.chk.ok, c.rs.map(r => buildRow(r, dups)), c.chk.lines)),
+      movies.length ? group(`Filme · ${pl(movies.length, "Bild", "Bilder")}`, null, true, movies.map(r => buildRow(r, dups))) : null,
+      loose.length ? group(`${checks.length || movies.length ? "Nicht zugeordnet" : "Bilder"} · ${pl(loose.length, "Bild", "Bilder")}`, loose.some(r => r.kind !== "ignore") ? h("span", { class: "pill warn" }, "bitte Titel wählen") : null, true, loose.map(r => buildRow(r, dups))) : null);
     refreshBtn();
   }
   draw();
   const m = modal(`${pl(rows.length, "Bild", "Bilder")} erkannt`, h("div", {},
     h("p", { class: "hint" }, fixed ? `Alle Bilder gehören zu „${fixed.title}“. Die Zuordnung zu Poster und Staffeln erkennt p5assets an den Dateinamen – prüfe oder ändere sie. Die Dateien werden Kometa-konform benannt (poster, Season01 …).`
-      : "Zuordnung automatisch anhand von Datei- und Ordnernamen (nur Titel dieser Welt). Prüfe oder ändere sie – die Dateien werden Kometa-konform benannt (poster, Season01 …)."), list),
+      : "Zuordnung automatisch anhand von Datei- und Ordnernamen (nur Titel dieser Welt). Prüfe oder ändere sie – die Dateien werden Kometa-konform benannt (poster, Season01 …)."), summary, list),
     [apply, h("button", { class: "btn", onclick: () => { api("/import/" + res.session, { method: "DELETE" }); m.close(); } }, "Abbrechen"),
       h("span", { class: "spacer" }),
       h("span", { class: "hint" }, `${rows.filter(r => r.item_id).length} von ${rows.length} zugeordnet`)]);

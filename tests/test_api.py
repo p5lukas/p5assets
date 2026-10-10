@@ -56,3 +56,15 @@ def test_app_starts_and_serves_index():
         r = c.get("/")
         assert r.status_code == 200 and "/static/app.js?v=" in r.text
         assert c.get("/api/version").status_code == 200
+
+
+def test_import_returns_targets_for_the_set_check(client):
+    import io
+    from PIL import Image
+    b = io.BytesIO()
+    Image.new("RGB", (20, 30), "red").save(b, "PNG")
+    r = client.post("/api/import", data={"world": "hd"}, files=[("files", ("Alpha (2020).png", b.getvalue(), "image/png"))])
+    assert r.status_code == 200
+    body = r.json()
+    assert body["entries"][0]["item_id"] == "w:1"
+    assert "w:1" in body["targets"] and "slots" in body["targets"]["w:1"]
