@@ -14,6 +14,7 @@
 - Herunterladen (Original, ZIP am Desktop); auf iPhone/iPad öffnet sich das Original in p5assets
 - Installierbar als App auf iPhone/iPad (Runterziehen zum Aktualisieren, „Neu laden“)
 - Upload-Gruppe „Bilder hochladen:“ (Datei/ZIP, Ordner), Suche neben den Reitern mit Ein-Klick-Leeren
+- Optionale Anmeldung (Benutzername/Passwort, scrypt-Hash, 30 Tage angemeldet bleiben, Sperre nach Fehlversuchen) mit Zurücksetzen per Befehl, Umgebungsvariable oder Datei
 - Lizenz: GPL-3.0
 
 **Geändert**

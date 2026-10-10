@@ -18,6 +18,9 @@
    "action": {"label": "Welt auswählen", "target": "settings:worlds"}},
   {"id": "app-1", "version": "0.4.0", "title": "p5assets als App",
    "text": "Auf iPhone und iPad: Teilen → „Zum Home-Bildschirm“. p5assets startet dann im Vollbild mit eigenem Icon."},
+  {"id": "auth-1", "version": "0.4.0", "title": "Anmeldung",
+   "text": "Schütze p5assets optional mit Benutzername und Passwort. Passwort vergessen? Mit Zugriff auf den Server lässt es sich zurücksetzen.",
+   "action": {"label": "Jetzt einrichten", "target": "settings:auth"}},
   {"id": "tpdb-1", "version": "0.4.0", "title": "ThePosterDB",
    "text": "In der Online-Suche und in der Serien-Detailansicht öffnet p5assets die Suche auf ThePosterDB; das heruntergeladene Set legst du danach einfach hier ab."}
 ]

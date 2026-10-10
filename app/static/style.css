@@ -542,3 +542,22 @@ input[type=search]::-webkit-search-cancel-button,input[type=search]::-webkit-sea
 .sclear:hover{color:var(--accent);background:var(--dim)}
 .sclear[hidden]{display:none}
 .lsearch .sclear{width:30px;height:30px;right:3px}
+
+/* login */
+.login{min-height:100vh;display:grid;place-items:center;padding:calc(env(safe-area-inset-top,0px) + 20px) 16px 20px}
+.logincard{width:min(420px,100%);background:var(--panel);border:1px solid var(--accent);border-radius:10px;padding:28px;box-shadow:0 0 40px var(--dim)}
+.logincard .logo{margin-bottom:14px}
+.logincard h1{margin:0 0 4px;font-size:22px;color:var(--accent);text-shadow:0 0 14px var(--glow)}
+.logincard h1:before{content:"> ";opacity:.6}
+.logincard ol{margin:8px 0 0;padding-left:18px}.logincard code{word-break:break-all}
+/* fun message: own ASCII drawing, never takes focus or clicks */
+.fun{position:fixed;right:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 16px);z-index:700;pointer-events:none;width:min(430px,calc(100vw - 32px));border:1px solid var(--accent);border-radius:8px;background:hsl(var(--h) var(--sat) 4% / .97);box-shadow:0 0 24px var(--dim);font-size:13px;animation:funin .2s ease-out;transition:opacity .3s}
+.fun.out{opacity:0}
+.funhead{padding:5px 10px;border-bottom:1px solid var(--line);color:var(--muted);font-size:11px}
+.funbody{display:flex;gap:10px;align-items:center;padding:10px 12px}
+.funart{margin:0;color:var(--accent);font:11px/1.05 var(--mono);white-space:pre;text-shadow:0 0 8px var(--glow);flex:none}
+.funtext{min-width:0}.funerr{color:#ff6b78;font-weight:700;margin-bottom:4px}.funtext u{text-decoration:none;animation:blink 1s steps(1) infinite}
+@keyframes funin{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}
+@media(max-width:700px){.fun{top:calc(env(safe-area-inset-top,0px) + 10px);bottom:auto;right:16px;left:16px;width:auto}}
+@media(prefers-reduced-motion:reduce){.fun{animation:none}.funtext u{animation:none}}
+.logincard .status{margin:0 0 12px}

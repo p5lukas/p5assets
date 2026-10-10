@@ -144,3 +144,16 @@ def test_password_never_reaches_the_log(client):
     from app import logs
     text = "".join(p.read_text(errors="ignore") for p in logs.LOG_DIR.glob("*.log*"))
     assert "log-me-not" not in text and "Anmeldung fehlgeschlagen" in text
+
+
+def test_cli_reset_sets_a_new_password_and_can_switch_off(monkeypatch, client):
+    _setup(client)
+    answers = iter(["1", "lukas"])
+    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+    pws = iter(["neues-pass-77", "neues-pass-77"])
+    monkeypatch.setattr(auth.getpass, "getpass", lambda *_: next(pws))
+    assert auth._cli(["reset"]) == 0
+    assert TestClient(main.app).post("/api/auth/login", json={"username": "lukas", "password": "neues-pass-77"}, headers=H).status_code == 200
+    assert not auth._sessions_file().exists() or len(auth._load_sessions()) == 1        # old sessions are gone
+    monkeypatch.setattr("builtins.input", lambda *_: "2")
+    assert auth._cli(["reset"]) == 0 and not auth.enabled()

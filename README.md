@@ -184,8 +184,26 @@ Updates: Container in Unraid mit *Force Update* aktualisieren.
 | `trash` | Papierkorb mit Rückgängig-Funktion | höchstens 2 GB, 30 Tage |
 | `cache/dims.json`, `history.json`, `logs` | Bildgrößen, Abdeckungsverlauf, Log | klein |
 
+## Anmeldung & Passwort zurücksetzen
+Optional lässt sich p5assets mit **Benutzername und Passwort** schützen (Onboarding-Schritt „Anmeldung“ oder später in den Einstellungen).
+Das Passwort wird nur als Hash (scrypt) in `/config/auth.json` gespeichert, die Anmeldung gilt auf Wunsch 30 Tage, nach mehreren
+Fehlversuchen gibt es eine Wartezeit. Die Anmeldeseite übernimmt die Farbe der zuletzt benutzten Welt.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/login.png" alt="Anmeldeseite"><br><sub>Anmeldeseite (nach einem falschen Passwort: kleine Terminal-Überraschung, abschaltbar)</sub></td>
+<td width="50%"><img src="docs/images/settings-auth.png" alt="Einstellungen: Anmeldung"><br><sub>Einstellungen → Anmeldung</sub></td>
+</tr>
+</table>
+
+**Passwort vergessen?** Mit Zugriff auf den Server geht es auf drei Wegen:
+1. `docker exec -it p5assets python -m app.auth reset` – neues Passwort setzen oder die Anmeldung ausschalten (`python -m app.auth status` zeigt den Zustand).
+2. Die Umgebungsvariable `P5_AUTH_RESET=1` setzen und den Container neu starten: die Anmeldung wird zurückgesetzt (danach die Variable wieder entfernen und neu einrichten).
+3. Die Datei `/config/auth.json` löschen.
+
 ## Hinweis
-Es gibt keine eigene Anmeldung – betreibe p5assets nur im Heimnetz oder hinter einem Reverse Proxy mit Login.
+Ohne eingeschaltete Anmeldung kann jeder im Netz p5assets bedienen – betreibe es dann nur im Heimnetz oder hinter einem Reverse Proxy mit Login.
+Bei Zugriff über das Internet bitte zusätzlich `https://` (Reverse Proxy) verwenden, damit Passwort und Sitzung verschlüsselt übertragen werden.
 Plex-Token, API-Keys und Benachrichtigungs-Zugangsdaten liegen in `/config/config.json` und werden nie ins Log geschrieben.
 Verbindungen zu Plex, Sonarr und Radarr im Heimnetz akzeptieren selbstsignierte Zertifikate (üblich bei `https://` im LAN); die Online-Suche und Benachrichtigungen im Internet nutzen die normale Zertifikatsprüfung.
 

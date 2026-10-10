@@ -21,11 +21,12 @@ function h(tag, attrs = {}, ...kids) {
 const fill = (el, ...kids) => { el.replaceChildren(...clean(kids)); return el; };
 
 async function api(path, opts = {}) {
-  const o = { ...opts };
-  if (o.json !== undefined) { o.method = o.method || "POST"; o.headers = { "Content-Type": "application/json" }; o.body = JSON.stringify(o.json); delete o.json; }
+  const o = { ...opts, headers: { "X-Requested-With": "p5assets", ...(opts.headers || {}) } };     // the header protects writing requests when a login is set (CSRF)
+  if (o.json !== undefined) { o.method = o.method || "POST"; o.headers["Content-Type"] = "application/json"; o.body = JSON.stringify(o.json); delete o.json; }
   const r = await fetch("/api" + path, o);
   let data = null;
   try { data = await r.json(); } catch { /* not json */ }
+  if (r.status === 401 && data && data.auth && !path.startsWith("/auth/")) { showLogin(); throw new Error("Anmeldung erforderlich"); }     // session expired or logged out elsewhere
   if (!r.ok) throw new Error((data && data.detail) || `Fehler ${r.status}`);
   return data;
 }
@@ -109,6 +110,7 @@ function setAccent() {
   const w = curWorld();
   const hue = w && w.hue != null ? w.hue : 140, t = themeOf(hue), st = document.documentElement.style;
   st.setProperty("--h", hue); st.setProperty("--sat", t.sat + "%"); st.setProperty("--lit", t.lit + "%");
+  try { localStorage.setItem("p5hue", hue); } catch { /* the login page uses it to pick the colour of the last world */ }
 }
 
 async function loadState() {
@@ -228,6 +230,7 @@ async function loadVersion() {
       v.commit_short ? link(`Commit ${v.commit_short}`, v.commit_url) : null,
       h("a", { href: "#", onclick: e => { e.preventDefault(); checkNews(true); } }, "Neuigkeiten"),
       h("a", { href: "#", onclick: e => { e.preventDefault(); location.reload(); } }, "Neu laden"),
+      S.auth && S.auth.enabled ? h("a", { href: "#", onclick: async e => { e.preventDefault(); await api("/auth/logout", { method: "POST" }); location.reload(); } }, "Abmelden") : null,
       link("GitHub ↗", v.repo));
   } catch { /* footer is optional */ }
 }
@@ -407,6 +410,8 @@ setInterval(() => { if (S.view === "dash") checkAlerts(); }, 60000);
 
 /* ------------------------------------------------------------ routing --- */
 async function boot() {
+  try { S.auth = await api("/auth/state"); } catch (e) { app.append(h("div", { class: "empty" }, "Backend nicht erreichbar: " + e.message)); return; }
+  if (S.auth.enabled && !S.auth.authenticated) return showLogin();
   loadVersion();
   try { await loadState(); S.langs = await api("/languages"); } catch (e) { app.append(h("div", { class: "empty" }, "Backend nicht erreichbar: " + e.message)); return; }
   if (!S.st.onboarded) return wizard();
@@ -1252,9 +1257,9 @@ async function importFiles(files, itemId, onDone, item, review) {
   try {
     res = await new Promise((resolve, reject) => {
       const x = new XMLHttpRequest();
-      x.open("POST", "/api/import");
+      x.open("POST", "/api/import"); x.setRequestHeader("X-Requested-With", "p5assets");
       x.upload.onprogress = e => { if (e.lengthComputable) bar.style.width = (e.loaded / e.total * 100) + "%"; };
-      x.onload = () => { try { const d = JSON.parse(x.responseText); x.status < 300 ? resolve(d) : reject(new Error(d.detail || x.status)); } catch { reject(new Error("Fehler " + x.status)); } };
+      x.onload = () => { try { const d = JSON.parse(x.responseText); if (x.status === 401 && d.auth) { showLogin(); return reject(new Error("Anmeldung erforderlich")); } x.status < 300 ? resolve(d) : reject(new Error(d.detail || x.status)); } catch { reject(new Error("Fehler " + x.status)); } };
       x.onerror = () => reject(new Error("Netzwerkfehler"));
       x.send(fd);
     });
@@ -1433,9 +1438,122 @@ function reviewImport(res, onDone, fixed) {
 }
 
 /* ======================================================= wizard / setup === */
-const STEP_LABELS = { welcome: "Start", plex: "Plex", libs: "Bibliotheken", arr: "Sonarr/Radarr", worlds: "Welten", assign: "Zuordnung", apis: "Quellen", notify: "Benachrichtigungen", done: "Fertig" };
+/* ============================================================ login === */
+const FINGER = {
+  tip: ["   ___   ", "  |   |  ", "  |   |  ", "  |   |  "],
+  hand: [" __|   |__ ", "|  _____  |", "|  |   |  |", " \\ |___| / ", "  \\_____/  "],
+};
+/** Fun message after a wrong password (terminal look, own ASCII drawing): never blocks input, vanishes by itself. */
+let funTimer = null;
+function funMessage() {
+  const old = $("#fun"); if (old) old.remove(); clearInterval(funTimer);
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const art = h("pre", { class: "funart", "aria-hidden": "true" }), typed = h("span", { "aria-live": "polite" }), cur = h("u", {}, "_");
+  const box = h("div", { id: "fun", class: "fun" }, h("div", { class: "funhead" }, "root@p5assets:~"),
+    h("div", { class: "funbody" }, art, h("div", { class: "funtext" }, h("div", { class: "funerr" }, "> ACCESS DENIED"), h("div", {}, typed, cur))));
+  document.body.append(box);
+  const text = "Ah ah ah, you didn’t write the magic word!";
+  const offsets = [0, -2, 0, 2], draw = f => { const pad = " ".repeat(Math.max(0, 2 + offsets[f % 4])); art.textContent = [...FINGER.tip.map(l => pad + l), ...FINGER.hand.map(l => "  " + l)].join("\n"); };
+  draw(0);
+  if (reduce) { typed.textContent = text; funTimer = setTimeout(() => box.remove(), 4500); return; }
+  let i = 0, f = 0;
+  funTimer = setInterval(() => {
+    f++; draw(f); if (i < text.length) typed.textContent = text.slice(0, i += 2);
+    if (f > 24) { clearInterval(funTimer); box.classList.add("out"); setTimeout(() => box.remove(), 300); }
+  }, 170);
+}
+
+function showLogin(note) {
+  if (S.view === "login") return;
+  S.view = "login";
+  clearInterval(S.logTimer); clearInterval(S.poll); clearTimeout(S.dimTimer);
+  document.querySelectorAll(".modalwrap, .scrim, #fun").forEach(el => el.remove());
+  $("#foot").replaceChildren();
+  try { const hue = +localStorage.getItem("p5hue"); const t = themeOf(Number.isFinite(hue) && hue >= 0 ? hue : 140), st = document.documentElement.style;
+    st.setProperty("--h", hue >= 0 ? hue : 140); st.setProperty("--sat", t.sat + "%"); st.setProperty("--lit", t.lit + "%"); } catch { /* default colour */ }
+  const user = h("input", { type: "text", name: "username", autocomplete: "username", autocapitalize: "none", spellcheck: false, "aria-label": "Benutzername", required: true });
+  const pass = h("input", { type: "password", name: "password", autocomplete: "current-password", "aria-label": "Passwort", required: true });
+  const remember = h("input", { type: "checkbox", checked: true, style: "accent-color:var(--accent)" });
+  const err = h("div", { class: "status bad", role: "alert", hidden: true });
+  const go = h("button", { class: "btn primary", type: "submit", style: "width:100%;justify-content:center" }, "Anmelden");
+  const form = h("form", { class: "logincard", onsubmit: async e => {
+    e.preventDefault(); err.hidden = true; go.disabled = true;
+    try {
+      await api("/auth/login", { json: { username: user.value, password: pass.value, remember: remember.checked } });
+      S.view = ""; $("#fun") && $("#fun").remove(); app.replaceChildren(); boot();
+    } catch (ex) {
+      err.hidden = false; err.textContent = "⚠ " + ex.message; go.disabled = false;
+      if (!/Zu viele/.test(ex.message)) { pass.value = ""; pass.focus(); if (S.auth && S.auth.fun !== false) funMessage(); }     // focus stays in the field: type again right away
+    }
+  } },
+    h("div", { class: "logo" }, h("i", { class: "logomark", "aria-hidden": "true" }, "p5"), h("span", {}, "assets", h("u", {}, "_"))),
+    h("h1", {}, "Anmeldung"), note ? h("p", { class: "hint" }, note) : h("p", { class: "hint" }, "Bitte melde dich an, um p5assets zu nutzen."),
+    h("label", { class: "f" }, "Benutzername"), user, h("label", { class: "f" }, "Passwort"), pass,
+    h("label", { class: "opt compact", style: "margin:14px 0" }, remember, "Angemeldet bleiben (30 Tage)"),
+    err, go,
+    h("details", { class: "how", style: "margin-top:18px" }, h("summary", {}, "Passwort vergessen?"), h("div", { class: "hint" },
+      "Das geht nur mit Zugriff auf den Server. Eine dieser Möglichkeiten:",
+      h("ol", {}, h("li", {}, "Im Container ausführen: ", h("code", {}, "docker exec -it p5assets python -m app.auth reset"), " (neues Passwort setzen oder Anmeldung ausschalten)."),
+        h("li", {}, "Die Umgebungsvariable ", h("code", {}, "P5_AUTH_RESET=1"), " setzen und den Container neu starten (die Anmeldung wird zurückgesetzt, Variable danach wieder entfernen)."),
+        h("li", {}, "Die Datei ", h("code", {}, "/config/auth.json"), " löschen.")))));
+  fill(app, h("div", { class: "login" }, form));
+  api("/auth/state").then(a => { S.auth = a; }).catch(() => {});
+  user.focus();
+}
+
+function wAuth(nav) {
+  const a = S.auth || { enabled: false };
+  const st = statusEl(), fun = a.fun !== false;
+  const field = (label, type, auto) => { const i = h("input", { type, autocomplete: auto, spellcheck: false, autocapitalize: "none" }); return { i, el: [h("label", { class: "f" }, label), i] }; };
+  const reload = async () => { S.auth = await api("/auth/state"); drawWiz(); };
+  if (!a.enabled) {
+    const u = field("Benutzername", "text", "username"), p1 = field("Passwort (mindestens 8 Zeichen)", "password", "new-password"), p2 = field("Passwort wiederholen", "password", "new-password");
+    return h("div", {}, h("h1", {}, "Anmeldung"),
+      h("p", { class: "lead" }, "Optional: Schütze p5assets mit Benutzername und Passwort. Im reinen Heimnetz brauchst du das nicht zwingend – sobald p5assets von außen erreichbar ist, solltest du es einschalten. Du kannst diesen Schritt überspringen und später in den Einstellungen nachholen."),
+      h("div", { class: "apirow" }, u.el, p1.el, p2.el,
+        h("div", { class: "row", style: "margin-top:14px" }, h("button", { class: "btn primary", onclick: async e => {
+          if (p1.i.value !== p2.i.value) return setStatus(st, false, "Die Passwörter stimmen nicht überein");
+          try { await busy(e.currentTarget, () => api("/auth/setup", { json: { username: u.i.value, password: p1.i.value } })); toast("Anmeldung eingeschaltet ✓", "ok"); await reload(); }
+          catch (err) { setStatus(st, false, err.message); }
+        } }, "Anmeldung einschalten")), st),
+      h("p", { class: "hint" }, "Passwort vergessen? Mit Zugriff auf den Server lässt es sich zurücksetzen: ", h("code", {}, "docker exec -it p5assets python -m app.auth reset"), " (Details auf der Anmeldeseite und in der README)."),
+      nav(null, S.wizSettings ? "Weiter" : "Überspringen"));
+  }
+  const cur = field("Aktuelles Passwort", "password", "current-password"), nu = field("Neuer Benutzername (leer = unverändert)", "text", "username"),
+    np = field("Neues Passwort (leer = unverändert)", "password", "new-password"), np2 = field("Neues Passwort wiederholen", "password", "new-password");
+  nu.i.value = a.user || "";
+  const off = field("Passwort zur Bestätigung", "password", "current-password");
+  const state = h("span", { class: "state" }, fun ? "An" : "Aus");
+  const funSw = h("input", { type: "checkbox", checked: fun, onchange: async e => {
+    state.textContent = e.target.checked ? "An" : "Aus"; e.target.closest(".switch").classList.toggle("on", e.target.checked);
+    try { await api("/auth/change", { json: { fun: e.target.checked } }); S.auth.fun = e.target.checked; } catch (err) { toast(err.message, "bad"); }
+  } });
+  return h("div", {}, h("h1", {}, "Anmeldung"),
+    h("p", { class: "lead" }, "Die Anmeldung ist eingeschaltet. Angemeldet als ", h("b", {}, a.user), "."),
+    h("div", { class: "apirow" }, h("h3", {}, "Benutzername oder Passwort ändern"), cur.el, nu.el, np.el, np2.el,
+      h("div", { class: "row", style: "margin-top:14px" }, h("button", { class: "btn primary", onclick: async e => {
+        if (np.i.value && np.i.value !== np2.i.value) return setStatus(st, false, "Die neuen Passwörter stimmen nicht überein");
+        const json = { current_password: cur.i.value };
+        if (nu.i.value.trim() !== a.user) json.username = nu.i.value;
+        if (np.i.value) json.new_password = np.i.value;
+        if (json.username === undefined && !json.new_password) return setStatus(st, false, "Nichts geändert");
+        try { await busy(e.currentTarget, () => api("/auth/change", { json })); toast("Gespeichert ✓ – andere Geräte müssen sich neu anmelden", "ok"); [cur.i, np.i, np2.i].forEach(i => { i.value = ""; }); await reload(); }
+        catch (err) { setStatus(st, false, err.message); }
+      } }, "Speichern")), st),
+    h("div", { class: "apirow" }, h("div", { class: "row" }, h("div", { class: "grow" }, h("h3", {}, "Spaß-Meldung bei falschem Passwort"), h("div", { class: "hint" }, "Eine kleine Terminal-Einblendung nach einem Fehlversuch. Sie stört die Eingabe nicht.")),
+      h("label", { class: "switch" + (fun ? " on" : "") }, state, funSw, h("i")))),
+    h("div", { class: "row wrap", style: "margin:14px 0" }, h("button", { class: "btn", onclick: async () => { await api("/auth/logout", { method: "POST" }); location.reload(); } }, "Abmelden")),
+    h("details", { class: "how" }, h("summary", {}, "Anmeldung ausschalten"), h("div", { class: "apirow" }, off.el,
+      h("div", { class: "row", style: "margin-top:14px" }, h("button", { class: "btn danger", onclick: async e => {
+        try { await busy(e.currentTarget, () => api("/auth/disable", { json: { password: off.i.value } })); toast("Anmeldung ausgeschaltet", "ok"); await reload(); }
+        catch (err) { setStatus(st, false, err.message); }
+      } }, "Anmeldung ausschalten")))),
+    nav(null, "Weiter"));
+}
+
+const STEP_LABELS = { welcome: "Start", plex: "Plex", libs: "Bibliotheken", arr: "Sonarr/Radarr", worlds: "Welten", assign: "Zuordnung", apis: "Quellen", notify: "Benachrichtigungen", auth: "Anmeldung", done: "Fertig" };
 // "Zuordnung" only exists when there is more than one world
-const stepList = () => ["welcome", "plex", "libs", "arr", "worlds", ...(cfg().worlds.length > 1 ? ["assign"] : []), "apis", "notify", "done"];
+const stepList = () => ["welcome", "plex", "libs", "arr", "worlds", ...(cfg().worlds.length > 1 ? ["assign"] : []), "apis", "notify", "auth", "done"];
 
 async function wizard(settings = false) {
   S.view = "wiz";
@@ -1465,7 +1583,7 @@ function drawWiz() {
     S.wizSettings ? h("button", { class: "btn ghost", onclick: closeSettings }, "Schließen") : null,
     h("span", { class: "spacer" }),
     h("button", { class: "btn primary", disabled, onclick: next || stepNext }, label));
-  const view = { welcome: wWelcome, plex: wPlex, libs: wLibs, arr: wArr, worlds: wWorlds, assign: wAssign, apis: wApis, notify: wNotify, done: wDone }[S.step];
+  const view = { welcome: wWelcome, plex: wPlex, libs: wLibs, arr: wArr, worlds: wWorlds, assign: wAssign, apis: wApis, notify: wNotify, auth: wAuth, done: wDone }[S.step];
   // labelled step navigation: in settings every step is reachable, during onboarding only the ones visited so far
   const shown = list.map((name, i) => ({ name, i })).filter(s => !(S.wizSettings && (s.name === "welcome" || s.name === "done")));
   fill(app, h("div", { class: "wiz" },
