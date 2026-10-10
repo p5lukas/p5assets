@@ -524,4 +524,11 @@ body::before{content:"";position:fixed;top:0;left:0;right:0;height:env(safe-area
 .setcheck li{margin:3px 0}.setcheck li.ok{color:var(--accent)}.setcheck li.bad{color:#ff6b78}.setcheck li.warn{color:var(--warn)}
 .impgroup .imp{padding:8px 14px}
 .pills{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
-.lbclose{position:absolute;z-index:5;top:calc(env(safe-area-inset-top,0px) + 10px);right:14px;width:44px;height:44px;border-radius:50%;border:1px solid var(--accent);background:var(--bg);color:var(--accent);font-size:20px;line-height:1;box-shadow:0 0 14px var(--dim)}
+
+/* preview window: header with the single close button (like every other window), the content scrolls below it */
+.lbox{display:flex;flex-direction:column;align-items:stretch;gap:0;padding:0;overflow:hidden}
+.lbhead{display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line);flex:none}
+.lbhead h2{margin:0;font-size:17px;color:var(--accent);text-shadow:0 0 12px var(--glow)}
+.lbbody{display:flex;gap:24px;align-items:flex-start;padding:20px;overflow:auto;min-height:0}
+@media(max-width:760px){.lbbody{flex-direction:column;align-items:stretch;padding:14px;gap:14px}.lbhead{padding:10px 14px}}
+@media(min-width:761px){.lbox img{max-height:calc(100dvh - 150px)}}

@@ -956,11 +956,11 @@ function openPreview(it, key, draw) {
     : h("div", { class: "noimg" }, h("b", {}, "＋"), "kein Bild");
   const pick = () => pickFiles(files => { close(); uploadSlot(it, key, files, draw); }, false);
   const wrap = h("div", { class: "modalwrap lightbox", onclick: e => { if (e.target === wrap) close(); } },
-    touch ? h("button", { class: "lbclose", "aria-label": "Schließen", onclick: () => close() }, "✕") : null,
-    h("div", { class: "lbox" }, h("div", { class: "limg" }, img,
+    h("div", { class: "lbox" },
+     h("header", { class: "lbhead" }, h("h2", { class: "grow" }, "Vorschau"), h("button", { class: "btn ghost sm", "aria-label": "Schließen", onclick: () => close() }, "✕")),     // the one close button: same place on desktop and phone
+     h("div", { class: "lbbody" }, h("div", { class: "limg" }, img,
         touch && exists ? h("div", { class: "hint", style: "text-align:center" }, "Bild lange drücken → „Zu Fotos hinzufügen“ (Originalqualität)") : null),
       h("div", { class: "lside" },
-        h("div", { class: "row" }, h("h3", { class: "grow" }, "Vorschau"), h("button", { class: "btn ghost sm", onclick: () => close() }, "✕")),
         metaGroups(it),
         (it.mirror_folders || []).length ? h("div", { style: "margin-top:8px" }, h("span", { class: "tag ok", title: "Coming-Soon-Platzhalter: Poster werden auch im echten Film-Ordner abgelegt" }, "Coming Soon gespiegelt")) : null,
         h("dl", {}, rows.map(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]), src ? [h("dt", {}, "Auflösung"), res] : null),
@@ -973,7 +973,7 @@ function openPreview(it, key, draw) {
             if (!confirm(`${slotLabel(key, it.type)} wirklich löschen?`)) return;
             close(); const r = await api(`/items/${it.id}/${key}`, { method: "DELETE" }); draw(r.item); undoToast("Gelöscht", r, draw);
           } }, "Löschen") : null),
-        !it.folder ? h("div", { class: "status bad" }, "Für diesen Titel ist kein Ordnername bekannt – Upload nicht möglich.") : null)));
+        !it.folder ? h("div", { class: "status bad" }, "Für diesen Titel ist kein Ordnername bekannt – Upload nicht möglich.") : null))));
   const onKey = e => { if (e.key === "Escape") close(); };
   function close() { wrap.remove(); document.removeEventListener("keydown", onKey); }
   document.addEventListener("keydown", onKey);
