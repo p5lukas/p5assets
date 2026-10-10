@@ -56,3 +56,12 @@ def test_security_headers_are_set(client):
     assert r.headers["x-frame-options"] == "DENY" and r.headers["x-content-type-options"] == "nosniff"
     assert "frame-ancestors 'none'" in r.headers["content-security-policy"] and "script-src 'self'" in r.headers["content-security-policy"]
     assert client.get("/api/health").headers["x-frame-options"] == "DENY"
+
+
+def test_news_file_is_valid():
+    import json
+    from pathlib import Path
+    items = json.loads((Path(main.__file__).parent / "news.json").read_text("utf-8"))
+    ids = [e["id"] for e in items]
+    assert len(ids) == len(set(ids)) and all(e["title"] and e["text"] and e["version"] for e in items)
+    assert all(e.get("action", {}).get("target") for e in items if "action" in e)

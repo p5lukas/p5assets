@@ -1,6 +1,6 @@
 # Änderungen
 
-## 0.4.0 (in Vorbereitung, Branch `dev`)
+## 0.4.0 – 2026-10-10
 
 **Neu**
 - Benachrichtigungen per Discord, Telegram oder ntfy (neue Titel ohne Poster, Coming Soon, Scan-Fehler)
@@ -30,9 +30,3 @@
 - Leere Liste nach fehlgeschlagenem Scan erklärt jetzt den Fehler und bietet „Erneut scannen“
 - Statische Dateien werden mit Versionsparameter ausgeliefert (die Home-Bildschirm-App lädt sofort die neue Version)
 - 40+ automatische Tests (Namensregeln, Zuordnung, Papierkorb, Upload/ZIP, Sicherheit) laufen vor jedem Image-Bau
-
-**Für die Veröffentlichung**
-1. `BASE_VERSION` in `app/version.py` auf `0.4.0` setzen
-2. `dev` nach `main` bringen (README, LICENSE und Social-Preview liegen bisher nur auf `dev`)
-3. Auf GitHub ein Release `v0.4.0` mit diesen Notizen anlegen (löst den Image-Bau mit dem Tag aus)
-4. Social-Preview-Bild `docs/images/social-preview-2026-10.png` in den Repo-Einstellungen hochladen
