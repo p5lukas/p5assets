@@ -21,7 +21,7 @@ from pydantic import BaseModel
 
 from .text import plural
 from .errors import short
-from . import arr as arrmod, config, history, kometa, languages as langmod, logs, notify, thumbs, trash, version, plex as plexmod, providers, scanner, uploads
+from . import arr as arrmod, auth, config, history, kometa, languages as langmod, logs, notify, thumbs, trash, version, plex as plexmod, providers, scanner, uploads
 from .plex import Plex, PlexError
 
 STATIC = Path(__file__).parent / "static"
@@ -32,6 +32,7 @@ log = logs.get("app")
 async def lifespan(app: FastAPI):
     logs.setup()
     config.load()
+    auth.startup()
     v = version.info()
     log.info("p5assets %s gestartet (Branch %s, Commit %s)", v["version"], v["branch"] or "-", v["commit_short"] or "-")
     await asyncio.to_thread(thumbs.cleanup_old)
@@ -41,6 +42,20 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="p5assets", lifespan=lifespan)
+app.include_router(auth.router)
+
+
+@app.middleware("http")
+async def auth_gate(request: Request, call_next):
+    denied = auth.gate(request)
+    return denied if denied is not None else await call_next(request)
+
+
+@app.get("/api/health")
+async def health():
+    """For the Docker health check: answers without a login and without any data."""
+    return {"ok": True}
+
 
 
 @app.exception_handler(PlexError)
