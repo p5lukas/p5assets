@@ -189,3 +189,8 @@ Es gibt keine eigene Anmeldung – betreibe p5assets nur im Heimnetz oder hinter
 Plex-Token, API-Keys und Benachrichtigungs-Zugangsdaten liegen in `/config/config.json` und werden nie ins Log geschrieben.
 
 Die Tests (`pytest`) laufen in der GitHub-Action vor jedem Image-Bau.
+
+## Lizenz
+p5assets steht unter der [GNU General Public License v3.0](LICENSE) (GPL-3.0): Du darfst den Code nutzen, ändern und weitergeben.
+Weiterentwicklungen, die du verbreitest, müssen ebenfalls unter der GPL-3.0 stehen und ihren Quellcode offenlegen.
+Das Projekt ist unabhängig von Plex, Sonarr, Radarr, Kometa, TMDb, TVDB, fanart.tv und ThePosterDB und nicht mit ihnen verbunden.
