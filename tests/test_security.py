@@ -49,3 +49,10 @@ def test_secrets_are_not_returned(client):
     pub = str(config.public(cfg))
     for secret in ("PLEXSECRET", "TMDBSECRET", "TGSECRET"):
         assert secret not in pub
+
+
+def test_security_headers_are_set(client):
+    r = client.get("/")
+    assert r.headers["x-frame-options"] == "DENY" and r.headers["x-content-type-options"] == "nosniff"
+    assert "frame-ancestors 'none'" in r.headers["content-security-policy"] and "script-src 'self'" in r.headers["content-security-policy"]
+    assert client.get("/api/health").headers["x-frame-options"] == "DENY"

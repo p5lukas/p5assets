@@ -204,6 +204,7 @@ Fehlversuchen gibt es eine Wartezeit. Die Anmeldeseite übernimmt die Farbe der 
 ## Hinweis
 Ohne eingeschaltete Anmeldung kann jeder im Netz p5assets bedienen – betreibe es dann nur im Heimnetz oder hinter einem Reverse Proxy mit Login.
 Bei Zugriff über das Internet bitte zusätzlich `https://` (Reverse Proxy) verwenden, damit Passwort und Sitzung verschlüsselt übertragen werden.
+Tipp: p5assets gehört nicht direkt ins offene Internet (keine Portfreigabe am Router). Besser per VPN (z. B. WireGuard/Tailscale) oder hinter einem Reverse Proxy mit `https://` erreichbar machen.
 Plex-Token, API-Keys und Benachrichtigungs-Zugangsdaten liegen in `/config/config.json` und werden nie ins Log geschrieben.
 Verbindungen zu Plex, Sonarr und Radarr im Heimnetz akzeptieren selbstsignierte Zertifikate (üblich bei `https://` im LAN); die Online-Suche und Benachrichtigungen im Internet nutzen die normale Zertifikatsprüfung.
 

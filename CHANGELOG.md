@@ -25,6 +25,7 @@
 **Behoben / verbessert**
 - Fehlermeldungen enthalten keine API-Keys oder Tokens mehr (auch nicht aus Request-URLs)
 - Titelabgleich beim Import ca. 17-mal schneller (180 Dateien gegen 6450 Titel: 29 s → 1,7 s)
+- Sicherheits-Header (Content-Security-Policy, kein Einbetten in fremde Seiten, nosniff, kein Referrer)
 - Ungültige Logdateinamen ergeben 400 statt 500; ZIP-Einträge mit echter Größenbegrenzung
 - Leere Liste nach fehlgeschlagenem Scan erklärt jetzt den Fehler und bietet „Erneut scannen“
 - Statische Dateien werden mit Versionsparameter ausgeliefert (die Home-Bildschirm-App lädt sofort die neue Version)

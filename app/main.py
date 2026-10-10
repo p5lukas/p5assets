@@ -51,6 +51,27 @@ async def auth_gate(request: Request, call_next):
     return denied if denied is not None else await call_next(request)
 
 
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",                       # nobody may embed p5assets in a frame (clickjacking)
+    "Referrer-Policy": "no-referrer",
+    "Content-Security-Policy": "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; "
+                               "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+}
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    for k, v in SECURITY_HEADERS.items():
+        response.headers.setdefault(k, v)
+    if request.url.path.startswith("/api/auth/"):
+        response.headers["Cache-Control"] = "no-store"
+    if auth._secure(request):
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+    return response
+
+
 @app.get("/api/health")
 async def health():
     """For the Docker health check: answers without a login and without any data."""
