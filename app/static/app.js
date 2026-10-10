@@ -845,7 +845,7 @@ async function openItem(id) {
         h("button", { class: "btn sm", onclick: () => { if (sel.size === have.length) sel.clear(); else have.forEach(k => sel.add(k)); draw(it); } }, sel.size === have.length ? "Alle abwählen" : "Alle wählen"),
         h("button", { class: "btn sm primary", disabled: !sel.size, onclick: () => zip([...sel]) }, icon("download", 14), `Auswahl als ZIP (${sel.size})`),
         h("button", { class: "btn sm", onclick: () => { selMode = false; sel.clear(); draw(it); } }, "Fertig")]
-      : [h("button", { class: "btn sm", title: "Poster in Originalqualität herunterladen", onclick: () => {
+      : isTouch() ? [] : [h("button", { class: "btn sm", title: "Poster in Originalqualität herunterladen", onclick: () => {
           const m = modal("Herunterladen", h("div", {},
             h("p", { class: "hint", style: "margin-top:0" }, "Die Poster werden unverändert aus dem Assets-Ordner geladen (Originalqualität)."),
             h("div", { class: "row wrap" },
@@ -906,12 +906,15 @@ function toggleActions(box) {
   box.classList.toggle("show");
 }
 
-/** Save an asset (original file, no re-encoding) or a ZIP – a normal download link, works on iPhone/iPad too. */
+/** Save an asset (original file, no re-encoding) or a ZIP with a normal download link (desktop).
+ *  On iPhone/iPad (touch) a link to a file ends in the iOS file page with no way back (home-screen app, plain http: no share sheet),
+ *  so there the original opens inside p5assets instead (see openPreview: long press → "Zu Fotos hinzufügen"). */
+const isTouch = () => matchMedia("(hover: none)").matches;
 function downloadUrl(url) {
   const a = h("a", { href: url, download: "", hidden: true });
   document.body.append(a); a.click(); a.remove();
 }
-const downloadSlot = (it, key) => downloadUrl(`/api/download/${it.id}/${key}`);
+const downloadSlot = (it, key, draw) => isTouch() ? openPreview(it, key, draw) : downloadUrl(`/api/download/${it.id}/${key}`);
 
 /** Hover/tap overlay of a poster tile with its actions (series tiles in the detail view, movie posters on the dashboard). */
 function slotActions(it, key, box, draw) {
@@ -922,7 +925,7 @@ function slotActions(it, key, box, draw) {
   return h("div", { class: "hover" },
     h("div", { class: "ovbtns" }, exists
       ? [ob("Ersetzen", pick), ob("Vorschau", () => openPreview(it, key, draw)), ob("Online suchen", () => searchOnline(it, key, draw)),
-         ob("Herunterladen", () => downloadSlot(it, key)),
+         ob("Herunterladen", () => downloadSlot(it, key, draw)),
          it.type === "show" ? ob("Auf alle …", () => openApplyAll(it, key, draw)) : null, ob("Löschen", del, "danger")]
       : [ob("Hochladen", pick), ob("Online suchen", () => searchOnline(it, key, draw))]),
     h("div", { class: "ovhint" }, "oder Bild hierher ziehen"));
@@ -953,6 +956,7 @@ function openPreview(it, key, draw) {
     : h("div", { class: "noimg" }, h("b", {}, "＋"), "kein Bild");
   const pick = () => pickFiles(files => { close(); uploadSlot(it, key, files, draw); }, false);
   const wrap = h("div", { class: "modalwrap lightbox", onclick: e => { if (e.target === wrap) close(); } },
+    touch ? h("button", { class: "lbclose", "aria-label": "Schließen", onclick: () => close() }, "✕") : null,
     h("div", { class: "lbox" }, h("div", { class: "limg" }, img,
         touch && exists ? h("div", { class: "hint", style: "text-align:center" }, "Bild lange drücken → „Zu Fotos hinzufügen“ (Originalqualität)") : null),
       h("div", { class: "lside" },
@@ -962,7 +966,7 @@ function openPreview(it, key, draw) {
         h("dl", {}, rows.map(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]), src ? [h("dt", {}, "Auflösung"), res] : null),
         h("div", { class: "row wrap", style: "margin-top:20px" },
           it.folder ? h("button", { class: "btn sm primary", onclick: pick }, exists ? "Ersetzen" : "Hochladen") : null,
-          exists ? h("button", { class: "btn sm", onclick: () => downloadSlot(it, key) }, icon("download", 14), "Herunterladen") : null,
+          exists && !touch ? h("button", { class: "btn sm", onclick: () => downloadSlot(it, key) }, icon("download", 14), "Herunterladen") : null,
           draw && it.folder ? h("button", { class: "btn sm", onclick: () => { close(); searchOnline(it, key, draw); } }, "Online suchen") : null,
           draw && exists && it.type === "show" ? h("button", { class: "btn sm", onclick: () => { close(); openApplyAll(it, key, draw); } }, "Auf alle …") : null,
           draw && exists ? h("button", { class: "btn sm danger", onclick: async () => {

@@ -38,6 +38,12 @@ Ein Bild auf eine Kachel, mehrere Dateien, ganze Ordner oder ZIPs irgendwo ins F
 Jahr und Staffel aus Datei- und Ordnernamen, zeigt die Zuordnung zur Kontrolle und benennt alles Kometa-konform
 (`<Medienordner>/poster.jpg`, `Season01.jpg` …). Neue Ordner landen dort, wo die anderen Titel schon liegen.
 
+**Set-Kontrolle beim Import:** Enthält ein Upload ein Serien-Set (auch mehrere Serien in einer ZIP, nach Serie gruppiert), prüft p5assets
+für jede Serie, wie viele Staffeln Plex (und Sonarr) kennen, ob das Set alle abdeckt, ob das Serienposter und die Specials dabei sind
+und welche vorhandenen Bilder ersetzt würden.
+
+<img src="docs/images/set-check.png" alt="Set-Kontrolle beim Import" width="640">
+
 <table>
 <tr>
 <td width="50%"><img src="docs/images/matrix-replace.gif" alt="Poster ersetzen"><br><sub>Staffelposter ergänzen – Matrix-Regen nur dort, wo sich etwas ändert</sub></td>
@@ -55,7 +61,7 @@ Jahr und Staffel aus Datei- und Ordnernamen, zeigt die Zuordnung zur Kontrolle u
 
 - Kacheln für Poster und **Season00 – Season50**, auch für Staffeln, die es noch nicht gibt
 - Poster per Drag & Drop auf eine andere Kachel **kopieren**, oder mit **„Auf alle …“** auf mehrere Kacheln übertragen
-- **Herunterladen** in Originalqualität: einzelne Poster oder eine Auswahl als ZIP
+- **Herunterladen** in Originalqualität: einzelne Poster oder eine Auswahl als ZIP (auf iPhone/iPad öffnet sich das Original in p5assets: Bild lange drücken → „Zu Fotos hinzufügen“)
 
 ### Online-Suche
 Poster von TMDb, TVDB und fanart.tv, gruppiert nach deiner **Sprach-Priorität pro Welt** (z. B. Textless → Deutsch → English),
