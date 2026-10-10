@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app import config, main, scanner
+from app import main, scanner
 
 
 def _item(i, title, **kw):

@@ -7,7 +7,6 @@ import json
 import os
 import re
 import tempfile
-import uuid
 import zipfile
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -21,7 +20,8 @@ from collections import Counter
 from pydantic import BaseModel
 
 from .text import plural
-from . import arr as arrmod, config, dims, history, kometa, languages as langmod, logs, notify, thumbs, trash, version, plex as plexmod, providers, scanner, uploads
+from .errors import short
+from . import arr as arrmod, config, history, kometa, languages as langmod, logs, notify, thumbs, trash, version, plex as plexmod, providers, scanner, uploads
 from .plex import Plex, PlexError
 
 STATIC = Path(__file__).parent / "static"
@@ -245,7 +245,7 @@ async def plex_connect(body: Connect):
     if not url and body.connections:
         url = await plexmod.first_reachable(body.connections, token, cfg["client_id"]) or ""
         if not url:
-            raise PlexError("Keiner der Server-Adressen war erreichbar – bitte URL manuell eingeben")
+            raise PlexError("Keine der Server-Adressen war erreichbar – bitte URL manuell eingeben")
     if not url or not token:
         raise HTTPException(400, "URL und Token werden benötigt")
     if "://" not in url:
@@ -303,7 +303,7 @@ async def test_provider(provider: str, body: ApiTest):
         raise HTTPException(400, f"Ungültiger Key (HTTP {e.response.status_code})")
     except httpx.HTTPError as e:
         log.warning("API-Test %s: nicht erreichbar (%s)", provider, e)
-        raise HTTPException(502, f"Nicht erreichbar: {e}")
+        raise HTTPException(502, f"Nicht erreichbar: {short(e)}") from None
     log.info("API-Test %s: OK", provider)
     return {"ok": True}
 
@@ -834,13 +834,13 @@ async def coverage_history(world: str = "", days: int = 90):
 
 # ----------------------------------------------------------- import ---
 
-def _suggest(entry: dict, fixed: dict | None, pool: list[dict]) -> dict:
+def _suggest(entry: dict, fixed: dict | None, pool: list[dict], index: dict | None = None) -> dict:
     out = dict(entry)
     out["item_id"] = None
     out["slot"] = None
     if entry["kind"] == "ignore":
         return out
-    item = fixed or kometa.match_item(entry["title"], entry["year"], pool)
+    item = fixed or kometa.match_item(entry["title"], entry["year"], pool, index)
     if item:
         slot = "poster" if entry["kind"] == "poster" else kometa.slot_key(entry["season"])
         if kometa.slot_allowed(item["type"], set(item["slots"]), slot):
@@ -866,7 +866,8 @@ async def import_files(request: Request):
             entries += uploads.stage_file(sid, name, await f.read())
         except ValueError as e:
             errors.append(str(e))
-    suggestions = [_suggest(e, fixed, pool) for e in entries]
+    match_index = kometa.index_items(pool) if not fixed else None
+    suggestions = [_suggest(e, fixed, pool, match_index) for e in entries]
     if fixed:
         # files dropped on a title belong to that title, whatever they are called
         for s in suggestions:
@@ -965,12 +966,18 @@ async def log_alerts(since: int = 0):
 
 @app.get("/api/logs/read")
 async def log_read(file: str = logs.LOG_NAME, tail: int = Query(1000, ge=1, le=20000), offset: int | None = None):
-    return logs.read(file, tail, offset)
+    try:
+        return logs.read(file, tail, offset)
+    except ValueError:
+        raise HTTPException(400, "Ungültige Logdatei") from None
 
 
 @app.get("/api/logs/download")
 async def log_download(file: str = logs.LOG_NAME):
-    p = logs.path_of(file)
+    try:
+        p = logs.path_of(file)
+    except ValueError:
+        raise HTTPException(400, "Ungültige Logdatei") from None
     if not p.is_file():
         raise HTTPException(404, "Logdatei nicht gefunden")
     return FileResponse(p, media_type="text/plain", filename=file)
@@ -978,14 +985,17 @@ async def log_download(file: str = logs.LOG_NAME):
 
 @app.delete("/api/logs")
 async def log_clear(file: str = logs.LOG_NAME):
-    logs.clear(file)
+    try:
+        logs.clear(file)
+    except ValueError:
+        raise HTTPException(400, "Ungültige Logdatei") from None
     log.info("Logdatei geleert: %s", file)
     return {"ok": True}
 
 
 def _asset_version() -> str:
     """Changes whenever a file in static/ changes: the scripts/styles get ?v=… so a home-screen app never keeps old ones."""
-    h = hashlib.md5()
+    h = hashlib.md5(usedforsecurity=False)
     for f in sorted(STATIC.glob("*")):
         if f.suffix in (".js", ".css", ".html"):
             st = f.stat()

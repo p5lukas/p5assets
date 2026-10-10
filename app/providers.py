@@ -6,6 +6,7 @@ import time
 
 import httpx
 
+from .errors import short
 from . import languages as langs
 
 TIMEOUT = httpx.Timeout(20.0, connect=8.0)
@@ -123,7 +124,7 @@ async def fanart_test(key: str) -> bool:
     async with httpx.AsyncClient(timeout=TIMEOUT) as c:
         r = await c.get("https://webservice.fanart.tv/v3/movies/603", params={"api_key": key})
         if r.status_code in (401, 403):
-            raise ValueError("Ungültiger fanart.tv API Key")
+            raise ValueError("Ungültiger fanart.tv-API-Key")
         r.raise_for_status()
     return True
 
@@ -139,7 +140,7 @@ async def _tvdb_login(key: str, pin: str = "") -> str:
     async with httpx.AsyncClient(timeout=TIMEOUT) as c:
         r = await c.post("https://api4.thetvdb.com/v4/login", json=body)
         if r.status_code == 401:
-            raise ValueError("Ungültiger TVDB API Key / PIN")
+            raise ValueError("Ungültiger TVDB-API-Key oder PIN")
         r.raise_for_status()
         token = r.json()["data"]["token"]
     _tvdb_token.update(key=key, token=token, ts=time.time())
@@ -215,7 +216,7 @@ async def search(apis: dict, kind: str, ids: dict, title: str, year: int | None,
         try:
             tmdb_id = await tmdb_find_id(apis["tmdb"], ids, kind, title, year)
         except Exception as e:  # noqa: BLE001
-            status["TMDb"].update(state="error", error=str(e) or e.__class__.__name__)
+            status["TMDb"].update(state="error", error=short(e))
         if tmdb_id:
             tasks["TMDb"] = tmdb_posters(apis["tmdb"], order, kind, tmdb_id, season)
         elif status["TMDb"]["state"] == "nokey":
@@ -228,7 +229,7 @@ async def search(apis: dict, kind: str, ids: dict, title: str, year: int | None,
     images: list[dict] = []
     for name, res in zip(tasks, results):
         if isinstance(res, Exception):
-            status[name].update(state="error", error=str(res) or res.__class__.__name__)
+            status[name].update(state="error", error=short(res))
         else:
             status[name].update(state="ok", count=len(res))
             images.extend(res)

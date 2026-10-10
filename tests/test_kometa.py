@@ -55,3 +55,12 @@ def test_coming_soon():
     assert not kometa.is_coming_soon("Dune 3 (2026)")
     assert kometa.coming_soon_mirrors(f, ["Dune 3 (2026)"]) == ["Dune 3 (2026)"]
     assert kometa.coming_soon_mirrors("Dune 3 (2026)", ["Dune 3 (2026)"]) == []
+
+
+def test_match_item_with_index_gives_the_same_answers():
+    items = [{"title": t, "year": 2000 + i, "folder": f"{t} ({2000 + i})"} for i, t in enumerate(
+        ["Heat", "The Matrix", "Orbital Kitchen", "Neon Harbor", "Harbor Lights", "Glass Orchard", "Quiet Engine"])]
+    idx = kometa.index_items(items)
+    for title, year in (("Heat", 2000), ("Matrix", 2001), ("Orbital Kitchen", 2002), ("Neon Harbour", 2003), ("harbor lights", 2004),
+                        ("Nothing Like It", 1999), ("Glas Orchard", 2005)):
+        assert kometa.match_item(title, year, items, idx) == kometa.match_item(title, year, items)

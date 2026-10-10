@@ -489,7 +489,7 @@ async function logsPage() {
           h("div", {}, h("label", { class: "f", style: "margin-top:0" }, "Nach Level filtern"), chips))),
       h("div", { class: "logcard", style: "padding:0;margin-top:18px" },
         h("div", { class: "row loghead" }, title, h("div", { class: "spacer" }), count, liveBadge),
-        h("div", { class: "loghint" }, h("b", {}, "Tipp: "), "Mit der Suche und den Level-Chips grenzt du die Anzeige ein. Warnungen und Fehler sind farbig markiert. Tokens und API-Keys werden nie ins Log geschrieben."),
+        h("div", { class: "loghint" }, h("b", {}, "Tipp: "), "Mit der Suche und den Level-Filtern grenzt du die Anzeige ein. Warnungen und Fehler sind farbig markiert. Tokens und API-Keys werden nie ins Log geschrieben."),
         view)));
   await load(false);
   S.logTimer = setInterval(tick, 2000);
@@ -510,7 +510,7 @@ function dashboard() {
       h("div", { class: "spacer" }),
       // desktop: one small group with two pickers (images/ZIP, whole folder); touch devices: the single normal button
       h("div", { class: "upgroup" }, h("span", { class: "uplab" }, "Bilder hochladen:"),
-        h("button", { class: "upb", title: "Bilder oder ZIP wählen – p5assets ordnet sie automatisch den Titeln zu", "aria-label": "Bilder oder ZIP wählen", onclick: () => pickFiles(f => importFiles(f), true) }, icon("file", 18)),
+        h("button", { class: "upb", title: "Bilder oder ZIPs wählen – p5assets ordnet sie automatisch den Titeln zu", "aria-label": "Bilder oder ZIPs wählen", onclick: () => pickFiles(f => importFiles(f), true) }, icon("file", 18)),
         h("button", { class: "upb", title: "Ordner wählen – oder Ordner und Dateien einfach ins Fenster ziehen", "aria-label": "Ordner wählen", onclick: () => pickFiles(f => importFiles(f), true, true) }, icon("folder", 18))),
       h("button", { class: "btn tb uptouch", title: "Bilder oder ZIPs wählen – p5assets ordnet sie automatisch den Titeln zu", onclick: () => pickFiles(f => importFiles(f), true) }, icon("upload"), h("span", { class: "lbl" }, "Bilder hochladen")),
       h("span", { class: "vsep" }),
@@ -681,7 +681,7 @@ function renderGrid() {
   if (!S.items.length) {
     fill(g, h("div", { class: "empty" },
       S.st.summary.running ? h("h2", {}, "Scanne …") :
-      S.filter === "missing" && !S.q && scopeStats().items ? [h("div", { class: "big" }, "🎉"), h("h2", {}, "Alles vollständig!"), "Für kein Poster oder keine Staffel fehlt etwas."] :
+      S.filter === "missing" && !S.q && scopeStats().items ? [h("div", { class: "big" }, "🎉"), h("h2", {}, "Alles vollständig!"), "Es fehlt kein Poster und keine Staffel."] :
       !worldStats().items ? [h("h2", {}, "Hier ist noch nichts"), "Ordne dieser Welt unter ⚙ Bibliotheken oder Sonarr/Radarr zu."] :
       [h("h2", {}, "Nichts gefunden"), "Passe Filter oder Suche an – oder starte einen neuen Scan."]));
     return;
@@ -1533,7 +1533,7 @@ function wPlex(nav, c) {
   const connect = async (btn, body) => {
     try {
       const r = await busy(btn, () => api("/plex/connect", { json: body }));
-      setStatus(st, true, `Verbunden mit ${r.server.name} (${r.libraries.length} Bibliotheken)`);
+      setStatus(st, true, `Verbunden mit ${r.server.name} (${pl(r.libraries.length, "Bibliothek", "Bibliotheken")})`);
       addr.set(r.url); token.value = "********"; await loadState(); nextBtn.disabled = false; fill(serverList);
     } catch (e) { setStatus(st, false, e.message); }
   };

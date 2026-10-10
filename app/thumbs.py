@@ -6,10 +6,8 @@ always use the original file."""
 from __future__ import annotations
 
 import hashlib
-import io
 import os
 import threading
-import time
 from pathlib import Path
 
 from PIL import Image, ImageOps
@@ -39,7 +37,7 @@ def cleanup_old() -> None:
 
 def thumb_path(src: Path, width: int = WIDTH) -> Path:
     st = src.stat()
-    key = hashlib.sha1(f"{src}|{st.st_mtime_ns}|{st.st_size}|{width}|{QUALITY}".encode()).hexdigest()
+    key = hashlib.sha1(f"{src}|{st.st_mtime_ns}|{st.st_size}|{width}|{QUALITY}".encode(), usedforsecurity=False).hexdigest()
     return _dir() / key[:2] / f"{key}.jpg"
 
 

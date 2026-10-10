@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import httpx
 
+from .errors import short
 from . import kometa
 
 
@@ -21,7 +22,7 @@ async def _get(c: httpx.AsyncClient, path: str):
     try:
         r = await c.get(path)
     except httpx.HTTPError as e:
-        raise ArrError(f"nicht erreichbar: {e}") from e
+        raise ArrError(f"nicht erreichbar: {short(e)}") from e
     if r.status_code == 401:
         raise ArrError("API-Key ungültig (401)")
     if r.status_code >= 400:

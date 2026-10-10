@@ -5,6 +5,8 @@ import asyncio
 
 import httpx
 
+from .errors import short
+
 PRODUCT = "p5assets"
 VERSION = "1.0.0"
 
@@ -45,7 +47,7 @@ class Plex:
         try:
             r = await self.client.get(path, params=params)
         except httpx.HTTPError as e:
-            raise PlexError(f"Plex nicht erreichbar: {e}") from e
+            raise PlexError(f"Plex nicht erreichbar: {short(e)}") from e
         if r.status_code == 401:
             raise PlexError("Plex-Token ungültig (401)")
         if r.status_code >= 400:
@@ -101,7 +103,7 @@ class Plex:
             if r.status_code >= 400:
                 r = await self.client.get(path)
         except httpx.HTTPError as e:
-            raise PlexError(str(e)) from e
+            raise PlexError(short(e)) from e
         if r.status_code >= 400:
             raise PlexError(f"HTTP {r.status_code}")
         return r.content

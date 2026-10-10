@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import difflib
 import threading
-import time
 from collections import deque
 import re
 import unicodedata
@@ -306,22 +305,52 @@ def letter_of(title: str) -> str:
     return "#"
 
 
-def match_item(title: str, year: int | None, items: list[dict]) -> dict | None:
-    """Best matching library item for a parsed title, or None."""
+def _match_names(it: dict) -> set[str]:
+    names = {normalize(it.get("title", "")), normalize(it.get("original_title", "")),
+             normalize(re.sub(r"\(.*?\)|\{.*?\}|\[.*?\]", "", it.get("folder", "")))}
+    names.discard("")
+    return names
+
+
+def index_items(items: list[dict]) -> dict:
+    """Lookup tables for match_item: normalized name -> items, plus first/last two letters -> (name, item).
+    Without them every file would be compared with every title of the world (thousands of fuzzy comparisons per file)."""
+    by_name: dict[str, list[dict]] = {}
+    by_edge: dict[str, list[tuple[str, dict]]] = {}
+    for it in items:
+        for n in _match_names(it):
+            by_name.setdefault(n, []).append(it)
+            by_edge.setdefault("^" + n[:2], []).append((n, it))
+            by_edge.setdefault("$" + n[-2:], []).append((n, it))
+    return {"name": by_name, "edge": by_edge}
+
+
+def match_item(title: str, year: int | None, items: list[dict], index: dict | None = None) -> dict | None:
+    """Best matching library item for a parsed title, or None. ``index`` (see index_items) makes it fast for many files."""
     key = normalize(title)
     if not key:
         return None
+    if index is None:
+        candidates = [(it, _match_names(it)) for it in items]
+    else:
+        found: dict[int, tuple[dict, set[str]]] = {}
+        for it in index["name"].get(key, []):
+            found[id(it)] = (it, _match_names(it))
+        for edge in ("^" + key[:2], "$" + key[-2:]):
+            for _, it in index["edge"].get(edge, []):
+                if id(it) not in found:
+                    found[id(it)] = (it, _match_names(it))
+        candidates = list(found.values())
     best, best_score = None, 0.0
-    for it in items:
-        names = {normalize(it.get("title", "")), normalize(it.get("original_title", "")),
-                 normalize(re.sub(r"\(.*?\)|\{.*?\}|\[.*?\]", "", it.get("folder", "")))}
-        names.discard("")
+    for it, names in candidates:
         score = 0.0
         for n in names:
             if n == key:
                 score = max(score, 1.0)
             else:
-                score = max(score, difflib.SequenceMatcher(None, n, key).ratio())
+                sm = difflib.SequenceMatcher(None, n, key)
+                if sm.real_quick_ratio() >= 0.7 and sm.quick_ratio() >= 0.7:
+                    score = max(score, sm.ratio())
         if year and it.get("year"):
             if int(it["year"]) == year:
                 score += 0.15

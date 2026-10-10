@@ -33,7 +33,7 @@ def _movie_folder(md: dict) -> str:
 
 def _item_id(world: str, kind: str, folder: str, fallback: str) -> str:
     base = f"{kind}|{folder.casefold()}" if folder else f"x|{fallback}"
-    return f"{world}-{hashlib.sha1(base.encode()).hexdigest()[:10]}"
+    return f"{world}-{hashlib.sha1(base.encode(), usedforsecurity=False).hexdigest()[:10]}"
 
 
 def _rel(p: Path, root: Path) -> str:
