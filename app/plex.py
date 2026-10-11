@@ -181,7 +181,7 @@ async def first_reachable(connections: list[dict], token: str, client_id: str) -
         try:
             await p.identity()
             return uri
-        except Exception:
+        except Exception:  # noqa: BLE001 – any failure just means this address is not reachable
             return None
         finally:
             await p.close()

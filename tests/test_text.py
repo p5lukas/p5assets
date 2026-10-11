@@ -9,6 +9,7 @@ def test_plural():
 
 def test_error_texts_have_no_keys():
     import httpx
+
     from app.errors import short
     req = httpx.Request("GET", "https://api.themoviedb.org/3/movie/1?api_key=SECRET123")
     err = httpx.HTTPStatusError("boom", request=req, response=httpx.Response(401, request=req))

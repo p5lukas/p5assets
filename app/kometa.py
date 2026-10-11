@@ -15,10 +15,10 @@ The name has to match the folder the media lives in on disk.
 from __future__ import annotations
 
 import difflib
-import threading
-from collections import deque
 import re
+import threading
 import unicodedata
+from collections import deque
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
@@ -161,7 +161,7 @@ class AssetIndex:
         base = folder_name.casefold()
         if base in self.flat:
             out["poster"] = self.flat[base]
-        for n in range(0, MAX_SEASON + 1):
+        for n in range(MAX_SEASON + 1):
             for name in (f"season{n:02d}", f"season{n}"):
                 f = self.flat.get(f"{base}_{name}")
                 if f:

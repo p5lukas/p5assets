@@ -8,21 +8,43 @@ import os
 import re
 import tempfile
 import zipfile
+from collections import Counter
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Annotated
 
 import httpx
 from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    Response,
+    StreamingResponse,
+)
 from fastapi.staticfiles import StaticFiles
-from collections import Counter
-
 from pydantic import BaseModel
 
-from .text import plural
+from . import arr as arrmod
+from . import (
+    auth,
+    config,
+    history,
+    kometa,
+    logs,
+    notify,
+    providers,
+    scanner,
+    thumbs,
+    trash,
+    uploads,
+    version,
+)
+from . import languages as langmod
+from . import plex as plexmod
 from .errors import short
-from . import arr as arrmod, auth, config, history, kometa, languages as langmod, logs, notify, thumbs, trash, version, plex as plexmod, providers, scanner, uploads
 from .plex import Plex, PlexError
+from .text import plural
 
 STATIC = Path(__file__).parent / "static"
 log = logs.get("app")
@@ -464,7 +486,8 @@ def _scope_stats(items: list[dict], weak_w: int = 0, weak_r: bool = False) -> di
         c["comingsoon"] += 1 if i.get("coming_soon") else 0
         c["notplex"] += 0 if i["in_plex"] else 1
         c["plexmissing"] += 1 if i.get("missing_plex") else 0
-    c["collections"] = len(collection_overview([i for i in items if i.get("collections")]))
+    with_col = [i for i in items if i.get("collections")]
+    c["collections"] = sum(1 for g in collection_overview(with_col, hidden=_hidden_collections()) if not g["hidden"]) if with_col else 0
     return {"items": c["items"], "slots": c["slots"], "missing": c["missing_slots"], "complete_items": c["complete"],
             "counts": {"collections": c["collections"], "all": c["items"], "missing": c["missing"], "complete": c["complete"],
                        "comingsoon": c["comingsoon"], "notplex": c["notplex"], "plexmissing": c["plexmissing"], "weak": c["weak"]},
@@ -511,7 +534,11 @@ async def items(world: str = "", q: str = "", filter: str = "all", library: str 
             "items": [_public_item(i) for i in res[offset:offset + limit]]}
 
 
-def collection_overview(items: list[dict], q: str = "") -> list[dict]:
+def _hidden_collections() -> frozenset:
+    return frozenset(config.get().get("hidden_collections") or [])
+
+
+def collection_overview(items: list[dict], q: str = "", hidden: set | frozenset = frozenset()) -> list[dict]:
     """Plex collections of one world with the state of their members' posters (only collections with at least two films)."""
     groups: dict[str, dict] = {}
     for it in items:
@@ -524,6 +551,7 @@ def collection_overview(items: list[dict], q: str = "") -> list[dict]:
         if len(g["members"]) < 2 or (nq and nq not in kometa.normalize(g["title"])):
             continue
         g["members"].sort(key=lambda m: (m["year"] or 0, m["title"].casefold()))
+        g["hidden"] = g["id"] in hidden
         g["total"] = len(g["members"])
         g["with_poster"] = sum(1 for m in g["members"] if m["has_poster"])
         out.append(g)
@@ -534,7 +562,20 @@ def collection_overview(items: list[dict], q: str = "") -> list[dict]:
 @app.get("/api/collections")
 async def collections(world: str = "", q: str = ""):
     wid = _world(world)["id"]
-    return {"collections": collection_overview([i for i in scanner.STATE["items"] if i["world"] == wid and i["type"] == "movie"], q)}
+    return {"collections": collection_overview([i for i in scanner.STATE["items"] if i["world"] == wid and i["type"] == "movie"], q, _hidden_collections())}
+
+
+class CollectionHide(BaseModel):
+    id: str
+    hidden: bool = True
+
+
+@app.post("/api/collections/hidden")
+async def collection_hide(body: CollectionHide):
+    """Hide a Plex collection (e.g. a huge one that is no film series) from the overview and the import check, or show it again."""
+    cur = [c for c in (config.get().get("hidden_collections") or []) if c != body.id]
+    config.update({"hidden_collections": cur + [body.id] if body.hidden else cur})
+    return {"ok": True}
 
 
 @app.get("/api/items/{item_id}")
@@ -598,7 +639,7 @@ async def download_asset(item_id: str, slot: str):
 
 
 def _build_zip(entries: list[tuple[Path, str]]):
-    tmp = tempfile.TemporaryFile()  # spills to disk, so a big series does not sit in RAM
+    tmp = tempfile.TemporaryFile()  # noqa: SIM115 – handed to the streaming response, which closes it
     with zipfile.ZipFile(tmp, "w", zipfile.ZIP_STORED, allowZip64=True) as zf:  # posters are compressed already
         for src, arc in entries:
             zf.write(src, arc)
@@ -648,7 +689,7 @@ async def season_thumb(item_id: str, slot: str):
 
 
 @app.post("/api/items/{item_id}/{slot}/upload")
-async def upload_slot(item_id: str, slot: str, file: UploadFile = File(...)):
+async def upload_slot(item_id: str, slot: str, file: Annotated[UploadFile, File()]):
     it = _item(item_id)
     _slot_check(it, slot)
     data = await file.read()
@@ -992,7 +1033,7 @@ async def slot_options(world: str = "", q: str = "", limit: int = 30):
         if i["world"] == wid and (not nq or nq in kometa.normalize(i["title"])):
             keys = ["poster"]
             if i["type"] == "show":
-                keys += [kometa.slot_key(n) for n in range(0, kometa.MAX_SEASON + 1)]
+                keys += [kometa.slot_key(n) for n in range(kometa.MAX_SEASON + 1)]
                 keys += [k for k in i["slots"] if k not in keys]
             out.append({"id": i["id"], "title": i["title"], "year": i["year"], "type": i["type"],
                         "slots": [{"slot": k, "label": kometa.slot_label(kometa.parse_slot_key(k))} for k in keys]})

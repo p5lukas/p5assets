@@ -60,6 +60,7 @@ def test_app_starts_and_serves_index():
 
 def test_import_returns_targets_for_the_set_check(client):
     import io
+
     from PIL import Image
     b = io.BytesIO()
     Image.new("RGB", (20, 30), "red").save(b, "PNG")
@@ -72,6 +73,7 @@ def test_import_returns_targets_for_the_set_check(client):
 
 def test_import_does_not_assign_collection_posters(client):
     import io
+
     from PIL import Image
     b = io.BytesIO()
     Image.new("RGB", (20, 30), "red").save(b, "PNG")
@@ -90,12 +92,12 @@ def test_news_summary_is_shown_once_per_version(client, monkeypatch):
     assert r["show"] and r["count"] >= 10 and len(r["highlights"]) == 4 and r["version"] == "0.4.1"
     client.post("/api/news/seen", json={"ids": [], "version": True})
     assert client.get("/api/news").json()["show"] is False
-    monkeypatch.setattr(version, "BASE_VERSION", "0.4.2")
-    config.update({"seen_news": [e["id"] for e in r["all"]], "news_version_seen": "0.4.1"})
+    monkeypatch.setattr(version, "BASE_VERSION", "0.4.3")
+    config.update({"seen_news": [e["id"] for e in r["all"]], "news_version_seen": "0.4.2"})
     import json
     from pathlib import Path
     entries = json.loads((Path(main.__file__).parent / "news.json").read_text("utf-8"))
-    assert client.get("/api/news").json()["count"] == sum(1 for e in entries if e["version"] == "0.4.2")
+    assert client.get("/api/news").json()["count"] == sum(1 for e in entries if e["version"] == "0.4.3")
 
 
 def test_collection_overview(monkeypatch):
@@ -113,3 +115,20 @@ def test_collection_overview(monkeypatch):
     r = c.get("/api/items", params={"world": "hd"}).json()
     assert r["stats"]["counts"]["collections"] == 1
     assert r["items"][0]["collections"] == col
+
+
+def test_collection_hide(monkeypatch):
+    from app import config
+    config.update({"hidden_collections": []})
+    col = [{"id": "1:900", "title": "Trilogie"}, {"id": "1:999", "title": "Riesen"}]
+    items = [_item(i, f"Film {i}", collections=col) for i in range(3)]
+    monkeypatch.setitem(scanner.STATE, "items", items)
+    monkeypatch.setattr(main, "_world", lambda w=None: {"id": "hd", "name": "HD", "assets_path": "/nonexistent"})
+    c = TestClient(main.app)
+    assert c.get("/api/items", params={"world": "hd"}).json()["stats"]["counts"]["collections"] == 2
+    assert c.post("/api/collections/hidden", json={"id": "1:999"}).status_code == 200
+    got = {g["id"]: g["hidden"] for g in c.get("/api/collections", params={"world": "hd"}).json()["collections"]}
+    assert got == {"1:900": False, "1:999": True}
+    assert c.get("/api/items", params={"world": "hd"}).json()["stats"]["counts"]["collections"] == 1
+    c.post("/api/collections/hidden", json={"id": "1:999", "hidden": False})
+    assert c.get("/api/items", params={"world": "hd"}).json()["stats"]["counts"]["collections"] == 2

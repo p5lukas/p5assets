@@ -1053,15 +1053,19 @@ function openPreview(it, key, draw) {
 function openCollections() {
   const list = h("div"), body = h("div", {}, list);
   const m = modal("Collections", body, [h("button", { class: "btn", onclick: () => m.close() }, "Schließen")]);
-  let all = [], q = "";
+  let all = [], q = "", showHidden = false;
+  const hide = async (g, hidden) => { try { await api("/collections/hidden", { json: { id: g.id, hidden } }); g.hidden = hidden; draw(); loadItems().then(() => { renderChips(); renderGrid(); }); } catch (e) { toast(e.message, "bad"); } };
   const draw = () => {
-    const shown = all.filter(g => !q || normText(g.title).includes(q));
     const open = new Set([...list.querySelectorAll("details[open]")].map(d => d.dataset.id));
-    const incomplete = all.filter(g => g.with_poster < g.total).length;
-    fill(list, all.length ? h("p", { class: "hint", style: "margin:12px 0" }, `${pl(all.length, "Collection", "Collections")} laut Plex (ab zwei Filmen), ${incomplete ? incomplete + " davon unvollständig" : "alle vollständig"}.`) : null,
-      shown.map(g => h("details", { class: "impgroup", "data-id": g.id, open: open.has(g.id) },
+    const visible = all.filter(g => !g.hidden), nHidden = all.length - visible.length;
+    const shown = (showHidden ? all : visible).filter(g => !q || normText(g.title).includes(q));
+    const incomplete = visible.filter(g => g.with_poster < g.total).length;
+    fill(list, all.length ? h("p", { class: "hint", style: "margin:12px 0" }, `${pl(visible.length, "Collection", "Collections")} laut Plex (ab zwei Filmen), ${incomplete ? incomplete + " davon unvollständig" : "alle vollständig"}. `,
+        nHidden ? h("a", { href: "#", onclick: e => { e.preventDefault(); showHidden = !showHidden; draw(); } }, showHidden ? "Ausgeblendete verbergen" : `${nHidden} ausgeblendet – anzeigen`) : null) : null,
+      shown.map(g => h("details", { class: "impgroup" + (g.hidden ? " muted" : ""), "data-id": g.id, open: open.has(g.id) },
         h("summary", {}, h("b", {}, g.title), h("span", { class: "grow" }),
-          h("span", { class: "pill " + (g.with_poster === g.total ? "ok" : "warn") }, g.with_poster === g.total ? `vollständig (${g.total})` : `${g.with_poster} von ${g.total} Postern`)),
+          h("span", { class: "pill " + (g.with_poster === g.total ? "ok" : "warn") }, g.with_poster === g.total ? `vollständig (${g.total})` : `${g.with_poster} von ${g.total} Postern`),
+          h("button", { class: "btn ghost sm", title: g.hidden ? "Wieder einblenden" : "Diese Collection ausblenden (z. B. eine Sammel-Collection, die keine Filmreihe ist)", onclick: e => { e.preventDefault(); e.stopPropagation(); hide(g, !g.hidden); } }, g.hidden ? "Einblenden" : "Ausblenden")),
         g.members.map(mb => h("div", { class: "colrow" },
           mb.has_poster ? h("img", { src: `/api/asset/${mb.id}/poster`, loading: "lazy", alt: "" }) : h("span", { class: "noimg sm" }, "–"),
           h("div", { class: "grow" }, mb.title + (mb.year ? ` (${mb.year})` : "")),
@@ -1499,8 +1503,10 @@ function reviewImport(res, onDone, fixed) {
       const t = r.item_id ? targets[r.item_id] : null;
       if (t && t.type === "show") { if (!series.has(r.item_id)) series.set(r.item_id, []); series.get(r.item_id).push(r); }
       else if (t) {
-        const cid = (t.collections || []).map(c => c.id).find(id => colMap[id]);
-        if (cid) { if (!cols.has(cid)) cols.set(cid, []); cols.get(cid).push(r); } else movies.push(r);
+        // a film appears in every (visible) Plex collection it belongs to: the same row, the same tick box
+        const cids = (t.collections || []).map(c => c.id).filter(id => colMap[id] && !colMap[id].hidden);
+        cids.forEach(cid => { if (!cols.has(cid)) cols.set(cid, []); cols.get(cid).push(r); });
+        if (!cids.length) movies.push(r);
       } else loose.push(r);
     }
     const checks = [...series].map(([id, rs]) => ({ id, rs, t: targets[id], chk: checkSet(targets[id], rs.filter(r => r.use)) }));
@@ -1519,12 +1525,14 @@ function reviewImport(res, onDone, fixed) {
       checks.map(c => group(`${c.t.title}${c.t.year ? ` (${c.t.year})` : ""} · ${pl(c.rs.length, "Bild", "Bilder")}`,
         h("span", { class: "pill " + (c.chk.dups ? "bad" : c.chk.ok ? "ok" : "warn") }, c.chk.dups ? "doppelt belegt" : c.chk.ok ? "Set vollständig" : "unvollständig"),
         checks.length === 1 || !c.chk.ok, c.rs.map(r => buildRow(r, dups)), c.chk.lines)),
-      [...cols].map(([cid, rs]) => {
+      [...cols].sort((x, y) => colMap[x[0]].total - colMap[y[0]].total).map(([cid, rs]) => {
         const g = colMap[cid], used = new Set(rs.filter(r => r.use).map(r => r.item_id));
         const lacking = g.members.filter(mb => !mb.has_poster && !used.has(mb.id));
         const dupC = rs.some(r => r.use && dups[r.item_id + "|" + r.slot] > 1);
         return group(`${g.title} · ${pl(rs.length, "Bild", "Bilder")}`,
-          h("span", { class: "pill " + (dupC ? "bad" : lacking.length ? "warn" : "ok") }, dupC ? "doppelt belegt" : lacking.length ? `${lacking.length} von ${g.total} ohne Poster` : "Collection vollständig"),
+          [h("span", { class: "pill " + (dupC ? "bad" : lacking.length ? "warn" : "ok") }, dupC ? "doppelt belegt" : lacking.length ? `${lacking.length} von ${g.total} ohne Poster` : "Collection vollständig"),
+            h("button", { class: "btn ghost sm", title: "Diese Collection ausblenden (gilt auch im Reiter „Collections“) – z. B. eine Sammel-Collection, die keine Filmreihe ist",
+              onclick: e => { e.preventDefault(); e.stopPropagation(); g.hidden = true; api("/collections/hidden", { json: { id: cid, hidden: true } }).catch(() => {}); draw(); } }, "Ausblenden")],
           true, rs.map(r => buildRow(r, dups)), [{ cls: lacking.length ? "warn" : "ok",
             text: lacking.length ? `Plex-Collection „${g.title}“: es fehlt noch ein Poster für ${lacking.map(x => x.title + (x.year ? " (" + x.year + ")" : "")).join(", ")}` : `Plex-Collection „${g.title}“: alle ${g.total} Filme haben ein Poster` }]);
       }),

@@ -1,5 +1,16 @@
 # Änderungen
 
+## 0.4.3 – 2026-10-11
+
+**Neu**
+- Collections lassen sich ausblenden (im Reiter „Collections“ und im Import); die Auswahl bleibt gespeichert, im Reiter sind ausgeblendete wieder einblendbar
+
+**Geändert**
+- Der Import zeigt alle passenden Plex-Collections eines Films (jeweils mit eigener Prüfung), nicht nur die erste; so kann eine große Sammel-Collection die passende kleine nicht mehr verdrängen
+
+**Behoben**
+- Code-Qualität: `ruff check` meldet keine Fehler mehr
+
 ## 0.4.2 – 2026-10-11
 
 **Neu**

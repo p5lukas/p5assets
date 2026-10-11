@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-from collections import Counter
 import time
+from collections import Counter
 from pathlib import Path
 
 from . import arr, config, dims, history, kometa, logs, notify, providers, thumbs, trash
@@ -280,7 +280,7 @@ async def scan() -> None:
             await asyncio.to_thread(trash.purge)
             asyncio.create_task(_measure_later(all_items))
             await notify.after_scan(all_items, cfg["worlds"], STATE["failed"], None)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.error("Scan fehlgeschlagen: %s", e, exc_info=not isinstance(e, PlexError))
             STATE.update(error=str(e) or e.__class__.__name__, progress="")
             await notify.after_scan([], cfg["worlds"], {}, STATE["error"])

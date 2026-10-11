@@ -6,8 +6,8 @@ import time
 
 import httpx
 
-from .errors import short
 from . import languages as langs
+from .errors import short
 
 TIMEOUT = httpx.Timeout(20.0, connect=8.0)
 TMDB_IMG = "https://image.tmdb.org/t/p/"
