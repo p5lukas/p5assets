@@ -1,3 +1,5 @@
+> Arbeitsregel (Nutzer): Bei jedem „leg los“ einen kleinen Versionssprung machen (Patch, z. B. 0.4.0 → 0.4.1): `BASE_VERSION` in `app/version.py` hochsetzen, neuen Abschnitt oben in `CHANGELOG.md` anlegen (Datum, Neu/Geändert/Behoben), Neuigkeiten in `app/news.json` mit der neuen Version ergänzen, alles testen und auf Feature-Branch und `dev` pushen. `main`, Tag und Release macht der Nutzer bzw. nur auf ausdrücklichen Wunsch (Tags kann ich nicht pushen). Größere Funktionen = kleine Versionssprünge (0.5.0), nur nach Absprache.
+
 > Arbeitsregel (Nutzer): Tests künftig mit einer doppelt so großen Test-Bibliothek wie die echte Welt (echte HD-Welt ≈ 3200 Titel → Testumgebung ≈ 6500 Titel, mit großen Postern), damit Geschwindigkeit und Speicherbedarf unter Last geprüft sind.
 
 # p5assets – Ideen & Verbesserungen
