@@ -253,6 +253,14 @@ def guess_slot(filename: str) -> tuple[str, int | None]:
     return "poster", None
 
 
+_COLLECTION_RE = re.compile(r"\b(collections?|sammlung|box[\s._-]?sets?|filmreihe|filmsammlung)\b", re.IGNORECASE)
+
+
+def is_collection_name(rel_path: str) -> bool:
+    """File names like "Yellowstone Collection.png" or "Box Set" point to a poster for a whole collection, not for one title."""
+    return bool(_COLLECTION_RE.search(re.sub(r"[_.]+", " ", Path(rel_path).stem)))
+
+
 def _is_bare_slot_name(stem: str) -> bool:
     s = stem.strip().casefold()
     if s in _POSTER_WORDS:

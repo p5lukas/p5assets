@@ -556,3 +556,8 @@ input[type=search]::-webkit-search-cancel-button,input[type=search]::-webkit-sea
 @media(prefers-reduced-motion:reduce){.funline u{animation:none}}
 
 .logincard .status{margin:0 0 12px}
+
+.logo.home{cursor:pointer;border-radius:8px}
+.logo.home:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
+.newshl{margin:0 0 6px;padding-left:20px}.newshl li{margin:3px 0}
+.newsver{margin:16px 0 2px;font-size:14px;color:var(--accent)}.newsver:first-child{margin-top:0}

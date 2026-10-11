@@ -222,29 +222,51 @@ def _news() -> list[dict]:
         return []
 
 
+def _vkey(v: str) -> tuple:
+    try:
+        return tuple(int(x) for x in (v or "0").split("."))
+    except ValueError:
+        return (0,)
+
+
+def _seen_version(cfg: dict) -> str:
+    """Last version whose news the user has been shown. Installs from before this setting but with seen entries count as 0.4.0."""
+    return cfg.get("news_version_seen") or ("0.4.0" if cfg.get("seen_news") else "")
+
+
 @app.get("/api/news")
 async def news():
-    """What is new since the user last looked: entries whose ID is not in ``seen_news`` (the first onboarding marks all as seen)."""
-    seen = set(config.get().get("seen_news") or [])
+    """``show``: news of a version the user has not been told about yet (one short notice per version);
+    ``unseen``/``all``: the single entries (by ID) for the full list in the footer."""
+    cfg = config.get()
+    seen = set(cfg.get("seen_news") or [])
     entries = _news()
-    return {"unseen": [e for e in entries if e["id"] not in seen], "all": [{**e, "seen": e["id"] in seen} for e in entries]}
+    current = version.BASE_VERSION
+    newer = [e for e in entries if _vkey(e["version"]) > _vkey(_seen_version(cfg)) and _vkey(e["version"]) <= _vkey(current)]
+    return {"version": current, "show": bool(newer) and bool(cfg.get("onboarded")), "count": len(newer), "highlights": [e["title"] for e in newer[:4]],
+            "unseen": [e for e in entries if e["id"] not in seen],
+            "all": [{**e, "seen": e["id"] in seen} for e in entries]}
 
 
 class NewsSeen(BaseModel):
-    ids: list[str]
+    ids: list[str] = []
+    version: bool = False        # also remember that the notice for the current version was shown
 
 
 @app.post("/api/news/seen")
 async def news_seen(body: NewsSeen):
     known = {e["id"] for e in _news()}
-    cur = list(config.get().get("seen_news") or [])
-    config.update({"seen_news": list(dict.fromkeys(cur + [i for i in body.ids if i in known]))})
+    cfg = config.get()
+    patch: dict = {"seen_news": list(dict.fromkeys(list(cfg.get("seen_news") or []) + [i for i in body.ids if i in known]))}
+    if body.version:
+        patch["news_version_seen"] = version.BASE_VERSION
+    config.update(patch)
     return {"ok": True}
 
 
 @app.post("/api/onboarding/finish")
 async def finish_onboarding():
-    config.update({"onboarded": True, "seen_news": [e["id"] for e in _news()]})   # a fresh install has nothing "new"
+    config.update({"onboarded": True, "seen_news": [e["id"] for e in _news()], "news_version_seen": version.BASE_VERSION})   # a fresh install has nothing "new"
     log.info("Onboarding abgeschlossen")
     asyncio.create_task(scanner.scan())
     return {"ok": True}
@@ -875,6 +897,9 @@ def _suggest(entry: dict, fixed: dict | None, pool: list[dict], index: dict | No
     out["item_id"] = None
     out["slot"] = None
     if entry["kind"] == "ignore":
+        return out
+    if kometa.is_collection_name(entry["name"]):          # a poster for a whole collection: the user decides where it belongs
+        out["collection"] = True
         return out
     item = fixed or kometa.match_item(entry["title"], entry["year"], pool, index)
     if item:

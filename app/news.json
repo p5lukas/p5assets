@@ -1,4 +1,8 @@
 [
+  {"id": "logo-1", "version": "0.4.1", "title": "Logo = Startseite", "text": "Ein Klick auf „p5 assets“ oben bringt dich von überall zurück zur Startseite."},
+  {"id": "keys-1", "version": "0.4.1", "title": "Tastaturkürzel", "text": "„/“ springt ins Suchfeld, Esc leert es. In der Poster-Vorschau blättern die Pfeiltasten links/rechts zum vorigen oder nächsten Poster."},
+  {"id": "collection-1", "version": "0.4.1", "title": "Collection-Poster beim Import", "text": "Dateien wie „… Collection“ oder „Box Set“ werden nicht mehr automatisch einem Titel zugeordnet. Bei doppelt belegten Kacheln bevorzugt die Prüfung die Datei „Titel (Jahr)“."},
+  {"id": "news-1", "version": "0.4.1", "title": "Kürzerer Update-Hinweis", "text": "Nach einem Update erscheint nur noch ein kurzer Hinweis. Alle Neuerungen findest du jederzeit unten in der Fußzeile unter „Neuigkeiten“."},
   {"id": "auth-1", "version": "0.4.0", "title": "Anmeldung", "text": "Schütze p5assets optional mit Benutzername und Passwort. Passwort vergessen? Mit Zugriff auf den Server lässt es sich zurücksetzen.", "action": {"label": "Jetzt einrichten", "target": "settings:auth"}},
   {"id": "notify-1", "version": "0.4.0", "title": "Benachrichtigungen", "text": "p5assets meldet sich per Discord, Telegram oder ntfy, wenn es neue Titel ohne Poster gibt (Coming Soon markiert) oder ein Scan fehlschlägt.", "action": {"label": "Jetzt einrichten", "target": "settings:notify"}},
   {"id": "setcheck-1", "version": "0.4.0", "title": "Set-Kontrolle beim Import", "text": "Lädst du ein Serien-Set oder eine ZIP mit mehreren Serien hoch, gruppiert p5assets die Bilder je Serie und prüft, ob alle Staffeln aus Plex/Sonarr dabei sind. Doppelt belegte Kacheln werden markiert und müssen erst aufgelöst werden."},

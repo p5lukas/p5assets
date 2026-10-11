@@ -40,6 +40,7 @@ DEFAULTS: dict = {
         "telegram": {"enabled": False, "token": "", "chat_id": ""},
         "ntfy": {"enabled": False, "url": "https://ntfy.sh", "topic": "", "token": ""},
     },
+    "news_version_seen": "",   # letzte Version, für die der kurze Update-Hinweis gezeigt wurde
     "seen_news": [],        # IDs der „Neu in diesem Update“-Einträge, die der Nutzer schon gesehen hat
     "config_version": 1,    # für künftige Umstellungen der Konfiguration
 }

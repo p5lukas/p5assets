@@ -1,5 +1,16 @@
 # Änderungen
 
+## 0.4.1 – 2026-10-11
+
+**Neu**
+- Ein Klick auf das Logo bringt von überall zurück zur Startseite
+- Tastaturkürzel: „/“ springt ins Suchfeld, Esc leert es, ←/→ blättern in der Poster-Vorschau (mit ‹ › Knöpfen)
+- Import erkennt Collection-/Sammlungs-Poster am Dateinamen und ordnet sie nicht automatisch zu
+
+**Geändert**
+- „Neu in diesem Update“ ist jetzt ein kurzer Hinweis (einmal pro Version); alle Neuigkeiten, nach Version gruppiert, stehen unter „Neuigkeiten“ in der Fußzeile
+- Bei doppelt belegten Kacheln bevorzugt der Import die Datei „Titel (Jahr)“ und wählt die andere ab
+
 ## 0.4.0 – 2026-10-10
 
 **Neu**

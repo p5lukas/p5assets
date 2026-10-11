@@ -354,24 +354,36 @@ function openCleanup(initial = "trash") {
 }
 
 /* ------------------------------------------------------------ what's new --- */
-/** "Neu in diesem Update": entries from news.json that the user has not seen yet, each with an optional "set up / try" action. */
+/** Once per version a short notice (the headlines); the full list, grouped by version, is behind "Neuigkeiten" in the footer. */
 async function checkNews(all = false) {
   try {
-    const r = await api("/news"), list = all ? r.all : r.unseen;
-    if (!list.length) { if (all) toast("Keine Neuigkeiten", "ok"); return; }
-    openNews(list, all);
+    const r = await api("/news");
+    if (all) { if (!r.all.length) toast("Keine Neuigkeiten", "ok"); else openNews(r.all); return; }
+    if (r.show) openNewsNotice(r);
   } catch { /* optional */ }
 }
-const markNewsSeen = ids => api("/news/seen", { json: { ids } }).catch(() => {});
+const markNewsSeen = (ids, version = false) => api("/news/seen", { json: { ids, version } }).catch(() => {});
 
-function openNews(list, all) {
-  const m = modal(all ? "Neuigkeiten" : "Neu in diesem Update", h("div", {},
-    all ? null : h("p", { class: "hint", style: "margin-top:0" }, "Das hat sich seit deinem letzten Besuch geändert. Wo es passt, kannst du es gleich ausprobieren oder einrichten."),
-    list.map(e => h("div", { class: "newsrow" },
-      h("div", { class: "grow" }, h("b", {}, e.title, e.seen ? h("span", { class: "tag", style: "margin-left:8px" }, "gesehen") : null), h("div", { class: "hint", style: "margin:3px 0 0" }, e.text)),
-      e.action ? h("button", { class: "btn sm primary", onclick: () => { m.close(); markNewsSeen([e.id]); runNewsAction(e.action.target); } }, e.action.label) : null))),
-    all ? null : [h("button", { class: "btn primary", onclick: () => { markNewsSeen(list.map(e => e.id)); m.close(); } }, "Alles gelesen"),
-      h("button", { class: "btn", onclick: () => m.close() }, "Später erinnern")]);
+function openNewsNotice(r) {
+  const done = () => { markNewsSeen([], true); m.close(); };
+  const m = modal(`Neu in Version ${r.version}`, h("div", {},
+    h("p", { class: "hint", style: "margin-top:0" }, `${pl(r.count, "Neuerung", "Neuerungen")}, zum Beispiel:`),
+    h("ul", { class: "newshl" }, r.highlights.map(t => h("li", {}, t))),
+    h("p", { class: "hint" }, "Alle Neuigkeiten findest du jederzeit unten in der Fußzeile unter „Neuigkeiten“.")),
+    [h("button", { class: "btn primary", onclick: () => { done(); openNews(); } }, "Alle ansehen"),
+      h("button", { class: "btn", onclick: done }, "Schließen")]);
+}
+
+async function openNews(list) {
+  if (!list) { try { list = (await api("/news")).all; } catch { return; } }
+  const byVer = new Map();
+  list.forEach(e => { if (!byVer.has(e.version)) byVer.set(e.version, []); byVer.get(e.version).push(e); });
+  const m = modal("Neuigkeiten", h("div", {},
+    [...byVer].map(([v, es]) => [h("h3", { class: "newsver" }, "Version " + v),
+      es.map(e => h("div", { class: "newsrow" },
+        h("div", { class: "grow" }, h("b", {}, e.title), h("div", { class: "hint", style: "margin:3px 0 0" }, e.text)),
+        e.action ? h("button", { class: "btn sm primary", onclick: () => { m.close(); markNewsSeen([e.id]); runNewsAction(e.action.target); } }, e.action.label) : null))])),
+    [h("button", { class: "btn primary", onclick: () => { markNewsSeen(list.map(e => e.id)); m.close(); } }, "Schließen")]);
 }
 
 async function runNewsAction(target) {
@@ -416,6 +428,31 @@ async function boot() {
   try { await loadState(); S.langs = await api("/languages"); } catch (e) { app.append(h("div", { class: "empty" }, "Backend nicht erreichbar: " + e.message)); return; }
   if (!S.st.onboarded) return wizard();
   dashboard();
+}
+
+// "/" jumps to the search field of the current page (start page or the list in an open window)
+document.addEventListener("keydown", e => {
+  if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey || e.target.closest("input,textarea,select,[contenteditable]")) return;
+  const wraps = document.querySelectorAll(".modalwrap"), top = wraps[wraps.length - 1];
+  const q = top ? top.querySelector("input[type=search]") : S.view === "dash" ? $("#q") : null;
+  if (q) { e.preventDefault(); q.focus(); q.select(); }
+});
+
+/** The logo always leads to the start page (not on the login page, not during the first setup). */
+function goHome() {
+  if (S.view === "login" || S.view === "wiz" && !S.wizSettings) return;
+  if (S.view === "wiz") return closeSettings();
+  if (S.view === "logs") clearInterval(S.logTimer);
+  if (S.view !== "dash") { S.q = ""; S.filter = "all"; dashboard(); return; }
+  S.q = ""; S.filter = "all"; S.letter = null; const q = $("#q"); if (q) q.value = "";
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  loadItems().then(() => { renderChips(); renderGrid(); });
+}
+function logoEl(word) {
+  const clickable = !(S.view === "wiz" && !S.wizSettings);
+  return h("div", { class: "logo" + (clickable ? " home" : ""), ...(clickable ? { role: "link", tabindex: "0", title: "Zur Startseite", onclick: goHome,
+    onkeydown: e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); goHome(); } } } : {}) },
+    h("i", { class: "logomark", "aria-hidden": "true" }, "p5"), h("span", {}, word, h("u", {}, "_")));
 }
 
 /* =============================================================== logs === */
@@ -472,7 +509,7 @@ async function logsPage() {
 
   fill(app,
     h("header", { class: "top" }, h("div", { class: "in" },
-      h("div", { class: "logo" }, h("i", { class: "logomark", "aria-hidden": "true" }, "p5"), h("span", {}, "logs", h("u", {}, "_"))),
+      logoEl("logs"),
       h("div", { class: "spacer" }),
       h("button", { class: "btn tb", onclick: async () => { clearInterval(S.logTimer); await checkAlerts(true); dashboard(); } }, icon("back"), h("span", { class: "lbl" }, "Zurück zum Dashboard")),
       h("button", { class: "btn tb icon", title: "Einstellungen", onclick: async () => { clearInterval(S.logTimer); await checkAlerts(true); wizard(true); } }, icon("gear", 20)))),
@@ -509,7 +546,7 @@ function dashboard() {
   const ws = cfg().worlds;
   fill(app,
     h("header", { class: "top" }, h("div", { class: "in" },
-      h("div", { class: "logo" }, h("i", { class: "logomark", "aria-hidden": "true" }, "p5"), h("span", {}, "assets", h("u", {}, "_"))),
+      logoEl("assets"),
       ws.length > 1 ? h("div", { class: "worlds", title: "Welt wechseln" }, ws.map(w =>
         h("button", { class: w.id === S.world ? "on" : "", style: `--c:${worldColor(w)}`, title: w.name, onclick: () => switchWorld(w.id) }, planetSvg(w.hue ?? 140, 20), w.name))) : null,
       h("div", { class: "spacer" }),
@@ -968,12 +1005,23 @@ function openPreview(it, key, draw) {
   ];
   if ((it.dupes || []).length) rows.push(["Hinweis", `Ordnername auch an anderer Stelle gefunden (wird nicht genutzt): ${it.dupes.join(", ")}`]);
   const touch = matchMedia("(hover: none)").matches;
+  // arrow keys / ‹ › flip through the posters of the movies on the start page (not while another window is open underneath)
+  const flip = key === "poster" && S.view === "dash" && it.type === "movie" ? S.items.filter(x => x.type === "movie") : [];
+  const at = flip.findIndex(x => x.id === it.id), nb = flip.length > 1 && at >= 0;
+  const go = d => {
+    const next = flip[(at + d + flip.length) % flip.length];
+    close();
+    openPreview(next, "poster", x => { const i = S.items.findIndex(y => y.id === x.id); if (i >= 0) S.items[i] = x; renderGrid(); api("/status").then(r => { S.st.summary = r; updateHero(); }); });
+  };
   const img = src ? h("img", { src, alt: "", onload: e => { res.textContent = `${e.target.naturalWidth} × ${e.target.naturalHeight} px${exists ? "" : " (Plex-Vorschau)"}`; } })
     : h("div", { class: "noimg" }, h("b", {}, "＋"), "kein Bild");
   const pick = () => pickFiles(files => { close(); uploadSlot(it, key, files, draw); }, false);
   const wrap = h("div", { class: "modalwrap lightbox", onclick: e => { if (e.target === wrap) close(); } },
     h("div", { class: "lbox" },
-     h("header", { class: "lbhead" }, h("h2", { class: "grow" }, "Vorschau"), h("button", { class: "btn ghost sm", "aria-label": "Schließen", onclick: () => close() }, "✕")),     // the one close button: same place on desktop and phone
+     h("header", { class: "lbhead" }, h("h2", { class: "grow" }, "Vorschau"),
+      nb ? [h("button", { class: "btn ghost sm", "aria-label": "Voriges Poster", title: "Voriges Poster (←)", onclick: () => go(-1) }, "‹"),
+        h("button", { class: "btn ghost sm", "aria-label": "Nächstes Poster", title: "Nächstes Poster (→)", onclick: () => go(1) }, "›")] : null,
+      h("button", { class: "btn ghost sm", "aria-label": "Schließen", onclick: () => close() }, "✕")),     // the one close button: same place on desktop and phone
      h("div", { class: "lbbody" }, h("div", { class: "limg" }, img,
         touch && exists ? h("div", { class: "hint", style: "text-align:center" }, "Bild lange drücken → „Zu Fotos hinzufügen“ (Originalqualität)") : null),
       h("div", { class: "lside" },
@@ -990,7 +1038,10 @@ function openPreview(it, key, draw) {
             close(); const r = await api(`/items/${it.id}/${key}`, { method: "DELETE" }); draw(r.item); undoToast("Gelöscht", r, draw);
           } }, "Löschen") : null),
         !it.folder ? h("div", { class: "status bad" }, "Für diesen Titel ist kein Ordnername bekannt – Upload nicht möglich.") : null))));
-  const onKey = e => { if (e.key === "Escape") close(); };
+  const onKey = e => {
+    if (e.key === "Escape") close();
+    else if (nb && !e.target.closest("input,textarea,select") && (e.key === "ArrowLeft" || e.key === "ArrowRight")) { e.preventDefault(); go(e.key === "ArrowLeft" ? -1 : 1); }
+  };
   function close() { wrap.remove(); document.removeEventListener("keydown", onKey); }
   document.addEventListener("keydown", onKey);
   document.body.append(wrap);
@@ -1346,6 +1397,15 @@ function checkSet(t, rows) {
 
 function reviewImport(res, onDone, fixed) {
   const rows = res.entries.map(e => ({ ...e, use: !!e.item_id && e.kind !== "ignore" }));
+  // two files for one tile: prefer the one named exactly "Title (Year)" (the other is probably a collection poster) and untick the rest
+  const byTile = new Map();
+  rows.filter(r => r.use).forEach(r => { const k = r.item_id + "|" + r.slot; byTile.set(k, [...(byTile.get(k) || []), r]); });
+  const norm = t => normText(t).replace(/[^a-z0-9]+/g, " ").trim();
+  byTile.forEach(rs => {
+    if (rs.length < 2) return;
+    const exact = rs.filter(r => norm(r.name.replace(/\.[^.]+$/, "").replace(/^.*\//, "")) === norm(`${r.item_title} ${r.item_year || ""}`));
+    if (exact.length === 1) rs.forEach(r => { if (r !== exact[0]) { r.use = false; r.autoSkipped = true; } });
+  });
   const targets = { ...(res.targets || {}) };
   if (fixed && !targets[fixed.id]) targets[fixed.id] = fixed;
   const list = h("div"), summary = h("div");
@@ -1387,7 +1447,9 @@ function reviewImport(res, onDone, fixed) {
     const chk = h("input", { type: "checkbox", checked: r.use, title: "Übernehmen", onchange: e => { r.use = e.target.checked; draw(); } });
     const pills = [];
     if (r.use && t && t.slots[r.slot] && t.slots[r.slot].exists) pills.push(h("span", { class: "pill warn", title: "Für diese Kachel gibt es schon ein Bild" }, "ersetzt vorhandenes Bild"));
+    if (r.collection && !r.item_id) pills.push(h("span", { class: "pill warn", title: "Der Dateiname deutet auf ein Collection-/Sammlungs-Poster hin – bitte selbst einen Titel wählen oder das Bild nicht übernehmen" }, "vermutlich Collection-Poster"));
     if (r.use && r.item_id && dups[r.item_id + "|" + r.slot] > 1) pills.push(h("span", { class: "pill bad", title: "Mehrere Dateien für dieselbe Kachel – nur die letzte bleibt" }, "doppelt belegt"));
+    if (r.autoSkipped && !r.use) pills.push(h("span", { class: "pill warn", title: "Für diese Kachel gibt es eine Datei, die genau „Titel (Jahr)“ heißt – sie wurde bevorzugt" }, "abgewählt: genauer Treffer vorhanden"));
     return h("div", { class: "imp" + (r.use ? "" : " skip") },
       h("img", { src: `/api/import/${res.session}/${r.id}`, loading: "lazy" }),
       h("div", { class: "fn" }, r.name, r.kind === "ignore" ? h("div", {}, h("span", { class: "pill bad" }, "Hintergrund/Banner – ignoriert")) : null),
@@ -1575,7 +1637,7 @@ function drawWiz() {
   // labelled step navigation: in settings every step is reachable, during onboarding only the ones visited so far
   const shown = list.map((name, i) => ({ name, i })).filter(s => !(S.wizSettings && (s.name === "welcome" || s.name === "done")));
   fill(app, h("div", { class: "wiz" },
-    h("div", { class: "logo" }, h("i", { class: "logomark", "aria-hidden": "true" }, "p5"), h("span", {}, "assets", h("u", {}, "_"))),
+    logoEl("assets"),
     h("nav", { class: "stepnav" }, shown.map((s, n) => {
       const reachable = S.wizSettings || s.i <= (S.reached || 0);
       return h("button", { class: (s.name === S.step ? "on " : "") + (s.i < idx ? "done" : ""), disabled: !reachable, title: reachable ? `Zu „${STEP_LABELS[s.name]}“ springen` : "Erst die vorherigen Schritte abschließen",

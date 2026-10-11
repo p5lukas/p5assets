@@ -68,3 +68,31 @@ def test_import_returns_targets_for_the_set_check(client):
     body = r.json()
     assert body["entries"][0]["item_id"] == "w:1"
     assert "w:1" in body["targets"] and "slots" in body["targets"]["w:1"]
+
+
+def test_import_does_not_assign_collection_posters(client):
+    import io
+    from PIL import Image
+    b = io.BytesIO()
+    Image.new("RGB", (20, 30), "red").save(b, "PNG")
+    files = [("files", ("Alpha (2020).png", b.getvalue(), "image/png")), ("files", ("Alpha Collection.png", b.getvalue(), "image/png"))]
+    body = client.post("/api/import", data={"world": "hd"}, files=files).json()
+    by = {e["name"]: e for e in body["entries"]}
+    assert by["Alpha (2020).png"]["item_id"] == "w:1"
+    assert by["Alpha Collection.png"]["item_id"] is None and by["Alpha Collection.png"]["collection"] is True
+
+
+def test_news_summary_is_shown_once_per_version(client, monkeypatch):
+    from app import config, version
+    monkeypatch.setattr(version, "BASE_VERSION", "0.4.1")
+    config.update({"onboarded": True, "seen_news": [], "news_version_seen": ""})
+    r = client.get("/api/news").json()
+    assert r["show"] and r["count"] >= 10 and len(r["highlights"]) == 4 and r["version"] == "0.4.1"
+    client.post("/api/news/seen", json={"ids": [], "version": True})
+    assert client.get("/api/news").json()["show"] is False
+    monkeypatch.setattr(version, "BASE_VERSION", "0.4.2")
+    config.update({"seen_news": [e["id"] for e in r["all"]], "news_version_seen": ""})       # old install: seen entries count as 0.4.0
+    import json
+    from pathlib import Path
+    entries = json.loads((Path(main.__file__).parent / "news.json").read_text("utf-8"))
+    assert client.get("/api/news").json()["count"] == sum(1 for e in entries if e["version"] == "0.4.1")

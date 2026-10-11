@@ -64,3 +64,11 @@ def test_match_item_with_index_gives_the_same_answers():
     for title, year in (("Heat", 2000), ("Matrix", 2001), ("Orbital Kitchen", 2002), ("Neon Harbour", 2003), ("harbor lights", 2004),
                         ("Nothing Like It", 1999), ("Glas Orchard", 2005)):
         assert kometa.match_item(title, year, items, idx) == kometa.match_item(title, year, items)
+
+
+def test_collection_posters_are_recognised():
+    assert kometa.is_collection_name("Yellowstone Collection.png")
+    assert kometa.is_collection_name("Filme/Die Reihe - Sammlung.jpg")
+    assert kometa.is_collection_name("Dune Box Set.jpg") and kometa.is_collection_name("dune_boxset.jpg")
+    assert not kometa.is_collection_name("Yellowstone (2018).png")
+    assert not kometa.is_collection_name("Boxer (2020).jpg")
