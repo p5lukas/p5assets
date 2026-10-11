@@ -1,5 +1,11 @@
 # Änderungen
 
+## 0.4.2 – 2026-10-11
+
+**Neu**
+- Plex-Collections: neuer Reiter „Collections“ zeigt jede Collection (ab zwei Filmen) mit „x von y Postern“; Filme ohne Poster lassen sich direkt dort hochladen
+- Beim Import werden Filme nach Plex-Collection gruppiert, die Prüfung nennt Filme der Collection, die danach noch kein Poster haben
+
 ## 0.4.1 – 2026-10-11
 
 **Neu**

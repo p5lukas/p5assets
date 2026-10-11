@@ -1,4 +1,5 @@
 [
+  {"id": "collections-1", "version": "0.4.2", "title": "Collections aus Plex", "text": "Unter „Collections“ in der Tab-Leiste siehst du die Plex-Collections und ob für alle ihre Filme ein Poster da ist. Beim Import zeigt die Prüfung, ob nach dem Upload noch Filme einer Collection ohne Poster bleiben.", "action": {"label": "Ansehen", "target": "collections"}},
   {"id": "logo-1", "version": "0.4.1", "title": "Logo = Startseite", "text": "Ein Klick auf „p5 assets“ oben bringt dich von überall zurück zur Startseite."},
   {"id": "keys-1", "version": "0.4.1", "title": "Tastaturkürzel", "text": "„/“ springt ins Suchfeld, Esc leert es. In der Poster-Vorschau blättern die Pfeiltasten links/rechts zum vorigen oder nächsten Poster."},
   {"id": "collection-1", "version": "0.4.1", "title": "Collection-Poster beim Import", "text": "Dateien wie „… Collection“ oder „Box Set“ werden nicht mehr automatisch einem Titel zugeordnet. Bei doppelt belegten Kacheln bevorzugt die Prüfung die Datei „Titel (Jahr)“."},

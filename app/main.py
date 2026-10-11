@@ -110,6 +110,7 @@ def _public_item(it: dict, full: bool = False) -> dict:
     out = {k: it[k] for k in ("id", "world", "type", "title", "year", "folder", "library_title", "missing",
                               "updated", "in_plex", "sources", "dupes")}
     out["mirror_folders"] = it.get("mirror_folders") or []
+    out["collections"] = it.get("collections") or []
     out["coming_soon"] = bool(it.get("coming_soon"))
     out["missing_plex"] = it.get("missing_plex", 0)
     out["arr_folders"] = it.get("arr_folders") or []
@@ -463,8 +464,9 @@ def _scope_stats(items: list[dict], weak_w: int = 0, weak_r: bool = False) -> di
         c["comingsoon"] += 1 if i.get("coming_soon") else 0
         c["notplex"] += 0 if i["in_plex"] else 1
         c["plexmissing"] += 1 if i.get("missing_plex") else 0
+    c["collections"] = len(collection_overview([i for i in items if i.get("collections")]))
     return {"items": c["items"], "slots": c["slots"], "missing": c["missing_slots"], "complete_items": c["complete"],
-            "counts": {"all": c["items"], "missing": c["missing"], "complete": c["complete"],
+            "counts": {"collections": c["collections"], "all": c["items"], "missing": c["missing"], "complete": c["complete"],
                        "comingsoon": c["comingsoon"], "notplex": c["notplex"], "plexmissing": c["plexmissing"], "weak": c["weak"]},
             "dims": {"known": c["dims_known"], "total": c["dims_total"]}}
 
@@ -507,6 +509,32 @@ async def items(world: str = "", q: str = "", filter: str = "all", library: str 
             res = [i for i in res if i["letter"] == letter]
     return {"total": len(res), "letters": letters, "stats": stats,
             "items": [_public_item(i) for i in res[offset:offset + limit]]}
+
+
+def collection_overview(items: list[dict], q: str = "") -> list[dict]:
+    """Plex collections of one world with the state of their members' posters (only collections with at least two films)."""
+    groups: dict[str, dict] = {}
+    for it in items:
+        for c in it.get("collections") or []:
+            g = groups.setdefault(c["id"], {"id": c["id"], "title": c["title"], "members": []})
+            g["members"].append({"id": it["id"], "title": it["title"], "year": it["year"], "has_poster": bool(it["slots"].get("poster", {}).get("exists"))})
+    nq = kometa.normalize(q) if q else ""
+    out = []
+    for g in groups.values():
+        if len(g["members"]) < 2 or (nq and nq not in kometa.normalize(g["title"])):
+            continue
+        g["members"].sort(key=lambda m: (m["year"] or 0, m["title"].casefold()))
+        g["total"] = len(g["members"])
+        g["with_poster"] = sum(1 for m in g["members"] if m["has_poster"])
+        out.append(g)
+    out.sort(key=lambda g: (g["with_poster"] == g["total"], g["title"].casefold()))
+    return out
+
+
+@app.get("/api/collections")
+async def collections(world: str = "", q: str = ""):
+    wid = _world(world)["id"]
+    return {"collections": collection_overview([i for i in scanner.STATE["items"] if i["world"] == wid and i["type"] == "movie"], q)}
 
 
 @app.get("/api/items/{item_id}")

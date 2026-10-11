@@ -115,6 +115,14 @@ async def _plex_items(cfg: dict, world: dict, plex: Plex, warnings: list[str]) -
             if need:
                 STATE["progress"] = f"{world['name']}: lese Pfade ({lib['title']}) …"
                 locations = await plex.show_locations(need)
+        in_collection: dict[str, list[dict]] = {}
+        if lib["type"] == "movie":     # what Plex shows as collections (optional: a failure only costs the collection overview)
+            try:
+                for c in await plex.collections(lib["key"]):
+                    for member in await plex.collection_members(str(c["ratingKey"])):
+                        in_collection.setdefault(member, []).append({"id": f"{lib['key']}:{c['ratingKey']}", "title": c.get("title", "")})
+            except PlexError as e:
+                warnings.append(f"Collections von „{lib['title']}“ nicht gelesen: {e}")
         for md in raw:
             rk = str(md["ratingKey"])
             if lib["type"] == "movie":
@@ -128,6 +136,7 @@ async def _plex_items(cfg: dict, world: dict, plex: Plex, warnings: list[str]) -
                 "year": md.get("year"), "folder": folder, "thumb": md.get("thumb", ""),
                 "ids": providers.ids_from_guids(md.get("Guid", [])),
                 "seasons": sorted(seasons_by_show.get(rk, []), key=lambda s: s["number"]),
+                "collections": in_collection.get(rk, []),
                 "in_plex": True, "sources": ["Plex"],
             })
     return items

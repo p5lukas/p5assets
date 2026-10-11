@@ -390,6 +390,7 @@ async function runNewsAction(target) {
   const [kind, arg] = target.split(":");
   if (kind === "settings") { await wizard(true); goStep(arg); }
   else if (kind === "cleanup") openCleanup(arg);
+  else if (kind === "collections") { if (S.view !== "dash") dashboard(); openCollections(); }
   else if (kind === "tab") { if (S.view !== "dash") dashboard(); S.filter = arg; renderChips(); await loadItems(); renderGrid(); }
 }
 
@@ -690,6 +691,7 @@ function renderChips() {
     hasExtra || cnt.notplex > 0 || S.filter === "notplex" ? chip("Noch nicht in Plex", "notplex", cnt.notplex, "Sonarr/Radarr kennen den Titel, in Plex ist er noch nicht (noch keine Datei, noch nicht erschienen oder noch nicht eingelesen)") : null,
     chip("Schwache Poster", "weak", cnt.weak, "Bilder, die zu schmal sind oder nicht das Seitenverhältnis 2:3 haben (Schwellwerte wählst du selbst)"),
     S.filter === "weak" ? weakOptions() : null,
+    cnt.collections > 0 ? h("button", { class: "chip", title: "Plex-Collections und ob für alle ihre Filme ein Poster da ist", onclick: openCollections }, "Collections", h("small", {}, cnt.collections)) : null,
     S.filter === "comingsoon" ? h("label", { class: "chip" + (S.nopost ? " on" : ""), style: "display:inline-flex;gap:8px;align-items:center;cursor:pointer" },
       h("input", { type: "checkbox", checked: S.nopost, style: "accent-color:var(--accent)", onchange: async e => { S.nopost = e.target.checked; renderChips(); await loadItems(); renderGrid(); } }), "nur ohne Poster") : null,
   );
@@ -1006,7 +1008,7 @@ function openPreview(it, key, draw) {
   if ((it.dupes || []).length) rows.push(["Hinweis", `Ordnername auch an anderer Stelle gefunden (wird nicht genutzt): ${it.dupes.join(", ")}`]);
   const touch = matchMedia("(hover: none)").matches;
   // arrow keys / ‹ › flip through the posters of the movies on the start page (not while another window is open underneath)
-  const flip = key === "poster" && S.view === "dash" && it.type === "movie" ? S.items.filter(x => x.type === "movie") : [];
+  const flip = key === "poster" && S.view === "dash" && it.type === "movie" && !document.querySelector(".modalwrap, .scrim") ? S.items.filter(x => x.type === "movie") : [];
   const at = flip.findIndex(x => x.id === it.id), nb = flip.length > 1 && at >= 0;
   const go = d => {
     const next = flip[(at + d + flip.length) % flip.length];
@@ -1045,6 +1047,31 @@ function openPreview(it, key, draw) {
   function close() { wrap.remove(); document.removeEventListener("keydown", onKey); }
   document.addEventListener("keydown", onKey);
   document.body.append(wrap);
+}
+
+/** Plex collections with the poster state of their films (like the set check of a series). */
+function openCollections() {
+  const list = h("div"), body = h("div", {}, list);
+  const m = modal("Collections", body, [h("button", { class: "btn", onclick: () => m.close() }, "Schließen")]);
+  let all = [], q = "";
+  const draw = () => {
+    const shown = all.filter(g => !q || normText(g.title).includes(q));
+    const open = new Set([...list.querySelectorAll("details[open]")].map(d => d.dataset.id));
+    const incomplete = all.filter(g => g.with_poster < g.total).length;
+    fill(list, all.length ? h("p", { class: "hint", style: "margin:12px 0" }, `${pl(all.length, "Collection", "Collections")} laut Plex (ab zwei Filmen), ${incomplete ? incomplete + " davon unvollständig" : "alle vollständig"}.`) : null,
+      shown.map(g => h("details", { class: "impgroup", "data-id": g.id, open: open.has(g.id) },
+        h("summary", {}, h("b", {}, g.title), h("span", { class: "grow" }),
+          h("span", { class: "pill " + (g.with_poster === g.total ? "ok" : "warn") }, g.with_poster === g.total ? `vollständig (${g.total})` : `${g.with_poster} von ${g.total} Postern`)),
+        g.members.map(mb => h("div", { class: "colrow" },
+          mb.has_poster ? h("img", { src: `/api/asset/${mb.id}/poster`, loading: "lazy", alt: "" }) : h("span", { class: "noimg sm" }, "–"),
+          h("div", { class: "grow" }, mb.title + (mb.year ? ` (${mb.year})` : "")),
+          mb.has_poster ? h("span", { class: "pill ok" }, "Poster da") : h("span", { class: "pill bad" }, "fehlt"),
+          h("button", { class: "btn sm", onclick: async () => { const it = await api("/items/" + mb.id); openPreview(it, "poster", load); } }, mb.has_poster ? "Ansehen" : "Hochladen"))))),
+      !shown.length && all.length ? h("div", { class: "hint" }, "Keine Collection gefunden") : null);
+  };
+  const load = async () => { try { all = (await api(`/collections?world=${S.world}`)).collections; draw(); loadItems().then(() => { renderChips(); renderGrid(); }); } catch (e) { fill(list, h("div", { class: "status bad" }, e.message)); } };
+  body.prepend(h("div", { class: "search lsearch" }, icon("search", 16), (() => { const i = h("input", { type: "search", placeholder: "Collection suchen …", autocomplete: "off", oninput: e => { q = normText(e.target.value).trim(); draw(); } }); return [i, clearBtn(i)]; })()));
+  load();
 }
 
 /** Use one existing asset for many tiles of the title at once (e.g. poster -> Season00 … Season50), named Kometa-conform. */
@@ -1409,6 +1436,10 @@ function reviewImport(res, onDone, fixed) {
   const targets = { ...(res.targets || {}) };
   if (fixed && !targets[fixed.id]) targets[fixed.id] = fixed;
   const list = h("div"), summary = h("div");
+  let colMap = {};       // Plex collections of the world: id -> {title, members:[{id,title,year,has_poster}]}, for the set check of films
+  if (Object.values(targets).some(t => (t.collections || []).length)) {
+    api(`/collections?world=${res.world}`).then(r => { colMap = Object.fromEntries(r.collections.map(g => [g.id, g])); draw(); }).catch(() => {});
+  }
   const count = () => rows.filter(r => r.use && r.item_id).length;
   const apply = h("button", { class: "btn primary" });
   let dupBlock = false;     // two files for the same tile: the review must be fixed first (a tile holds one image)
@@ -1463,11 +1494,14 @@ function reviewImport(res, onDone, fixed) {
     const dups = {};
     rows.filter(r => r.use && r.item_id).forEach(r => { const k = r.item_id + "|" + r.slot; dups[k] = (dups[k] || 0) + 1; });
     // groups: one per series (with the completeness check), movies, and everything without a title
-    const series = new Map(), movies = [], loose = [];
+    const series = new Map(), movies = [], loose = [], cols = new Map();
     for (const r of rows) {
       const t = r.item_id ? targets[r.item_id] : null;
       if (t && t.type === "show") { if (!series.has(r.item_id)) series.set(r.item_id, []); series.get(r.item_id).push(r); }
-      else if (t) movies.push(r); else loose.push(r);
+      else if (t) {
+        const cid = (t.collections || []).map(c => c.id).find(id => colMap[id]);
+        if (cid) { if (!cols.has(cid)) cols.set(cid, []); cols.get(cid).push(r); } else movies.push(r);
+      } else loose.push(r);
     }
     const checks = [...series].map(([id, rs]) => ({ id, rs, t: targets[id], chk: checkSet(targets[id], rs.filter(r => r.use)) }));
     const dupN = checks.filter(c => c.chk.dups).length, okN = checks.filter(c => c.chk.ok).length, incN = checks.length - okN - dupN;
@@ -1485,6 +1519,15 @@ function reviewImport(res, onDone, fixed) {
       checks.map(c => group(`${c.t.title}${c.t.year ? ` (${c.t.year})` : ""} · ${pl(c.rs.length, "Bild", "Bilder")}`,
         h("span", { class: "pill " + (c.chk.dups ? "bad" : c.chk.ok ? "ok" : "warn") }, c.chk.dups ? "doppelt belegt" : c.chk.ok ? "Set vollständig" : "unvollständig"),
         checks.length === 1 || !c.chk.ok, c.rs.map(r => buildRow(r, dups)), c.chk.lines)),
+      [...cols].map(([cid, rs]) => {
+        const g = colMap[cid], used = new Set(rs.filter(r => r.use).map(r => r.item_id));
+        const lacking = g.members.filter(mb => !mb.has_poster && !used.has(mb.id));
+        const dupC = rs.some(r => r.use && dups[r.item_id + "|" + r.slot] > 1);
+        return group(`${g.title} · ${pl(rs.length, "Bild", "Bilder")}`,
+          h("span", { class: "pill " + (dupC ? "bad" : lacking.length ? "warn" : "ok") }, dupC ? "doppelt belegt" : lacking.length ? `${lacking.length} von ${g.total} ohne Poster` : "Collection vollständig"),
+          true, rs.map(r => buildRow(r, dups)), [{ cls: lacking.length ? "warn" : "ok",
+            text: lacking.length ? `Plex-Collection „${g.title}“: es fehlt noch ein Poster für ${lacking.map(x => x.title + (x.year ? " (" + x.year + ")" : "")).join(", ")}` : `Plex-Collection „${g.title}“: alle ${g.total} Filme haben ein Poster` }]);
+      }),
       movies.length ? group(`Filme · ${pl(movies.length, "Bild", "Bilder")}`, movieDup ? h("span", { class: "pill bad" }, "doppelt belegt") : null, true, movies.map(r => buildRow(r, dups))) : null,
       loose.length ? group(`${checks.length || movies.length ? "Nicht zugeordnet" : "Bilder"} · ${pl(loose.length, "Bild", "Bilder")}`, loose.some(r => r.kind !== "ignore") ? h("span", { class: "pill warn" }, "bitte Titel wählen") : null, true, loose.map(r => buildRow(r, dups))) : null);
     refreshBtn();

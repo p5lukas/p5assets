@@ -561,3 +561,6 @@ input[type=search]::-webkit-search-cancel-button,input[type=search]::-webkit-sea
 .logo.home:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
 .newshl{margin:0 0 6px;padding-left:20px}.newshl li{margin:3px 0}
 .newsver{margin:16px 0 2px;font-size:14px;color:var(--accent)}.newsver:first-child{margin-top:0}
+.colrow{display:flex;align-items:center;gap:12px;padding:7px 12px;border-top:1px solid var(--line)}
+.colrow img,.colrow .noimg.sm{width:34px;height:51px;object-fit:cover;border-radius:4px;flex:none;background:var(--panel2,#0003)}
+.colrow .noimg.sm{display:grid;place-items:center;color:var(--muted,#888)}

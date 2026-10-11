@@ -91,8 +91,25 @@ def test_news_summary_is_shown_once_per_version(client, monkeypatch):
     client.post("/api/news/seen", json={"ids": [], "version": True})
     assert client.get("/api/news").json()["show"] is False
     monkeypatch.setattr(version, "BASE_VERSION", "0.4.2")
-    config.update({"seen_news": [e["id"] for e in r["all"]], "news_version_seen": ""})       # old install: seen entries count as 0.4.0
+    config.update({"seen_news": [e["id"] for e in r["all"]], "news_version_seen": "0.4.1"})
     import json
     from pathlib import Path
     entries = json.loads((Path(main.__file__).parent / "news.json").read_text("utf-8"))
-    assert client.get("/api/news").json()["count"] == sum(1 for e in entries if e["version"] == "0.4.1")
+    assert client.get("/api/news").json()["count"] == sum(1 for e in entries if e["version"] == "0.4.2")
+
+
+def test_collection_overview(monkeypatch):
+    col = [{"id": "1:900", "title": "Trilogie"}]
+    items = [_item(1, "Teil 1", year=2005, collections=col), _item(2, "Teil 2", year=2008, collections=col, slots={"poster": {"exists": False}}),
+             _item(3, "Allein", collections=[{"id": "1:901", "title": "Allein"}]), _item(4, "Ohne")]
+    monkeypatch.setitem(scanner.STATE, "items", items)
+    monkeypatch.setattr(main, "_world", lambda w=None: {"id": "hd", "name": "HD", "assets_path": "/nonexistent"})
+    c = TestClient(main.app)
+    cols = c.get("/api/collections", params={"world": "hd"}).json()["collections"]
+    assert [g["title"] for g in cols] == ["Trilogie"]          # a collection with a single film is not worth listing
+    assert (cols[0]["total"], cols[0]["with_poster"]) == (2, 1)
+    assert [m["title"] for m in cols[0]["members"]] == ["Teil 1", "Teil 2"]
+    assert c.get("/api/collections", params={"world": "hd", "q": "zzz"}).json()["collections"] == []
+    r = c.get("/api/items", params={"world": "hd"}).json()
+    assert r["stats"]["counts"]["collections"] == 1
+    assert r["items"][0]["collections"] == col

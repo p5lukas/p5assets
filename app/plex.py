@@ -72,6 +72,14 @@ class Plex:
         mc = await self._get(f"/library/sections/{section}/all", includeGuids=1)
         return mc.get("Metadata", [])
 
+    async def collections(self, section: str) -> list[dict]:
+        mc = await self._get(f"/library/sections/{section}/collections")
+        return mc.get("Metadata", [])
+
+    async def collection_members(self, rating_key: str) -> list[str]:
+        mc = await self._get(f"/library/collections/{rating_key}/children")
+        return [str(m["ratingKey"]) for m in mc.get("Metadata", []) if m.get("ratingKey")]
+
     async def seasons(self, section: str) -> list[dict]:
         mc = await self._get(f"/library/sections/{section}/all", type=3)
         return mc.get("Metadata", [])
