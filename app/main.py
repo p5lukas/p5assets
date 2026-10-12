@@ -484,11 +484,10 @@ def _scope_stats(items: list[dict], weak_w: int = 0, weak_r: bool = False) -> di
         c["missing"] += 1 if i["missing"] else 0
         c["complete"] += 0 if i["missing"] else 1
         c["comingsoon"] += 1 if i.get("coming_soon") else 0
-        c["notplex"] += 0 if i["in_plex"] else 1
         c["plexmissing"] += 1 if i.get("missing_plex") else 0
     return {"items": c["items"], "slots": c["slots"], "missing": c["missing_slots"], "complete_items": c["complete"],
             "counts": {"all": c["items"], "missing": c["missing"],
-                       "comingsoon": c["comingsoon"], "notplex": c["notplex"], "plexmissing": c["plexmissing"], "weak": c["weak"]},
+                       "comingsoon": c["comingsoon"], "plexmissing": c["plexmissing"], "weak": c["weak"]},
             "dims": {"known": c["dims_known"], "total": c["dims_total"]}}
 
 
@@ -507,8 +506,6 @@ async def items(world: str = "", q: str = "", filter: str = "all", library: str 
     stats = _scope_stats(res, weak_w, weak_r)          # for the chosen source, independent of tab, letter and search
     if filter == "missing":
         res = [i for i in res if i["missing"]]
-    elif filter == "notplex":
-        res = [i for i in res if not i["in_plex"]]
     elif filter == "plexmissing":     # already in Plex, but a poster/season is missing in the Kometa assets
         res = [i for i in res if i.get("missing_plex")]
     elif filter == "comingsoon":      # Coming-Soon placeholders already visible in Plex: the ones without a poster first
@@ -575,6 +572,27 @@ async def collection_detail(id: str):
 async def collections(world: str = "", q: str = ""):
     wid = _world(world)["id"]
     return {"collections": collection_overview([i for i in scanner.STATE["items"] if i["world"] == wid and i["type"] == "movie"], q, _hidden_collections())}
+
+
+@app.get("/api/collections/hidden")
+async def collections_hidden():
+    """The hidden collections with names and film counts; IDs saved by older versions get their name from the last scan (and keep it)."""
+    names: dict[str, str] = {}
+    counts: Counter = Counter()
+    for i in scanner.STATE["items"]:
+        for c in i.get("collections") or []:
+            names[c["id"]] = c["title"]
+            counts[c["id"]] += 1
+    out = []
+    changed = any(not isinstance(c, dict) for c in config.get().get("hidden_collections") or [])      # legacy plain IDs get converted
+    for hc in _hidden_list():
+        known = hc["id"] in names
+        new = {**hc, "title": names[hc["id"]], "count": counts[hc["id"]]} if known else dict(hc)
+        changed = changed or new != hc
+        out.append({**new, "gone": bool(scanner.STATE["items"]) and not known})
+    if changed:
+        config.update({"hidden_collections": [{k: v for k, v in o.items() if k != "gone"} for o in out]})
+    return {"hidden": out}
 
 
 class CollectionHide(BaseModel):

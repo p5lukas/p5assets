@@ -86,7 +86,8 @@ function icon(name, size = 18) {
 }
 
 /* ------------------------------------------------------------ state --- */
-const S = { st: null, langs: [], items: [], total: 0, filter: "all", q: "", lib: "", letter: null, letters: {}, allTotal: 0, req: 0, pending: 0, ctl: null, stats: null, nopost: false, io: null, hist: [], dimTries: 0, world: "", poll: null, step: "", reached: 0, rain: new Set(), view: "" };
+const DEFAULT_FILTER = "plexmissing";   // what a Plex user sees first: titles that are in Plex but have no poster
+const S = { st: null, langs: [], items: [], total: 0, filter: DEFAULT_FILTER, q: "", lib: "", letter: null, letters: {}, allTotal: 0, req: 0, pending: 0, ctl: null, stats: null, nopost: false, io: null, hist: [], dimTries: 0, world: "", poll: null, step: "", reached: 0, rain: new Set(), view: "" };
 const cfg = () => S.st.config;
 const curWorld = () => cfg().worlds.find(w => w.id === S.world) || cfg().worlds[0];
 const weakDefault = { wOn: true, w: 1000, rOn: true };
@@ -443,8 +444,8 @@ function goHome() {
   if (S.view === "login" || S.view === "wiz" && !S.wizSettings) return;
   if (S.view === "wiz") return closeSettings();
   if (S.view === "logs") clearInterval(S.logTimer);
-  if (S.view !== "dash") { S.q = ""; S.filter = "all"; dashboard(); return; }
-  S.q = ""; S.filter = "all"; S.letter = null; const q = $("#q"); if (q) q.value = "";
+  if (S.view !== "dash") { S.q = ""; S.filter = DEFAULT_FILTER; dashboard(); return; }
+  S.q = ""; S.filter = DEFAULT_FILTER; S.letter = null; const q = $("#q"); if (q) q.value = "";
   window.scrollTo({ top: 0, behavior: "smooth" });
   loadItems().then(() => { renderChips(); renderGrid(); });
 }
@@ -576,7 +577,7 @@ function switchWorld(id) {
   if (id === S.world) return;
   const w = cfg().worlds.find(x => x.id === id);
   worldTransition(w, async () => {
-    S.world = id; S.filter = "all"; S.q = ""; S.lib = ""; S.letter = null; S.letters = {}; S.stats = null; S.nopost = false; S.hist = [];
+    S.world = id; S.filter = DEFAULT_FILTER; S.q = ""; S.lib = ""; S.letter = null; S.letters = {}; S.stats = null; S.nopost = false; S.hist = [];
     try { localStorage.setItem("p5world", id); } catch { /* ignore */ }
     setAccent(); dashboard();
   });
@@ -682,11 +683,10 @@ function renderChips() {
   const chip = (label, key, n, title) => h("button", { class: "chip" + (S.filter === key ? " on" : ""), title, onclick: async () => { S.filter = key; renderChips(); await loadItems(); renderGrid(); } },
     label, n != null ? h("small", {}, n) : null);
   fill(el,
-    chip("Alle", "all", cnt.all),
-    chip("Fehlende", "missing", cnt.missing),
-    chip("In Plex, Poster fehlt", "plexmissing", cnt.plexmissing, "In Plex vorhanden, aber bei Kometa fehlt ein Poster oder eine Staffel (ohne Titel, die nur in Sonarr/Radarr stehen)"),
+    chip("In Plex, Poster fehlt", "plexmissing", cnt.plexmissing, "In Plex vorhanden, aber bei Kometa fehlt ein Poster oder eine Staffel – das, was in Plex ohne Bild erscheint"),
     cnt.comingsoon > 0 || S.filter === "comingsoon" ? chip("Coming Soon", "comingsoon", cnt.comingsoon, "Coming-Soon-Poster ({edition-Coming Soon}): in Plex schon sichtbar, brauchen zeitnah ein Poster") : null,
-    hasExtra || cnt.notplex > 0 || S.filter === "notplex" ? chip("Noch nicht in Plex", "notplex", cnt.notplex, "Sonarr/Radarr kennen den Titel, in Plex ist er noch nicht (noch keine Datei, noch nicht erschienen oder noch nicht eingelesen)") : null,
+    chip("Alle", "all", cnt.all),
+    chip("Alle fehlenden", "missing", cnt.missing, "Alles, was ein Poster oder eine Staffel braucht – auch Titel, die nur Sonarr/Radarr kennen und in Plex noch nicht sind"),
     chip("Schwache Poster", "weak", cnt.weak, "Bilder, die zu schmal sind oder nicht das Seitenverhältnis 2:3 haben (Schwellwerte wählst du selbst)"),
     S.filter === "weak" ? weakOptions() : null,
     S.filter === "comingsoon" ? h("label", { class: "chip" + (S.nopost ? " on" : ""), style: "display:inline-flex;gap:8px;align-items:center;cursor:pointer" },
@@ -727,7 +727,9 @@ function renderGrid() {
   if (!S.items.length) {
     fill(g, h("div", { class: "empty" },
       S.st.summary.running ? h("h2", {}, "Scanne …") :
-      S.filter === "missing" && !S.q && scopeStats().items ? [h("div", { class: "big" }, "🎉"), h("h2", {}, "Alles vollständig!"), "Es fehlt kein Poster und keine Staffel."] :
+      (S.filter === "missing" || S.filter === "plexmissing") && !S.q && scopeStats().items ? [h("div", { class: "big" }, "🎉"), h("h2", {}, "Alles vollständig!"),
+        S.filter === "plexmissing" ? "In Plex fehlt kein Poster und keine Staffel." : "Es fehlt kein Poster und keine Staffel.",
+        h("div", { style: "margin-top:14px" }, h("button", { class: "btn", onclick: async () => { S.filter = "all"; renderChips(); await loadItems(); renderGrid(); } }, "Alle anzeigen"))] :
       !worldStats().items && S.st.summary.error ? [h("h2", {}, "Der Scan ist fehlgeschlagen"), "Details stehen oben und im Log. Prüfe die Verbindung zu Plex, Sonarr und Radarr und starte dann einen neuen Scan.",
         h("div", { style: "margin-top:14px" }, h("button", { class: "btn primary", onclick: doScan }, "Erneut scannen"))] :
       !worldStats().items ? [h("h2", {}, "Hier ist noch nichts"), "Ordne dieser Welt unter ⚙ Bibliotheken oder Sonarr/Radarr zu."] :
@@ -1689,6 +1691,7 @@ const stepList = () => ["welcome", "plex", "libs", "arr", "worlds", ...(cfg().wo
 async function wizard(settings = false) {
   S.view = "wiz";
   S.wizSettings = settings;
+  S.navList = settings;        // on phones the settings start with the list of pages
   await loadState();
   S.settingsSig = settings ? scanSig() : null;     // remembered to decide on closing whether a rescan is needed
   S.step = settings ? "plex" : (stepList().includes(S.step) ? S.step : "welcome");
@@ -1699,6 +1702,7 @@ async function wizard(settings = false) {
 function goStep(name) {
   const list = stepList();
   S.step = list.includes(name) ? name : "worlds";
+  S.navList = false;
   S.reached = Math.max(S.reached || 0, list.indexOf(S.step));
   drawWiz();
 }
@@ -1715,6 +1719,18 @@ function drawWiz() {
     h("span", { class: "spacer" }),
     h("button", { class: "btn primary", disabled, onclick: next || stepNext }, label));
   const view = { welcome: wWelcome, plex: wPlex, libs: wLibs, arr: wArr, worlds: wWorlds, assign: wAssign, apis: wApis, notify: wNotify, auth: wAuth, done: wDone }[S.step];
+  // phones: settings = list of pages (iOS style) → page with "‹ Einstellungen"; onboarding = progress bar instead of a navigation
+  const mobile = matchMedia("(max-width:820px), (max-height:520px)").matches;      // phones, also in landscape (the sidebar would not fit)
+  if (mobile && S.wizSettings && S.navList) {
+    const rows = names => names.filter(n => list.includes(n)).map(n => h("button", { class: "mrow", onclick: () => goStep(n) }, h("span", {}, STEP_LABELS[n]), h("i", { "aria-hidden": "true" }, "›")));
+    return fill(app, h("div", { class: "wiz" }, logoEl("assets"), h("div", { class: "mlist" }, h("h1", {}, "Einstellungen"),
+      STEP_GROUPS.map(([g, names]) => [h("div", { class: "navgrp" }, g), h("div", { class: "mgroup" }, rows(names))]),
+      h("div", { style: "margin-top:22px" }, h("button", { class: "btn", onclick: closeSettings }, "Schließen")))));
+  }
+  const top = !mobile ? null : S.wizSettings
+    ? h("button", { class: "mback", onclick: () => { S.navList = true; drawWiz(); } }, "‹ Einstellungen")
+    : h("div", { class: "mprog" }, h("div", { class: "hint", style: "margin:0 0 6px" }, `Schritt ${idx + 1} von ${list.length} · ${STEP_LABELS[S.step]}`),
+      h("div", { class: "bar" }, h("i", { style: `width:${Math.round(((idx + 1) / list.length) * 100)}%` })));
   // sidebar: grouped steps; in settings every step is reachable, during onboarding only the ones visited so far
   const shown = list.map((name, i) => ({ name, i })).filter(s => !(S.wizSettings && (s.name === "welcome" || s.name === "done")));
   const stepBtn = (s, n) => {
@@ -1733,7 +1749,7 @@ function drawWiz() {
   fill(app, h("div", { class: "wiz" },
     logoEl("assets"),
     h("div", { class: "wlayout" },
-      h("nav", { class: "stepnav", "aria-label": S.wizSettings ? "Einstellungen" : "Einrichtung" }, side),
+      mobile ? top : h("nav", { class: "stepnav", "aria-label": S.wizSettings ? "Einstellungen" : "Einrichtung" }, side),
       h("div", { class: "wcard" }, view(nav, cfg())))));
 }
 
@@ -1833,15 +1849,22 @@ function wPlex(nav, c) {
 }
 
 /** Hidden Plex collections: foldable list with the names, show again one by one or all at once. */
-function hiddenCollections(c) {
-  const list = (c.hidden_collections || []).map(x => typeof x === "string" ? { id: x, title: x, count: 0 } : x);
-  if (!list.length) return null;
-  const show = async ids => { await savePatch({ hidden_collections: list.filter(x => !ids.includes(x.id)) }); drawWiz(); };
-  return h("details", { class: "impgroup", style: "margin-top:16px" },
-    h("summary", {}, h("b", {}, pl(list.length, "ausgeblendete Collection", "ausgeblendete Collections")), h("span", { class: "grow" }), h("small", { class: "hint", style: "margin:0" }, "Ausgeblendet in Vorschau und Import")),
-    list.map(x => h("div", { class: "opt compact", style: "margin:0;border-radius:0;border-width:1px 0 0" }, h("div", { class: "grow" }, x.title === x.id ? "Collection " + x.id : x.title, x.count ? h("small", {}, pl(x.count, "Film", "Filme")) : null),
-      h("button", { class: "btn sm", onclick: () => show([x.id]) }, "Einblenden"))),
-    list.length > 1 ? h("div", { style: "padding:10px 14px" }, h("button", { class: "btn sm", onclick: () => show(list.map(x => x.id)) }, "Alle einblenden")) : null);
+function hiddenCollections() {
+  const box = h("div");
+  const load = async () => {
+    let list; try { list = (await api("/collections/hidden")).hidden; } catch { return; }
+    const show = async ids => { for (const id of ids) await api("/collections/hidden", { json: { id, hidden: false } }); await loadState(); load(); };
+    if (!list.length) return fill(box);
+    fill(box, h("details", { class: "impgroup", style: "margin-top:16px" },
+      h("summary", {}, h("b", {}, pl(list.length, "ausgeblendete Collection", "ausgeblendete Collections"))),
+      h("div", { class: "hint", style: "padding:0 14px" }, "Diese Collections erscheinen nicht in der Vorschau und im Import."),
+      list.map(x => h("div", { class: "opt compact", style: "margin:0;border-radius:0;border-width:1px 0 0" },
+        h("div", { class: "grow" }, x.gone ? "Collection nicht mehr vorhanden" : x.title, h("small", {}, x.gone ? x.id : pl(x.count, "Film", "Filme"))),
+        h("button", { class: "btn sm", onclick: () => show([x.id]) }, x.gone ? "Entfernen" : "Einblenden"))),
+      list.length > 1 ? h("div", { style: "padding:10px 14px" }, h("button", { class: "btn sm", onclick: () => show(list.map(x => x.id)) }, "Alle einblenden")) : null));
+  };
+  load();
+  return box;
 }
 
 function wLibs(nav, c) {
@@ -1855,7 +1878,7 @@ function wLibs(nav, c) {
     h("label", { class: "f" }, "Automatischer Scan"),
     h("select", { onchange: e => savePatch({ scan_interval_minutes: +e.target.value }) },
       intervals.map(([v, l]) => h("option", { value: v, selected: c.scan_interval_minutes === v }, l))),
-    hiddenCollections(c),
+    hiddenCollections(),
     h("p", { class: "hint" }, "p5assets gleicht Plex, Sonarr/Radarr und die Assets-Ordner im Hintergrund ab und aktualisiert die Liste der fehlenden Poster. Dabei wird nichts heruntergeladen oder verändert."),
     nav());
 }
@@ -2115,7 +2138,7 @@ function wNotify(nav, c) {
 function wDone() {
   return h("div", { style: "text-align:center" }, h("div", { class: "big" }, "🚀"), h("h1", {}, "Alles bereit!"),
     h("p", { class: "lead" }, "p5assets scannt jetzt deine Bibliotheken und zeigt dir, was fehlt."),
-    h("button", { class: "btn primary", onclick: async () => { await api("/onboarding/finish", { method: "POST" }); await loadState(); S.filter = "all"; dashboard(); } }, "Scan starten"),
+    h("button", { class: "btn primary", onclick: async () => { await api("/onboarding/finish", { method: "POST" }); await loadState(); S.filter = DEFAULT_FILTER; dashboard(); } }, "Scan starten"),
     h("div", { style: "margin-top:16px" }, h("button", { class: "btn ghost", onclick: stepPrev }, "Zurück")));
 }
 

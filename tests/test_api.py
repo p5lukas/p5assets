@@ -33,7 +33,7 @@ def test_filters_and_counters(client):
     assert _titles(client)[0] == ["Alpha", "Beta", "Gamma", "Delta"]
     assert _titles(client, filter="plexmissing")[0] == ["Beta"]
     assert _titles(client, filter="comingsoon")[0] == ["Gamma"]
-    assert _titles(client, filter="notplex")[0] == ["Delta"]
+    assert _titles(client, filter="missing")[0] == ["Beta", "Gamma", "Delta"]
     _, body = _titles(client)
     assert body["stats"]["counts"]["plexmissing"] == 1 and body["stats"]["counts"]["comingsoon"] == 1
 
@@ -91,12 +91,12 @@ def test_news_summary_is_shown_once_per_version(client, monkeypatch):
     assert r["show"] and r["count"] >= 10 and len(r["highlights"]) == 4 and r["version"] == "0.4.1"
     client.post("/api/news/seen", json={"ids": [], "version": True})
     assert client.get("/api/news").json()["show"] is False
-    monkeypatch.setattr(version, "BASE_VERSION", "0.4.5")
-    config.update({"seen_news": [e["id"] for e in r["all"]], "news_version_seen": "0.4.4"})
+    monkeypatch.setattr(version, "BASE_VERSION", "0.4.6")
+    config.update({"seen_news": [e["id"] for e in r["all"]], "news_version_seen": "0.4.5"})
     import json
     from pathlib import Path
     entries = json.loads((Path(main.__file__).parent / "news.json").read_text("utf-8"))
-    assert client.get("/api/news").json()["count"] == sum(1 for e in entries if e["version"] == "0.4.5")
+    assert client.get("/api/news").json()["count"] == sum(1 for e in entries if e["version"] == "0.4.6")
 
 
 def test_collection_overview(monkeypatch):
@@ -144,4 +144,18 @@ def test_collection_detail_and_hidden_names(monkeypatch):
     hidden = config.get()["hidden_collections"]
     assert {"id": "1:900", "title": "Trilogie", "count": 2} in hidden and any(h["id"] == "1:777" for h in hidden if isinstance(h, dict))
     assert c.get("/api/collection", params={"id": "1:900"}).json()["hidden"] is True
+    config.update({"hidden_collections": []})
+
+
+def test_hidden_collections_get_names_from_the_scan(monkeypatch):
+    from app import config
+    config.update({"hidden_collections": ["1:900", "1:404"]})        # old format: IDs only
+    col = [{"id": "1:900", "title": "Trilogie"}]
+    monkeypatch.setitem(scanner.STATE, "items", [_item(1, "Teil 1", collections=col), _item(2, "Teil 2", collections=col)])
+    c = TestClient(main.app)
+    got = {h["id"]: h for h in c.get("/api/collections/hidden").json()["hidden"]}
+    assert got["1:900"]["title"] == "Trilogie" and got["1:900"]["count"] == 2 and not got["1:900"]["gone"]
+    assert got["1:404"]["gone"] is True
+    assert all(isinstance(h, dict) for h in config.get()["hidden_collections"])            # converted and kept
+    assert next(h for h in config.get()["hidden_collections"] if h["id"] == "1:900")["title"] == "Trilogie"
     config.update({"hidden_collections": []})

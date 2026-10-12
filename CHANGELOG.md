@@ -1,5 +1,18 @@
 # Änderungen
 
+## 0.4.6 – 2026-10-12
+
+**Neu**
+- Startansicht „In Plex, Poster fehlt“ (an erster Stelle in der Reiterleiste); ist nichts offen, gibt es „Alles vollständig!“ mit einem Knopf „Alle anzeigen“
+- Einstellungen auf dem Handy als Liste mit Gruppen, ein Tipp öffnet die Seite („‹ Einstellungen“ führt zurück); das Onboarding zeigt „Schritt x von y“ mit Fortschrittsbalken
+
+**Geändert**
+- Reiter „Fehlende“ heißt „Alle fehlenden“; der Reiter „Noch nicht in Plex“ entfällt (Titel, die nur Sonarr/Radarr kennen, stehen weiter unter „Alle“ und „Alle fehlenden“ mit dem Etikett „Noch nicht in Plex“)
+- Ausgeblendete Collections zeigen in den Einstellungen ihren Namen (auch bei älteren Einträgen aus dem letzten Scan nachgetragen); nicht mehr vorhandene lassen sich entfernen
+
+**Behoben**
+- Collection-Detailansicht: Poster waren auf dem Handy fast bildfüllend, jetzt mehrere Spalten wie bei Serien
+
 ## 0.4.5 – 2026-10-12
 
 **Neu**

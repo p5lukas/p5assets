@@ -1,4 +1,7 @@
 [
+  {"id": "tabs-2", "version": "0.4.6", "title": "Neue Startansicht", "text": "p5assets startet jetzt mit „In Plex, Poster fehlt“ – das, was in Plex ohne Bild erscheint. „Fehlende“ heißt „Alle fehlenden“, der Reiter „Noch nicht in Plex“ ist entfallen (die Titel tragen weiter das Etikett und stehen unter „Alle“ und „Alle fehlenden“)."},
+  {"id": "nav-2", "version": "0.4.6", "title": "Einstellungen auf dem Handy", "text": "Auf dem iPhone und iPad im Hochformat sind die Einstellungen eine Liste mit Gruppen; ein Tipp öffnet die Seite. Das Onboarding zeigt „Schritt x von y“ mit Fortschrittsbalken."},
+  {"id": "fix-046", "version": "0.4.6", "title": "Collections auf dem Handy", "text": "Die Poster in der Collection-Ansicht sind auf dem Handy kleiner, und ausgeblendete Collections stehen mit Namen in den Einstellungen."},
   {"id": "smooth-1", "version": "0.4.5", "title": "Kein Flackern mehr", "text": "Beim Schließen der Detailansicht bleiben die Poster stehen, statt kurz schwarz zu werden und neu zu laden."},
   {"id": "collections-4", "version": "0.4.5", "title": "Ausgeblendete Collections im Blick", "text": "Unter Einstellungen → Bibliotheken lässt sich die Liste der ausgeblendeten Collections aufklappen; jede kannst du einzeln wieder einblenden."},
   {"id": "collections-3", "version": "0.4.4", "title": "Collection in der Vorschau", "text": "Die Poster-Vorschau eines Films nennt seine Plex-Collection. Ein Klick öffnet die Detailansicht der Collection mit allen Postern, die du dort wie bei einer Serie ersetzen oder hochladen kannst."},

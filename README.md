@@ -29,7 +29,7 @@ Ein schlanker Docker-Container im Matrix-Look. Er vergleicht deine Bibliotheken 
 
 ### Lücken finden
 Plex, Sonarr und Radarr werden zusammengeführt (über TMDb/TVDB/IMDb-IDs). Reiter zeigen sofort, was zu tun ist:
-**Alle**, **Fehlende**, **In Plex, Poster fehlt**, **Coming Soon**, **Noch nicht in Plex** (Sonarr/Radarr kennen den Titel, Plex noch nicht) und **Schwache Poster**.
+**In Plex, Poster fehlt** (die Startansicht: was in Plex ohne Bild erscheint), **Coming Soon**, **Alle**, **Alle fehlenden** (auch Titel, die nur Sonarr/Radarr kennen und in Plex noch nicht sind, mit dem Etikett „Noch nicht in Plex“) und **Schwache Poster**.
 Dazu eine Quellenauswahl, schnelle Suche (rechts neben den Reitern), A–Z-Leiste und eine Abdeckungsanzeige mit kleinem Verlauf pro Scan.
 Große Bibliotheken sind kein Problem: mit über 6000 Titeln antworten die Listen in rund 30 ms.
 
