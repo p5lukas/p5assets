@@ -718,7 +718,12 @@ function renderGrid() {
   updateHero();                                // statistic and tab counters belong to the chosen source
   renderAz();
   const g = $("#grid"); if (!g) return;
-  g.querySelectorAll("img").forEach(i => i.removeAttribute("src"));   // cancels pictures of the old list that are still loading
+  // cards of unchanged titles are reused (no flicker, no reloading of pictures); only the pictures of dropped cards are cancelled
+  const old = S.cards || new Map(), fresh = new Map();
+  const els = S.items.map(it => { const sig = JSON.stringify(it), c = old.get(it.id); const el = c && c.sig === sig ? c.el : card(it); fresh.set(it.id, { sig, el }); return el; });
+  S.cards = fresh;
+  const keep = new Set(els);
+  g.querySelectorAll(".card").forEach(c => { if (!keep.has(c)) c.querySelectorAll("img").forEach(i => i.removeAttribute("src")); });
   if (!S.items.length) {
     fill(g, h("div", { class: "empty" },
       S.st.summary.running ? h("h2", {}, "Scanne …") :
@@ -729,7 +734,7 @@ function renderGrid() {
       [h("h2", {}, "Nichts gefunden"), "Passe Filter oder Suche an – oder starte einen neuen Scan."]));
     return;
   }
-  fill(g, h("div", { class: "grid", id: "gridin" }, S.items.map(card)));
+  fill(g, h("div", { class: "grid", id: "gridin" }, els));
   moreControl(g);
 }
 
@@ -745,7 +750,7 @@ function moreControl(g) {
     await loadItems(true);
     if (S.req !== gen + 1 || S.items.length === before) return;      // typing/filtering took over meanwhile
     const grid = $("#gridin"); if (!grid) return;
-    S.items.slice(before).forEach(it => grid.append(card(it)));
+    S.items.slice(before).forEach(it => { const el = card(it); (S.cards ||= new Map()).set(it.id, { sig: JSON.stringify(it), el }); grid.append(el); });
     moreControl($("#grid"));
   };
   if (S.items.length < MAX_AUTO) {
@@ -804,7 +809,7 @@ function metaText(it) {
   return [world && cfg().worlds.length > 1 ? `Welt: ${world.name}` : null, `Quellen: ${it.sources.join(" · ")}`, `Status: ${statusTags(it).map(t => t.text).join(" · ")}`].filter(Boolean).join("\n");
 }
 
-function card(item) {
+function card(item, local) {
   const movie = item.type === "movie";
   const el = h("div", { class: "card" + (movie ? " movie" : ""), onclick: movie ? null : () => openItem(item.id) });
   const box = posterBox(item, "poster");
@@ -820,7 +825,9 @@ function card(item) {
     h("div", { class: "s" }, [item.year, item.type === "show" ? pl(item.season_count, "Staffel", "Staffeln") : "Film"].filter(Boolean).join(" · ")));
   function changed(it) {
     const i = S.items.findIndex(x => x.id === it.id);
-    if (i >= 0) { S.items[i] = it; el.replaceWith(card(it)); }
+    if (i >= 0) S.items[i] = it;
+    if (i >= 0 || local) el.replaceWith(card(it, local));
+    if (local) local(it);
     api("/status").then(r => { S.st.summary = r; updateHero(); });
   }
   if (movie && item.folder) {
@@ -1025,7 +1032,7 @@ function openPreview(it, key, draw) {
         touch && exists ? h("div", { class: "hint", style: "text-align:center" }, "Bild lange drücken → „Zu Fotos hinzufügen“ (Originalqualität)") : null),
       h("div", { class: "lside" },
         metaGroups(it),
-        it.type === "movie" ? collectionBoxes(it, draw, close) : null,
+        it.type === "movie" ? collectionBoxes(it, close) : null,
         (it.mirror_folders || []).length ? h("div", { style: "margin-top:8px" }, h("span", { class: "tag ok", title: "Coming-Soon-Platzhalter: Poster werden auch im echten Film-Ordner abgelegt" }, "Coming Soon gespiegelt")) : null,
         h("dl", {}, rows.map(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]), src ? [h("dt", {}, "Auflösung"), res] : null),
         h("div", { class: "row wrap", style: "margin-top:20px" },
@@ -1047,23 +1054,57 @@ function openPreview(it, key, draw) {
   document.body.append(wrap);
 }
 
-/** In the preview of a film: its Plex collections; opened, they show all posters side by side (missing ones marked). */
-function collectionBoxes(it, draw, close) {
+/** In the preview of a film: its Plex collections; a click opens the detail view of the collection (all its posters). */
+function collectionBoxes(it, close) {
   const box = h("div", { class: "colboxes" });
   if (!(it.collections || []).length) return box;
   api(`/collections?world=${it.world}`).then(r => {
     const mine = r.collections.filter(g => !g.hidden && g.members.some(m => m.id === it.id));
-    fill(box, mine.map(g => { const d = h("details", { class: "colbox" },
-      h("summary", {}, h("b", {}, "Collection: " + g.title),
-        h("span", { class: "pill " + (g.with_poster === g.total ? "ok" : "warn") }, g.with_poster === g.total ? `vollständig (${g.total})` : `${g.with_poster} von ${g.total} Postern`)),
-      h("div", { class: "colstrip" }, g.members.map(mb => h("button", { class: "colpost" + (mb.id === it.id ? " cur" : ""), title: mb.title + (mb.year ? ` (${mb.year})` : ""),
-        onclick: async () => { if (mb.id === it.id) return; const other = await api("/items/" + mb.id); close(); openPreview(other, "poster", draw); } },
-        mb.has_poster ? h("img", { src: `/api/asset/${mb.id}/poster`, loading: "lazy", alt: "" }) : h("span", { class: "noimg sm" }, "fehlt"),
-        h("small", {}, mb.title + (mb.year ? ` (${mb.year})` : ""))))),
-      h("button", { class: "btn ghost sm", title: "Diese Collection nicht mehr anzeigen (z. B. eine Sammel-Collection, die keine Filmreihe ist). Wieder einblenden: Einstellungen → Bibliotheken",
-        onclick: async () => { try { await api("/collections/hidden", { json: { id: g.id, hidden: true } }); S.st.config.hidden_collections = [...(S.st.config.hidden_collections || []), g.id]; d.remove(); } catch (e) { toast(e.message, "bad"); } } }, "Ausblenden")); return d; }));
+    fill(box, mine.map(g => h("button", { class: "colbox", title: "Alle Poster dieser Collection ansehen und bearbeiten", onclick: () => { close(); openCollection(g.id); } },
+      h("b", {}, "Collection: " + g.title),
+      h("span", { class: "pill " + (g.with_poster === g.total ? "ok" : "warn") }, g.with_poster === g.total ? `vollständig (${g.total})` : `${g.with_poster} von ${g.total} Postern`),
+      h("span", { class: "chev", "aria-hidden": "true" }, "›"))));
   }).catch(() => {});
   return box;
+}
+
+/** Detail view of a Plex collection, like the one of a series: one tile per film (replace, upload, delete, preview), upload of a whole set. */
+async function openCollection(cid) {
+  let data;
+  try { data = await api("/collection?id=" + encodeURIComponent(cid)); } catch (e) { toast(e.message, "bad"); return; }
+  const scrim = h("div", { class: "scrim", onclick: e => { if (e.target === scrim) close(); } });
+  const drawer = h("div", { class: "drawer" });
+  scrim.append(drawer);
+  document.body.append(scrim);
+  const onKey = e => { if (e.key === "Escape" && !$(".modalwrap")) close(); };
+  document.addEventListener("keydown", onKey);
+  function close() {
+    scrim.remove(); document.removeEventListener("keydown", onKey);
+    api("/status").then(r => { S.st.summary = r; updateHero(); });
+    loadItems().then(renderGrid);
+  }
+  const reload = async () => { try { data = await api("/collection?id=" + encodeURIComponent(cid)); draw(); } catch { close(); } };
+  const pill = h("span", {});
+  const refreshPill = () => {
+    const have = data.members.filter(m => m.slots.poster && m.slots.poster.exists).length, total = data.members.length;
+    pill.className = "pill " + (have === total ? "ok" : "warn"); pill.textContent = have === total ? `vollständig (${total})` : `${have} von ${total} Postern`;
+  };
+  const onChange = it => { const k = data.members.findIndex(x => x.id === it.id); if (k >= 0) data.members[k] = it; refreshPill(); };
+  function draw() {
+    const total = data.members.length;
+    refreshPill();
+    fill(drawer,
+      h("header", {}, h("button", { class: "btn ghost", "aria-label": "Schließen", onclick: close }, "✕"),
+        h("div", { class: "grow" }, h("h2", {}, data.title), h("div", { class: "hint", style: "margin:2px 0" }, "Plex-Collection · ", pill))),
+      h("div", { class: "body" },
+        h("p", { class: "hint", style: "margin-top:0" }, "Poster auf eine Kachel ziehen oder anklicken, um es zu ersetzen. Mehrere Dateien, Ordner oder eine ZIP lassen sich über „Poster hochladen“ den Filmen zuordnen."),
+        h("div", { class: "row wrap", style: "margin-bottom:16px" },
+          h("button", { class: "btn sm primary", onclick: () => pickFiles(f => importFiles(f, null, reload), true) }, icon("upload", 14), "Poster hochladen"),
+          h("button", { class: "btn sm", title: "Diese Collection nicht mehr anzeigen (z. B. eine Sammel-Collection, die keine Filmreihe ist). Wieder einblenden: Einstellungen → Bibliotheken",
+            onclick: async () => { try { await api("/collections/hidden", { json: { id: cid, hidden: true, title: data.title, count: total } }); S.st.config.hidden_collections = [...(S.st.config.hidden_collections || []), { id: cid, title: data.title, count: total }]; toast("Collection ausgeblendet", "ok"); close(); } catch (e) { toast(e.message, "bad"); } } }, "Ausblenden")),
+        h("div", { class: "grid colgrid" }, data.members.map(m => card(m, onChange)))));
+  }
+  draw();
 }
 
 /** Use one existing asset for many tiles of the title at once (e.g. poster -> Season00 … Season50), named Kometa-conform. */
@@ -1520,7 +1561,7 @@ function reviewImport(res, onDone, fixed) {
         return group(`${g.title} · ${pl(rs.length, "Bild", "Bilder")}`,
           [h("span", { class: "pill " + (dupC ? "bad" : lacking.length ? "warn" : "ok") }, dupC ? "doppelt belegt" : lacking.length ? `${lacking.length} von ${g.total} ohne Poster` : "Collection vollständig"),
             h("button", { class: "btn ghost sm", title: "Diese Collection ausblenden (gilt auch im Reiter „Collections“) – z. B. eine Sammel-Collection, die keine Filmreihe ist",
-              onclick: e => { e.preventDefault(); e.stopPropagation(); g.hidden = true; api("/collections/hidden", { json: { id: cid, hidden: true } }).catch(() => {}); draw(); } }, "Ausblenden")],
+              onclick: e => { e.preventDefault(); e.stopPropagation(); g.hidden = true; api("/collections/hidden", { json: { id: cid, hidden: true, title: g.title, count: g.total } }).then(() => { S.st.config.hidden_collections = [...(S.st.config.hidden_collections || []), { id: cid, title: g.title, count: g.total }]; }).catch(() => {}); draw(); } }, "Ausblenden")],
           true, rs.map(r => buildRow(r, dups)), [{ cls: lacking.length ? "warn" : "ok",
             text: lacking.length ? `Plex-Collection „${g.title}“: es fehlt noch ein Poster für ${lacking.map(x => x.title + (x.year ? " (" + x.year + ")" : "")).join(", ")}` : `Plex-Collection „${g.title}“: alle ${g.total} Filme haben ein Poster` }]);
       }),
@@ -1791,6 +1832,18 @@ function wPlex(nav, c) {
     st, n);
 }
 
+/** Hidden Plex collections: foldable list with the names, show again one by one or all at once. */
+function hiddenCollections(c) {
+  const list = (c.hidden_collections || []).map(x => typeof x === "string" ? { id: x, title: x, count: 0 } : x);
+  if (!list.length) return null;
+  const show = async ids => { await savePatch({ hidden_collections: list.filter(x => !ids.includes(x.id)) }); drawWiz(); };
+  return h("details", { class: "impgroup", style: "margin-top:16px" },
+    h("summary", {}, h("b", {}, pl(list.length, "ausgeblendete Collection", "ausgeblendete Collections")), h("span", { class: "grow" }), h("small", { class: "hint", style: "margin:0" }, "Ausgeblendet in Vorschau und Import")),
+    list.map(x => h("div", { class: "opt compact", style: "margin:0;border-radius:0;border-width:1px 0 0" }, h("div", { class: "grow" }, x.title === x.id ? "Collection " + x.id : x.title, x.count ? h("small", {}, pl(x.count, "Film", "Filme")) : null),
+      h("button", { class: "btn sm", onclick: () => show([x.id]) }, "Einblenden"))),
+    list.length > 1 ? h("div", { style: "padding:10px 14px" }, h("button", { class: "btn sm", onclick: () => show(list.map(x => x.id)) }, "Alle einblenden")) : null);
+}
+
 function wLibs(nav, c) {
   const libs = c.libraries.map(l => ({ ...l }));
   const intervals = [[0, "Nur manuell"], [15, "alle 15 Minuten"], [60, "stündlich"], [360, "alle 6 Stunden"], [1440, "täglich"]];
@@ -1802,8 +1855,7 @@ function wLibs(nav, c) {
     h("label", { class: "f" }, "Automatischer Scan"),
     h("select", { onchange: e => savePatch({ scan_interval_minutes: +e.target.value }) },
       intervals.map(([v, l]) => h("option", { value: v, selected: c.scan_interval_minutes === v }, l))),
-    (c.hidden_collections || []).length ? h("div", { class: "opt compact", style: "margin-top:16px" }, h("div", { class: "grow" }, pl(c.hidden_collections.length, "ausgeblendete Collection", "ausgeblendete Collections"), h("small", {}, "Ausgeblendet in der Vorschau und im Import")),
-      h("button", { class: "btn sm", onclick: async () => { await savePatch({ hidden_collections: [] }); drawWiz(); } }, "Wieder einblenden")) : null,
+    hiddenCollections(c),
     h("p", { class: "hint" }, "p5assets gleicht Plex, Sonarr/Radarr und die Assets-Ordner im Hintergrund ab und aktualisiert die Liste der fehlenden Poster. Dabei wird nichts heruntergeladen oder verändert."),
     nav());
 }

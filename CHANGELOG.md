@@ -1,5 +1,17 @@
 # Änderungen
 
+## 0.4.5 – 2026-10-12
+
+**Neu**
+- Collection-Detailansicht: In der Vorschau führt die Collection des Films in eine Ansicht mit allen Postern der Collection (Kacheln wie bei einer Serie: ersetzen, hochladen, löschen, Vorschau; Set-Upload und „Ausblenden“)
+- Ausgeblendete Collections stehen in den Einstellungen als aufklappbare Liste mit Namen und lassen sich einzeln (oder alle) wieder einblenden
+
+**Geändert**
+- Die aufklappbare Poster-Leiste in der Vorschau ist durch einen Eintrag ersetzt, der die Detailansicht öffnet
+
+**Behoben**
+- Beim Schließen der Detailansicht flackerte das ganze Raster (alle Poster kurz schwarz): unveränderte Kacheln werden jetzt wiederverwendet statt neu aufgebaut
+
 ## 0.4.4 – 2026-10-12
 
 **Neu**

@@ -530,8 +530,13 @@ async def items(world: str = "", q: str = "", filter: str = "all", library: str 
             "items": [_public_item(i) for i in res[offset:offset + limit]]}
 
 
+def _hidden_list() -> list[dict]:
+    """Hidden collections as [{id, title, count}]; older versions stored plain IDs."""
+    return [c if isinstance(c, dict) else {"id": str(c), "title": str(c), "count": 0} for c in config.get().get("hidden_collections") or []]
+
+
 def _hidden_collections() -> frozenset:
-    return frozenset(config.get().get("hidden_collections") or [])
+    return frozenset(c["id"] for c in _hidden_list())
 
 
 def collection_overview(items: list[dict], q: str = "", hidden: set | frozenset = frozenset()) -> list[dict]:
@@ -555,6 +560,17 @@ def collection_overview(items: list[dict], q: str = "", hidden: set | frozenset 
     return out
 
 
+@app.get("/api/collection")
+async def collection_detail(id: str):
+    """One Plex collection with its films (public items) for the detail view."""
+    films = [i for i in scanner.STATE["items"] if any(c["id"] == id for c in i.get("collections") or [])]
+    if not films:
+        raise HTTPException(404, "Collection nicht gefunden – bitte neu scannen")
+    title = next(c["title"] for c in films[0]["collections"] if c["id"] == id)
+    films.sort(key=lambda i: (i["year"] or 0, i["title"].casefold()))
+    return {"id": id, "title": title, "hidden": id in _hidden_collections(), "members": [_public_item(i, True) for i in films]}
+
+
 @app.get("/api/collections")
 async def collections(world: str = "", q: str = ""):
     wid = _world(world)["id"]
@@ -564,13 +580,17 @@ async def collections(world: str = "", q: str = ""):
 class CollectionHide(BaseModel):
     id: str
     hidden: bool = True
+    title: str = ""
+    count: int = 0
 
 
 @app.post("/api/collections/hidden")
 async def collection_hide(body: CollectionHide):
     """Hide a Plex collection (e.g. a huge one that is no film series) from the overview and the import check, or show it again."""
-    cur = [c for c in (config.get().get("hidden_collections") or []) if c != body.id]
-    config.update({"hidden_collections": cur + [body.id] if body.hidden else cur})
+    cur = [c for c in _hidden_list() if c["id"] != body.id]
+    if body.hidden:
+        cur.append({"id": body.id, "title": body.title[:200] or body.id, "count": body.count})
+    config.update({"hidden_collections": cur})
     return {"ok": True}
 
 

@@ -91,12 +91,12 @@ def test_news_summary_is_shown_once_per_version(client, monkeypatch):
     assert r["show"] and r["count"] >= 10 and len(r["highlights"]) == 4 and r["version"] == "0.4.1"
     client.post("/api/news/seen", json={"ids": [], "version": True})
     assert client.get("/api/news").json()["show"] is False
-    monkeypatch.setattr(version, "BASE_VERSION", "0.4.4")
-    config.update({"seen_news": [e["id"] for e in r["all"]], "news_version_seen": "0.4.3"})
+    monkeypatch.setattr(version, "BASE_VERSION", "0.4.5")
+    config.update({"seen_news": [e["id"] for e in r["all"]], "news_version_seen": "0.4.4"})
     import json
     from pathlib import Path
     entries = json.loads((Path(main.__file__).parent / "news.json").read_text("utf-8"))
-    assert client.get("/api/news").json()["count"] == sum(1 for e in entries if e["version"] == "0.4.4")
+    assert client.get("/api/news").json()["count"] == sum(1 for e in entries if e["version"] == "0.4.5")
 
 
 def test_collection_overview(monkeypatch):
@@ -127,3 +127,21 @@ def test_collection_hide(monkeypatch):
     assert got == {"1:900": False, "1:999": True}
     c.post("/api/collections/hidden", json={"id": "1:999", "hidden": False})
     assert not any(g["hidden"] for g in c.get("/api/collections", params={"world": "hd"}).json()["collections"])
+
+
+def test_collection_detail_and_hidden_names(monkeypatch):
+    from app import config
+    config.update({"hidden_collections": ["1:777"]})              # plain IDs of older versions still work
+    col = [{"id": "1:900", "title": "Trilogie"}]
+    items = [_item(2, "Teil 2", year=2008, collections=col), _item(1, "Teil 1", year=2005, collections=col), _item(3, "Ohne")]
+    monkeypatch.setitem(scanner.STATE, "items", items)
+    monkeypatch.setattr(main, "_world", lambda w=None: {"id": "hd", "name": "HD", "assets_path": "/nonexistent"})
+    c = TestClient(main.app)
+    d = c.get("/api/collection", params={"id": "1:900"}).json()
+    assert d["title"] == "Trilogie" and [m["title"] for m in d["members"]] == ["Teil 1", "Teil 2"] and d["hidden"] is False
+    assert c.get("/api/collection", params={"id": "nope"}).status_code == 404
+    c.post("/api/collections/hidden", json={"id": "1:900", "title": "Trilogie", "count": 2})
+    hidden = config.get()["hidden_collections"]
+    assert {"id": "1:900", "title": "Trilogie", "count": 2} in hidden and any(h["id"] == "1:777" for h in hidden if isinstance(h, dict))
+    assert c.get("/api/collection", params={"id": "1:900"}).json()["hidden"] is True
+    config.update({"hidden_collections": []})
