@@ -390,7 +390,6 @@ async function runNewsAction(target) {
   const [kind, arg] = target.split(":");
   if (kind === "settings") { await wizard(true); goStep(arg); }
   else if (kind === "cleanup") openCleanup(arg);
-  else if (kind === "collections") { if (S.view !== "dash") dashboard(); openCollections(); }
   else if (kind === "tab") { if (S.view !== "dash") dashboard(); S.filter = arg; renderChips(); await loadItems(); renderGrid(); }
 }
 
@@ -552,10 +551,10 @@ function dashboard() {
         h("button", { class: w.id === S.world ? "on" : "", style: `--c:${worldColor(w)}`, title: w.name, onclick: () => switchWorld(w.id) }, planetSvg(w.hue ?? 140, 20), w.name))) : null,
       h("div", { class: "spacer" }),
       // desktop: one small group with two pickers (images/ZIP, whole folder); touch devices: the single normal button
-      h("div", { class: "upgroup" }, h("span", { class: "uplab" }, "Bilder hochladen:"),
-        h("button", { class: "upb", title: "Bilder oder ZIPs wählen – p5assets ordnet sie automatisch den Titeln zu", "aria-label": "Bilder oder ZIPs wählen", onclick: () => pickFiles(f => importFiles(f), true) }, icon("file", 18)),
+      h("div", { class: "upgroup" }, h("span", { class: "uplab" }, "Poster hochladen:"),
+        h("button", { class: "upb", title: "Poster-Dateien oder ZIPs wählen – p5assets ordnet sie automatisch den Titeln zu", "aria-label": "Bilder oder ZIPs wählen", onclick: () => pickFiles(f => importFiles(f), true) }, icon("file", 18)),
         h("button", { class: "upb", title: "Ordner wählen – oder Ordner und Dateien einfach ins Fenster ziehen", "aria-label": "Ordner wählen", onclick: () => pickFiles(f => importFiles(f), true, true) }, icon("folder", 18))),
-      h("button", { class: "btn tb uptouch", title: "Bilder oder ZIPs wählen – p5assets ordnet sie automatisch den Titeln zu", onclick: () => pickFiles(f => importFiles(f), true) }, icon("upload"), h("span", { class: "lbl" }, "Bilder hochladen")),
+      h("button", { class: "btn tb uptouch", title: "Poster-Dateien oder ZIPs wählen – p5assets ordnet sie automatisch den Titeln zu", onclick: () => pickFiles(f => importFiles(f), true) }, icon("upload"), h("span", { class: "lbl" }, "Poster hochladen")),
       h("span", { class: "vsep" }),
       h("button", { class: "btn tb", id: "scanbtn", title: "Plex, Sonarr/Radarr und die Assets-Ordner neu einlesen", onclick: doScan }, icon("sync"), h("span", { class: "lbl" }, "Scannen")),
       h("button", { class: "btn tb icon", title: "Papierkorb & Aufräumen: ersetzte Poster zurückholen (30 Tage) und verwaiste Ordner entfernen", onclick: () => openCleanup() }, icon("trash", 20)),
@@ -686,12 +685,10 @@ function renderChips() {
     chip("Alle", "all", cnt.all),
     chip("Fehlende", "missing", cnt.missing),
     chip("In Plex, Poster fehlt", "plexmissing", cnt.plexmissing, "In Plex vorhanden, aber bei Kometa fehlt ein Poster oder eine Staffel (ohne Titel, die nur in Sonarr/Radarr stehen)"),
-    chip("Vollständig", "complete", cnt.complete),
     cnt.comingsoon > 0 || S.filter === "comingsoon" ? chip("Coming Soon", "comingsoon", cnt.comingsoon, "Coming-Soon-Poster ({edition-Coming Soon}): in Plex schon sichtbar, brauchen zeitnah ein Poster") : null,
     hasExtra || cnt.notplex > 0 || S.filter === "notplex" ? chip("Noch nicht in Plex", "notplex", cnt.notplex, "Sonarr/Radarr kennen den Titel, in Plex ist er noch nicht (noch keine Datei, noch nicht erschienen oder noch nicht eingelesen)") : null,
     chip("Schwache Poster", "weak", cnt.weak, "Bilder, die zu schmal sind oder nicht das Seitenverhältnis 2:3 haben (Schwellwerte wählst du selbst)"),
     S.filter === "weak" ? weakOptions() : null,
-    cnt.collections > 0 ? h("button", { class: "chip", title: "Plex-Collections und ob für alle ihre Filme ein Poster da ist", onclick: openCollections }, "Collections", h("small", {}, cnt.collections)) : null,
     S.filter === "comingsoon" ? h("label", { class: "chip" + (S.nopost ? " on" : ""), style: "display:inline-flex;gap:8px;align-items:center;cursor:pointer" },
       h("input", { type: "checkbox", checked: S.nopost, style: "accent-color:var(--accent)", onchange: async e => { S.nopost = e.target.checked; renderChips(); await loadItems(); renderGrid(); } }), "nur ohne Poster") : null,
   );
@@ -1028,6 +1025,7 @@ function openPreview(it, key, draw) {
         touch && exists ? h("div", { class: "hint", style: "text-align:center" }, "Bild lange drücken → „Zu Fotos hinzufügen“ (Originalqualität)") : null),
       h("div", { class: "lside" },
         metaGroups(it),
+        it.type === "movie" ? collectionBoxes(it, draw, close) : null,
         (it.mirror_folders || []).length ? h("div", { style: "margin-top:8px" }, h("span", { class: "tag ok", title: "Coming-Soon-Platzhalter: Poster werden auch im echten Film-Ordner abgelegt" }, "Coming Soon gespiegelt")) : null,
         h("dl", {}, rows.map(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]), src ? [h("dt", {}, "Auflösung"), res] : null),
         h("div", { class: "row wrap", style: "margin-top:20px" },
@@ -1049,33 +1047,23 @@ function openPreview(it, key, draw) {
   document.body.append(wrap);
 }
 
-/** Plex collections with the poster state of their films (like the set check of a series). */
-function openCollections() {
-  const list = h("div"), body = h("div", {}, list);
-  const m = modal("Collections", body, [h("button", { class: "btn", onclick: () => m.close() }, "Schließen")]);
-  let all = [], q = "", showHidden = false;
-  const hide = async (g, hidden) => { try { await api("/collections/hidden", { json: { id: g.id, hidden } }); g.hidden = hidden; draw(); loadItems().then(() => { renderChips(); renderGrid(); }); } catch (e) { toast(e.message, "bad"); } };
-  const draw = () => {
-    const open = new Set([...list.querySelectorAll("details[open]")].map(d => d.dataset.id));
-    const visible = all.filter(g => !g.hidden), nHidden = all.length - visible.length;
-    const shown = (showHidden ? all : visible).filter(g => !q || normText(g.title).includes(q));
-    const incomplete = visible.filter(g => g.with_poster < g.total).length;
-    fill(list, all.length ? h("p", { class: "hint", style: "margin:12px 0" }, `${pl(visible.length, "Collection", "Collections")} laut Plex (ab zwei Filmen), ${incomplete ? incomplete + " davon unvollständig" : "alle vollständig"}. `,
-        nHidden ? h("a", { href: "#", onclick: e => { e.preventDefault(); showHidden = !showHidden; draw(); } }, showHidden ? "Ausgeblendete verbergen" : `${nHidden} ausgeblendet – anzeigen`) : null) : null,
-      shown.map(g => h("details", { class: "impgroup" + (g.hidden ? " muted" : ""), "data-id": g.id, open: open.has(g.id) },
-        h("summary", {}, h("b", {}, g.title), h("span", { class: "grow" }),
-          h("span", { class: "pill " + (g.with_poster === g.total ? "ok" : "warn") }, g.with_poster === g.total ? `vollständig (${g.total})` : `${g.with_poster} von ${g.total} Postern`),
-          h("button", { class: "btn ghost sm", title: g.hidden ? "Wieder einblenden" : "Diese Collection ausblenden (z. B. eine Sammel-Collection, die keine Filmreihe ist)", onclick: e => { e.preventDefault(); e.stopPropagation(); hide(g, !g.hidden); } }, g.hidden ? "Einblenden" : "Ausblenden")),
-        g.members.map(mb => h("div", { class: "colrow" },
-          mb.has_poster ? h("img", { src: `/api/asset/${mb.id}/poster`, loading: "lazy", alt: "" }) : h("span", { class: "noimg sm" }, "–"),
-          h("div", { class: "grow" }, mb.title + (mb.year ? ` (${mb.year})` : "")),
-          mb.has_poster ? h("span", { class: "pill ok" }, "Poster da") : h("span", { class: "pill bad" }, "fehlt"),
-          h("button", { class: "btn sm", onclick: async () => { const it = await api("/items/" + mb.id); openPreview(it, "poster", load); } }, mb.has_poster ? "Ansehen" : "Hochladen"))))),
-      !shown.length && all.length ? h("div", { class: "hint" }, "Keine Collection gefunden") : null);
-  };
-  const load = async () => { try { all = (await api(`/collections?world=${S.world}`)).collections; draw(); loadItems().then(() => { renderChips(); renderGrid(); }); } catch (e) { fill(list, h("div", { class: "status bad" }, e.message)); } };
-  body.prepend(h("div", { class: "search lsearch" }, icon("search", 16), (() => { const i = h("input", { type: "search", placeholder: "Collection suchen …", autocomplete: "off", oninput: e => { q = normText(e.target.value).trim(); draw(); } }); return [i, clearBtn(i)]; })()));
-  load();
+/** In the preview of a film: its Plex collections; opened, they show all posters side by side (missing ones marked). */
+function collectionBoxes(it, draw, close) {
+  const box = h("div", { class: "colboxes" });
+  if (!(it.collections || []).length) return box;
+  api(`/collections?world=${it.world}`).then(r => {
+    const mine = r.collections.filter(g => !g.hidden && g.members.some(m => m.id === it.id));
+    fill(box, mine.map(g => { const d = h("details", { class: "colbox" },
+      h("summary", {}, h("b", {}, "Collection: " + g.title),
+        h("span", { class: "pill " + (g.with_poster === g.total ? "ok" : "warn") }, g.with_poster === g.total ? `vollständig (${g.total})` : `${g.with_poster} von ${g.total} Postern`)),
+      h("div", { class: "colstrip" }, g.members.map(mb => h("button", { class: "colpost" + (mb.id === it.id ? " cur" : ""), title: mb.title + (mb.year ? ` (${mb.year})` : ""),
+        onclick: async () => { if (mb.id === it.id) return; const other = await api("/items/" + mb.id); close(); openPreview(other, "poster", draw); } },
+        mb.has_poster ? h("img", { src: `/api/asset/${mb.id}/poster`, loading: "lazy", alt: "" }) : h("span", { class: "noimg sm" }, "fehlt"),
+        h("small", {}, mb.title + (mb.year ? ` (${mb.year})` : ""))))),
+      h("button", { class: "btn ghost sm", title: "Diese Collection nicht mehr anzeigen (z. B. eine Sammel-Collection, die keine Filmreihe ist). Wieder einblenden: Einstellungen → Bibliotheken",
+        onclick: async () => { try { await api("/collections/hidden", { json: { id: g.id, hidden: true } }); S.st.config.hidden_collections = [...(S.st.config.hidden_collections || []), g.id]; d.remove(); } catch (e) { toast(e.message, "bad"); } } }, "Ausblenden")); return d; }));
+  }).catch(() => {});
+  return box;
 }
 
 /** Use one existing asset for many tiles of the title at once (e.g. poster -> Season00 … Season50), named Kometa-conform. */
@@ -1653,6 +1641,7 @@ function wAuth(nav) {
 }
 
 const STEP_LABELS = { welcome: "Start", plex: "Plex", libs: "Bibliotheken", arr: "Sonarr/Radarr", worlds: "Welten", assign: "Zuordnung", apis: "Quellen", notify: "Benachrichtigungen", auth: "Anmeldung", done: "Fertig" };
+const STEP_GROUPS = [["Verbindungen", ["plex", "libs", "arr"]], ["Welten", ["worlds", "assign"]], ["Weiteres", ["apis", "notify", "auth"]]];
 // "Zuordnung" only exists when there is more than one world
 const stepList = () => ["welcome", "plex", "libs", "arr", "worlds", ...(cfg().worlds.length > 1 ? ["assign"] : []), "apis", "notify", "auth", "done"];
 
@@ -1685,16 +1674,26 @@ function drawWiz() {
     h("span", { class: "spacer" }),
     h("button", { class: "btn primary", disabled, onclick: next || stepNext }, label));
   const view = { welcome: wWelcome, plex: wPlex, libs: wLibs, arr: wArr, worlds: wWorlds, assign: wAssign, apis: wApis, notify: wNotify, auth: wAuth, done: wDone }[S.step];
-  // labelled step navigation: in settings every step is reachable, during onboarding only the ones visited so far
+  // sidebar: grouped steps; in settings every step is reachable, during onboarding only the ones visited so far
   const shown = list.map((name, i) => ({ name, i })).filter(s => !(S.wizSettings && (s.name === "welcome" || s.name === "done")));
+  const stepBtn = (s, n) => {
+    const reachable = S.wizSettings || s.i <= (S.reached || 0);
+    return h("button", { class: (s.name === S.step ? "on " : "") + (s.i < idx ? "done" : ""), disabled: !reachable, title: reachable ? `Zu „${STEP_LABELS[s.name]}“ springen` : "Erst die vorherigen Schritte abschließen",
+      "aria-current": s.name === S.step ? "step" : null, onclick: () => goStep(s.name) }, S.wizSettings ? null : h("b", {}, String(n + 1).padStart(2, "0")), STEP_LABELS[s.name]);
+  };
+  const side = [];
+  let lastGroup = null;
+  shown.forEach((s, n) => {
+    const g = (STEP_GROUPS.find(([, names]) => names.includes(s.name)) || [null])[0];
+    if (g !== lastGroup && g) side.push(h("div", { class: "navgrp" }, g));
+    lastGroup = g;
+    side.push(stepBtn(s, n));
+  });
   fill(app, h("div", { class: "wiz" },
     logoEl("assets"),
-    h("nav", { class: "stepnav" }, shown.map((s, n) => {
-      const reachable = S.wizSettings || s.i <= (S.reached || 0);
-      return h("button", { class: (s.name === S.step ? "on " : "") + (s.i < idx ? "done" : ""), disabled: !reachable, title: reachable ? `Zu „${STEP_LABELS[s.name]}“ springen` : "Erst die vorherigen Schritte abschließen",
-        onclick: () => goStep(s.name) }, h("b", {}, String(n + 1).padStart(2, "0")), STEP_LABELS[s.name]);
-    })),
-    h("div", { class: "wcard" }, view(nav, cfg()))));
+    h("div", { class: "wlayout" },
+      h("nav", { class: "stepnav", "aria-label": S.wizSettings ? "Einstellungen" : "Einrichtung" }, side),
+      h("div", { class: "wcard" }, view(nav, cfg())))));
 }
 
 /** What influences the title list: if one of these changed while the settings were open, closing them rescans. */
@@ -1803,6 +1802,8 @@ function wLibs(nav, c) {
     h("label", { class: "f" }, "Automatischer Scan"),
     h("select", { onchange: e => savePatch({ scan_interval_minutes: +e.target.value }) },
       intervals.map(([v, l]) => h("option", { value: v, selected: c.scan_interval_minutes === v }, l))),
+    (c.hidden_collections || []).length ? h("div", { class: "opt compact", style: "margin-top:16px" }, h("div", { class: "grow" }, pl(c.hidden_collections.length, "ausgeblendete Collection", "ausgeblendete Collections"), h("small", {}, "Ausgeblendet in der Vorschau und im Import")),
+      h("button", { class: "btn sm", onclick: async () => { await savePatch({ hidden_collections: [] }); drawWiz(); } }, "Wieder einblenden")) : null,
     h("p", { class: "hint" }, "p5assets gleicht Plex, Sonarr/Radarr und die Assets-Ordner im Hintergrund ab und aktualisiert die Liste der fehlenden Poster. Dabei wird nichts heruntergeladen oder verändert."),
     nav());
 }

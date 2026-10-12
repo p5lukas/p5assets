@@ -486,10 +486,8 @@ def _scope_stats(items: list[dict], weak_w: int = 0, weak_r: bool = False) -> di
         c["comingsoon"] += 1 if i.get("coming_soon") else 0
         c["notplex"] += 0 if i["in_plex"] else 1
         c["plexmissing"] += 1 if i.get("missing_plex") else 0
-    with_col = [i for i in items if i.get("collections")]
-    c["collections"] = sum(1 for g in collection_overview(with_col, hidden=_hidden_collections()) if not g["hidden"]) if with_col else 0
     return {"items": c["items"], "slots": c["slots"], "missing": c["missing_slots"], "complete_items": c["complete"],
-            "counts": {"collections": c["collections"], "all": c["items"], "missing": c["missing"], "complete": c["complete"],
+            "counts": {"all": c["items"], "missing": c["missing"],
                        "comingsoon": c["comingsoon"], "notplex": c["notplex"], "plexmissing": c["plexmissing"], "weak": c["weak"]},
             "dims": {"known": c["dims_known"], "total": c["dims_total"]}}
 
@@ -509,8 +507,6 @@ async def items(world: str = "", q: str = "", filter: str = "all", library: str 
     stats = _scope_stats(res, weak_w, weak_r)          # for the chosen source, independent of tab, letter and search
     if filter == "missing":
         res = [i for i in res if i["missing"]]
-    elif filter == "complete":
-        res = [i for i in res if not i["missing"]]
     elif filter == "notplex":
         res = [i for i in res if not i["in_plex"]]
     elif filter == "plexmissing":     # already in Plex, but a poster/season is missing in the Kometa assets

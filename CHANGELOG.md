@@ -1,5 +1,16 @@
 # Änderungen
 
+## 0.4.4 – 2026-10-12
+
+**Neu**
+- Poster-Vorschau zeigt die Plex-Collection(en) des Films; aufgeklappt stehen alle Poster der Collection nebeneinander (fehlende markiert, anklickbar)
+- Einrichtung und Einstellungen mit Seitenleiste (Gruppen: Verbindungen, Welten, Weiteres); auf dem Handy eine scrollbare Zeile
+
+**Geändert**
+- Aufgeräumt: Reiter „Vollständig“ und „Collections“ entfernt (die Collection-Erkennung im Import und die Vorschau bleiben)
+- „Bilder hochladen“ heißt jetzt „Poster hochladen“
+- Ausgeblendete Collections lassen sich unter Einstellungen → Bibliotheken zurücksetzen
+
 ## 0.4.3 – 2026-10-11
 
 **Neu**

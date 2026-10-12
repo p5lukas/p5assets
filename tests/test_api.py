@@ -34,7 +34,6 @@ def test_filters_and_counters(client):
     assert _titles(client, filter="plexmissing")[0] == ["Beta"]
     assert _titles(client, filter="comingsoon")[0] == ["Gamma"]
     assert _titles(client, filter="notplex")[0] == ["Delta"]
-    assert _titles(client, filter="complete")[0] == ["Alpha"]
     _, body = _titles(client)
     assert body["stats"]["counts"]["plexmissing"] == 1 and body["stats"]["counts"]["comingsoon"] == 1
 
@@ -92,12 +91,12 @@ def test_news_summary_is_shown_once_per_version(client, monkeypatch):
     assert r["show"] and r["count"] >= 10 and len(r["highlights"]) == 4 and r["version"] == "0.4.1"
     client.post("/api/news/seen", json={"ids": [], "version": True})
     assert client.get("/api/news").json()["show"] is False
-    monkeypatch.setattr(version, "BASE_VERSION", "0.4.3")
-    config.update({"seen_news": [e["id"] for e in r["all"]], "news_version_seen": "0.4.2"})
+    monkeypatch.setattr(version, "BASE_VERSION", "0.4.4")
+    config.update({"seen_news": [e["id"] for e in r["all"]], "news_version_seen": "0.4.3"})
     import json
     from pathlib import Path
     entries = json.loads((Path(main.__file__).parent / "news.json").read_text("utf-8"))
-    assert client.get("/api/news").json()["count"] == sum(1 for e in entries if e["version"] == "0.4.3")
+    assert client.get("/api/news").json()["count"] == sum(1 for e in entries if e["version"] == "0.4.4")
 
 
 def test_collection_overview(monkeypatch):
@@ -112,9 +111,7 @@ def test_collection_overview(monkeypatch):
     assert (cols[0]["total"], cols[0]["with_poster"]) == (2, 1)
     assert [m["title"] for m in cols[0]["members"]] == ["Teil 1", "Teil 2"]
     assert c.get("/api/collections", params={"world": "hd", "q": "zzz"}).json()["collections"] == []
-    r = c.get("/api/items", params={"world": "hd"}).json()
-    assert r["stats"]["counts"]["collections"] == 1
-    assert r["items"][0]["collections"] == col
+    assert c.get("/api/items", params={"world": "hd"}).json()["items"][0]["collections"] == col
 
 
 def test_collection_hide(monkeypatch):
@@ -125,10 +122,8 @@ def test_collection_hide(monkeypatch):
     monkeypatch.setitem(scanner.STATE, "items", items)
     monkeypatch.setattr(main, "_world", lambda w=None: {"id": "hd", "name": "HD", "assets_path": "/nonexistent"})
     c = TestClient(main.app)
-    assert c.get("/api/items", params={"world": "hd"}).json()["stats"]["counts"]["collections"] == 2
     assert c.post("/api/collections/hidden", json={"id": "1:999"}).status_code == 200
     got = {g["id"]: g["hidden"] for g in c.get("/api/collections", params={"world": "hd"}).json()["collections"]}
     assert got == {"1:900": False, "1:999": True}
-    assert c.get("/api/items", params={"world": "hd"}).json()["stats"]["counts"]["collections"] == 1
     c.post("/api/collections/hidden", json={"id": "1:999", "hidden": False})
-    assert c.get("/api/items", params={"world": "hd"}).json()["stats"]["counts"]["collections"] == 2
+    assert not any(g["hidden"] for g in c.get("/api/collections", params={"world": "hd"}).json()["collections"])
