@@ -1,5 +1,11 @@
 # Änderungen
 
+## 0.4.8 – 2026-10-15
+
+**Geändert**
+- **App-Icon** endgültig: Das Abzeichen unten rechts ist ein **oranger Flammen-Komet** (eigene Zeichnung, Anspielung auf Kometa) statt des grünen Feuerballs; Aufbau wie das Icon von p5converter (dort silberne Audio-CD + blaue Blu-ray). Alle Größen neu: Favicon `icon.png`, `icon-192.png`, `icon-512.png`, Apple-Touch-Icon (iPhone/iPad-Web-App) und `unraid/icon.png` (erscheint auch im README)
+- Icon-Skript `tools/icons/make_icons.py` (gemeinsam mit p5converter) und die SVG-Quellen beider Icons liegen in `tools/icons/`
+
 ## 0.4.7 – 2026-10-15
 
 **Geändert**

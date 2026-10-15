@@ -9,6 +9,7 @@
 Alle bisher gesammelten Punkte sind in Version 2 umgesetzt. Neue Beobachtungen bitte unten eintragen.
 
 - [x] 0.4.7: App-Icon mit Feuerball-Abzeichen im selben Aufbau wie p5converter (alle Größen inkl. Apple-Touch- und Unraid-Icon)
+- [x] 0.4.8: Endgültiges Icon: oranger Flammen-Komet als Abzeichen (Anspielung auf Kometa); p5converter bekommt Audio-CD + Blu-ray
 
 ## Uploads
 - [x] Beliebige zusätzliche Staffelposter hochladen können, auch für Staffeln, die Plex noch nicht kennt (z. B. Season05, bevor sie bei Plex landet). Benennung weiterhin automatisch Kometa-konform (`Season05.jpg` im richtigen Medienordner)
