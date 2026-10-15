@@ -1,5 +1,11 @@
 # Änderungen
 
+## 0.4.7 – 2026-10-15
+
+**Geändert**
+- **App-Icon** mit Abzeichen: kleiner Feuerball (Komet, wie beim Kometa-Logo) unten rechts, das „p5“ etwas kleiner; gleicher Aufbau wie das Icon von p5converter (dort zwei Pfeile). Alle Größen neu: Favicon `icon.png`, `icon-192.png`, `icon-512.png`, Apple-Touch-Icon (iPhone/iPad-Web-App) und `unraid/icon.png`
+- SVG-Quelle und Erzeugungs-Skript für die Icons in `tools/icons/` (`make_icons.py`, gemeinsam mit p5converter)
+
 ## 0.4.6 – 2026-10-12
 
 **Neu**

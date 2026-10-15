@@ -8,6 +8,8 @@
 
 Alle bisher gesammelten Punkte sind in Version 2 umgesetzt. Neue Beobachtungen bitte unten eintragen.
 
+- [x] 0.4.7: App-Icon mit Feuerball-Abzeichen im selben Aufbau wie p5converter (alle Größen inkl. Apple-Touch- und Unraid-Icon)
+
 ## Uploads
 - [x] Beliebige zusätzliche Staffelposter hochladen können, auch für Staffeln, die Plex noch nicht kennt (z. B. Season05, bevor sie bei Plex landet). Benennung weiterhin automatisch Kometa-konform (`Season05.jpg` im richtigen Medienordner)
 - [x] Sonarr/Radarr anbinden (URL + API-Key im Onboarding, optional, mehrere Instanzen möglich): Titel und Staffeln inkl. noch nicht erschienener/nicht in Plex vorhandener liefern; Ordnername (letzte Pfadkomponente) aus Sonarr/Radarr ableiten und mit Plex per TVDB-/TMDB-ID zusammenführen. Titel nur in Sonarr/Radarr als „noch nicht in Plex“ kennzeichnen, Poster-Upload dafür erlauben
