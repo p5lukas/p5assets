@@ -625,7 +625,7 @@ async def _plex_image(path: str) -> Response:
         data = await p.image(path)
     finally:
         await p.close()
-    return Response(data, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=3600"})
+    return Response(data, media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/api/asset/{item_id}/{slot}")
@@ -1173,6 +1173,11 @@ async def index():
     v = _asset_version()
     for name in ("style.css", "planets.js", "app.js"):
         html = html.replace(f"/static/{name}", f"/static/{name}?v={v}")
+    # versioned icon addresses: browsers keep favicons very long, so a new version number makes them load the new icon
+    ver = version.BASE_VERSION
+    for name in ("favicon-32.png", "favicon-48.png", "apple-touch-icon.png"):
+        html = html.replace(f"/static/{name}", f"/static/{name}?v={ver}")
+    html = html.replace('href="/favicon.ico"', f'href="/favicon.ico?v={ver}"').replace('href="/manifest.webmanifest"', f'href="/manifest.webmanifest?v={ver}"')
     return HTMLResponse(html, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 
@@ -1183,15 +1188,15 @@ async def manifest():
         "name": "p5assets", "short_name": "p5assets", "description": "Fehlende Poster für Plex und Kometa finden und ersetzen",
         "start_url": "/", "scope": "/", "display": "standalone", "orientation": "any", "lang": "de",
         "background_color": "#02100a", "theme_color": "#02100a",
-        "icons": [{"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
-                  {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
-                  {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}],
-    }, media_type="application/manifest+json", headers={"Cache-Control": "public, max-age=3600"})
+        "icons": [{"src": f"/static/icon-192.png?v={version.BASE_VERSION}", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+                  {"src": f"/static/icon-512.png?v={version.BASE_VERSION}", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+                  {"src": f"/static/icon-512.png?v={version.BASE_VERSION}", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}],
+    }, media_type="application/manifest+json", headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/favicon.ico")
 async def favicon():
-    return FileResponse(STATIC / "icon.png", media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
+    return FileResponse(STATIC / "favicon.ico", media_type="image/x-icon", headers={"Cache-Control": "no-cache"})
 
 
 class _RevalidatingStatic(StaticFiles):

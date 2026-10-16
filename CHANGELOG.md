@@ -1,5 +1,10 @@
 # Änderungen
 
+## 0.4.9 – 2026-10-16
+
+**Behoben**
+- **Browser-Tab-Icon** zeigte noch das alte Bild: Die Icon-Adressen tragen jetzt die Versionsnummer (`?v=…`), sodass Browser das neue Icon sofort laden; `/favicon.ico` liefert eine echte `.ico` (16/32/48 px), dazu eigene 32- und 48-px-Tab-Icons mit lesbarem Abzeichen; Web-App-Manifest und Icons ohne langes Zwischenspeichern
+
 ## 0.4.8 – 2026-10-15
 
 **Geändert**
