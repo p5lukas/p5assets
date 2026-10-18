@@ -1,5 +1,10 @@
 # Änderungen
 
+## 0.4.7 – 2026-10-18
+
+**Behoben**
+- Die Suche auf der Startseite durchsucht wieder alle Titel der Welt, auch wenn ein anderer Reiter (z. B. die neue Startansicht „In Plex, Poster fehlt“) offen ist; während der Suche ist „Alle“ markiert, ein Klick auf einen Reiter beendet die Suche
+
 ## 0.4.6 – 2026-10-12
 
 **Neu**

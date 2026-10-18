@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import os
 
-BASE_VERSION = "0.4.6"
+BASE_VERSION = "0.4.7"
 REPO = os.environ.get("P5_REPO", "https://github.com/p5lukas/p5assets").rstrip("/")
 
 

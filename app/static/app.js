@@ -123,6 +123,8 @@ async function loadState() {
 async function savePatch(patch) { const r = await api("/config", { json: { patch } }); S.st.config = r; return r; }
 
 const weakParams = () => { const c = weakCfg(), p = {}; if (c.wOn) p.weak_w = c.w; if (c.rOn) p.weak_r = "1"; return p; };
+/** A search always covers ALL titles of the world, whatever tab is open (the tab only applies without a search). */
+const effFilter = () => S.q.trim() ? "all" : S.filter;
 const AZ_MIN = 150;   // from this many titles on the list is split by first letter instead of one endless page
 async function loadItems(append = false) {
   // S.lib is "lib:<Plex library>" or "src:<Sonarr/Radarr instance>"
@@ -137,10 +139,10 @@ async function loadItems(append = false) {
 async function loadItemsInner(append, id, q, sig) {
   // S.lib: "" = all | "type:movie|show" = all movie/series sources combined | "lib:<Plex library>" | "src:<Sonarr/Radarr instance>"
   const scope = { type: S.lib.startsWith("type:") ? S.lib.slice(5) : "", library: S.lib.startsWith("lib:") ? S.lib.slice(4) : "", source: S.lib.startsWith("src:") ? S.lib.slice(4) : "" };
-  const query = (letter, limit, offset) => new URLSearchParams({ world: S.world, q: S.q, filter: S.filter, letter, ...scope,
-    ...(S.filter === "comingsoon" && S.nopost ? { nopost: "1" } : {}), ...weakParams(), offset, limit });
+  const query = (letter, limit, offset) => new URLSearchParams({ world: S.world, q: S.q, filter: effFilter(), letter, ...scope,
+    ...(effFilter() === "comingsoon" && S.nopost ? { nopost: "1" } : {}), ...weakParams(), offset, limit });
   const total = letters => Object.values(letters || {}).reduce((a, b) => a + b, 0);
-  const useLetters = S.filter === "all" && !q;   // only the tab "Alle" is split by letter; the search always covers all titles
+  const useLetters = S.filter === "all" && !q;   // only the tab "Alle" is split by letter
   let letter = useLetters ? (S.letter ?? "") : "";
   if (useLetters && S.letter === null) {          // first view of a big list: start with "#" (or the first letter that exists)
     const r0 = await api("/items?" + query("", 1, 0), sig);
@@ -542,7 +544,7 @@ async function logsPage() {
 /* ========================================================== dashboard === */
 function dashboard() {
   S.view = "dash";
-  const qInput = h("input", { type: "search", placeholder: "Titel suchen …", id: "q", value: S.q, autocomplete: "off", enterkeyhint: "search", "aria-label": "Titel suchen", oninput: debounce(async e => { S.q = e.target.value; await loadItems(); renderGrid(); }, 150) });
+  const qInput = h("input", { type: "search", placeholder: "Titel suchen …", id: "q", value: S.q, autocomplete: "off", enterkeyhint: "search", "aria-label": "Titel suchen", oninput: debounce(async e => { S.q = e.target.value; await loadItems(); renderChips(); renderGrid(); }, 150) });
   setAccent();
   const ws = cfg().worlds;
   fill(app,
@@ -680,7 +682,7 @@ function renderChips() {
   const el = $("#chips"); if (!el) return;
   const c = cfg(), cnt = (S.stats && S.stats.counts) || {};
   const hasExtra = c.arr.some(a => a.world === S.world);
-  const chip = (label, key, n, title) => h("button", { class: "chip" + (S.filter === key ? " on" : ""), title, onclick: async () => { S.filter = key; renderChips(); await loadItems(); renderGrid(); } },
+  const chip = (label, key, n, title) => h("button", { class: "chip" + (effFilter() === key ? " on" : ""), title, onclick: async () => { S.filter = key; S.q = ""; const q = $("#q"); if (q) { q.value = ""; q.parentElement.querySelector(".sclear")?.setAttribute("hidden", ""); } renderChips(); await loadItems(); renderGrid(); } },
     label, n != null ? h("small", {}, n) : null);
   fill(el,
     chip("In Plex, Poster fehlt", "plexmissing", cnt.plexmissing, "In Plex vorhanden, aber bei Kometa fehlt ein Poster oder eine Staffel – das, was in Plex ohne Bild erscheint"),
