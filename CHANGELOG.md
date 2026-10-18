@@ -1,9 +1,26 @@
 # Änderungen
 
-## 0.4.7 – 2026-10-18
+## 0.4.10 – 2026-10-18
 
 **Behoben**
 - Die Suche auf der Startseite durchsucht wieder alle Titel der Welt, auch wenn ein anderer Reiter (z. B. die neue Startansicht „In Plex, Poster fehlt“) offen ist; während der Suche ist „Alle“ markiert, ein Klick auf einen Reiter beendet die Suche
+
+## 0.4.9 – 2026-10-16
+
+**Behoben**
+- **Browser-Tab-Icon** zeigte noch das alte Bild: Die Icon-Adressen tragen jetzt die Versionsnummer (`?v=…`), sodass Browser das neue Icon sofort laden; `/favicon.ico` liefert eine echte `.ico` (16/32/48 px), dazu eigene 32- und 48-px-Tab-Icons mit lesbarem Abzeichen; Web-App-Manifest und Icons ohne langes Zwischenspeichern
+
+## 0.4.8 – 2026-10-15
+
+**Geändert**
+- **App-Icon** endgültig: Das Abzeichen unten rechts ist ein **oranger Flammen-Komet** (eigene Zeichnung, Anspielung auf Kometa) statt des grünen Feuerballs; Aufbau wie das Icon von p5converter (dort silberne Audio-CD + blaue Blu-ray). Alle Größen neu: Favicon `icon.png`, `icon-192.png`, `icon-512.png`, Apple-Touch-Icon (iPhone/iPad-Web-App) und `unraid/icon.png` (erscheint auch im README)
+- Icon-Skript `tools/icons/make_icons.py` (gemeinsam mit p5converter) und die SVG-Quellen beider Icons liegen in `tools/icons/`
+
+## 0.4.7 – 2026-10-15
+
+**Geändert**
+- **App-Icon** mit Abzeichen: kleiner Feuerball (Komet, wie beim Kometa-Logo) unten rechts, das „p5“ etwas kleiner; gleicher Aufbau wie das Icon von p5converter (dort zwei Pfeile). Alle Größen neu: Favicon `icon.png`, `icon-192.png`, `icon-512.png`, Apple-Touch-Icon (iPhone/iPad-Web-App) und `unraid/icon.png`
+- SVG-Quelle und Erzeugungs-Skript für die Icons in `tools/icons/` (`make_icons.py`, gemeinsam mit p5converter)
 
 ## 0.4.6 – 2026-10-12
 
