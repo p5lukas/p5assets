@@ -62,6 +62,14 @@ und welche vorhandenen Bilder ersetzt würden.
 - Kacheln für Poster und **Season00 – Season50**, auch für Staffeln, die es noch nicht gibt
 - Poster per Drag & Drop auf eine andere Kachel **kopieren**, oder mit **„Auf alle …“** auf mehrere Kacheln übertragen
 - **Plex-Collections:** Filme zeigen ihre Collection in der Vorschau; ein Klick öffnet die Detailansicht der Collection mit allen Postern (ersetzen, hochladen, Set-Upload). Beim Import werden Filme nach Plex-Collection gruppiert und p5assets sagt, welche Filme der Collection danach noch ohne Poster sind. Dateien wie „… Collection“ ordnet der Import nicht automatisch einem Film zu; große Sammel-Collections, die keine Filmreihen sind, lassen sich ausblenden (Einstellungen → Bibliotheken zeigt und holt sie zurück)
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/collection-preview.png" alt="Vorschau mit Collections"><br><sub>Die Vorschau nennt die Plex-Collections des Films</sub></td>
+<td width="50%"><img src="docs/images/collection.png" alt="Collection-Detailansicht"><br><sub>Detailansicht: alle Poster der Collection, fehlende sofort ersetzbar</sub></td>
+</tr>
+</table>
+
 - **Herunterladen** in Originalqualität: einzelne Poster oder eine Auswahl als ZIP (auf iPhone/iPad öffnet sich das Original in p5assets: Bild lange drücken → „Zu Fotos hinzufügen“)
 
 ### Online-Suche
@@ -165,7 +173,7 @@ Aus dem Quellcode: `docker compose up -d --build`.
 |---|---|---|
 | `:dev` | Branch `dev` | Neues testen |
 | `:latest` | Branch `main` | stabil |
-| `:0.4.0` | Git-Tag `v0.4.0` | feste Version (aktuell `0.4.0`, `1.0.0` erst bei ausgereiftem Stand) |
+| `:0.5.0` | Git-Tag `v0.5.0` | feste Version (aktuell `0.5.0`, `1.0.0` erst bei ausgereiftem Stand) |
 | `:sha-…` | jeder Build | Fehlersuche |
 
 Solange p5assets in der Entwicklung ist, nutzen Template und Compose-Datei `:dev`. Sobald alles stabil läuft,

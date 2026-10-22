@@ -1,5 +1,21 @@
 # Änderungen
 
+## 0.5.0 – 2026-10-22
+
+Sammel-Version der Serie 0.4.1 – 0.4.10 (Details siehe unten).
+
+**Neu**
+- **Plex-Collections:** Die Poster-Vorschau eines Films nennt seine Collection; ein Klick öffnet die Detailansicht der Collection mit allen Postern (ersetzen, hochladen, Set-Upload, ausblenden). Der Import gruppiert Filme nach Plex-Collection und prüft, welche Filme danach noch ohne Poster sind; Collection-Poster („… Collection“) werden nicht automatisch einem Film zugeordnet
+- **Startansicht „In Plex, Poster fehlt“**, Reiter aufgeräumt („Alle fehlenden“; „Vollständig“, „Collections“ und „Noch nicht in Plex“ entfallen)
+- **Einstellungen und Onboarding** mit Seitenleiste (Desktop) bzw. als Liste mit Gruppen und „Schritt x von y“ (iPhone/iPad)
+- Tastaturkürzel (`/`, `Esc`, `←`/`→`), Logo führt zur Startseite, kürzerer Update-Hinweis mit nach Version gruppierter Liste unter „Neuigkeiten“
+- Neues App-Icon (orange Flammen-Komet) in allen Größen
+
+**Geändert**
+- Die Suche durchsucht immer alle Titel der Welt; „Bilder hochladen“ heißt „Poster hochladen“
+- Kein Flackern mehr beim Schließen der Detailansicht (unveränderte Kacheln werden wiederverwendet)
+- Alle README-Bilder und Animationen neu (fiktive Demo-Titel)
+
 ## 0.4.10 – 2026-10-18
 
 **Behoben**
