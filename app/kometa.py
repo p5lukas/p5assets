@@ -15,10 +15,10 @@ The name has to match the folder the media lives in on disk.
 from __future__ import annotations
 
 import difflib
-import threading
-from collections import deque
 import re
+import threading
 import unicodedata
+from collections import deque
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
@@ -161,7 +161,7 @@ class AssetIndex:
         base = folder_name.casefold()
         if base in self.flat:
             out["poster"] = self.flat[base]
-        for n in range(0, MAX_SEASON + 1):
+        for n in range(MAX_SEASON + 1):
             for name in (f"season{n:02d}", f"season{n}"):
                 f = self.flat.get(f"{base}_{name}")
                 if f:
@@ -251,6 +251,14 @@ def guess_slot(filename: str) -> tuple[str, int | None]:
     if _SPECIALS_RE.search(stem):
         return "season", 0
     return "poster", None
+
+
+_COLLECTION_RE = re.compile(r"\b(collections?|sammlung|box[\s._-]?sets?|filmreihe|filmsammlung)\b", re.IGNORECASE)
+
+
+def is_collection_name(rel_path: str) -> bool:
+    """File names like "Yellowstone Collection.png" or "Box Set" point to a poster for a whole collection, not for one title."""
+    return bool(_COLLECTION_RE.search(re.sub(r"[_.]+", " ", Path(rel_path).stem)))
 
 
 def _is_bare_slot_name(stem: str) -> bool:

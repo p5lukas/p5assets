@@ -86,7 +86,8 @@ function icon(name, size = 18) {
 }
 
 /* ------------------------------------------------------------ state --- */
-const S = { st: null, langs: [], items: [], total: 0, filter: "all", q: "", lib: "", letter: null, letters: {}, allTotal: 0, req: 0, pending: 0, ctl: null, stats: null, nopost: false, io: null, hist: [], dimTries: 0, world: "", poll: null, step: "", reached: 0, rain: new Set(), view: "" };
+const DEFAULT_FILTER = "plexmissing";   // what a Plex user sees first: titles that are in Plex but have no poster
+const S = { st: null, langs: [], items: [], total: 0, filter: DEFAULT_FILTER, q: "", lib: "", letter: null, letters: {}, allTotal: 0, req: 0, pending: 0, ctl: null, stats: null, nopost: false, io: null, hist: [], dimTries: 0, world: "", poll: null, step: "", reached: 0, rain: new Set(), view: "" };
 const cfg = () => S.st.config;
 const curWorld = () => cfg().worlds.find(w => w.id === S.world) || cfg().worlds[0];
 const weakDefault = { wOn: true, w: 1000, rOn: true };
@@ -122,6 +123,8 @@ async function loadState() {
 async function savePatch(patch) { const r = await api("/config", { json: { patch } }); S.st.config = r; return r; }
 
 const weakParams = () => { const c = weakCfg(), p = {}; if (c.wOn) p.weak_w = c.w; if (c.rOn) p.weak_r = "1"; return p; };
+/** A search always covers ALL titles of the world, whatever tab is open (the tab only applies without a search). */
+const effFilter = () => S.q.trim() ? "all" : S.filter;
 const AZ_MIN = 150;   // from this many titles on the list is split by first letter instead of one endless page
 async function loadItems(append = false) {
   // S.lib is "lib:<Plex library>" or "src:<Sonarr/Radarr instance>"
@@ -136,10 +139,10 @@ async function loadItems(append = false) {
 async function loadItemsInner(append, id, q, sig) {
   // S.lib: "" = all | "type:movie|show" = all movie/series sources combined | "lib:<Plex library>" | "src:<Sonarr/Radarr instance>"
   const scope = { type: S.lib.startsWith("type:") ? S.lib.slice(5) : "", library: S.lib.startsWith("lib:") ? S.lib.slice(4) : "", source: S.lib.startsWith("src:") ? S.lib.slice(4) : "" };
-  const query = (letter, limit, offset) => new URLSearchParams({ world: S.world, q: S.q, filter: S.filter, letter, ...scope,
-    ...(S.filter === "comingsoon" && S.nopost ? { nopost: "1" } : {}), ...weakParams(), offset, limit });
+  const query = (letter, limit, offset) => new URLSearchParams({ world: S.world, q: S.q, filter: effFilter(), letter, ...scope,
+    ...(effFilter() === "comingsoon" && S.nopost ? { nopost: "1" } : {}), ...weakParams(), offset, limit });
   const total = letters => Object.values(letters || {}).reduce((a, b) => a + b, 0);
-  const useLetters = S.filter === "all" && !q;   // only the tab "Alle" is split by letter; the search always covers all titles
+  const useLetters = S.filter === "all" && !q;   // only the tab "Alle" is split by letter
   let letter = useLetters ? (S.letter ?? "") : "";
   if (useLetters && S.letter === null) {          // first view of a big list: start with "#" (or the first letter that exists)
     const r0 = await api("/items?" + query("", 1, 0), sig);
@@ -354,24 +357,36 @@ function openCleanup(initial = "trash") {
 }
 
 /* ------------------------------------------------------------ what's new --- */
-/** "Neu in diesem Update": entries from news.json that the user has not seen yet, each with an optional "set up / try" action. */
+/** Once per version a short notice (the headlines); the full list, grouped by version, is behind "Neuigkeiten" in the footer. */
 async function checkNews(all = false) {
   try {
-    const r = await api("/news"), list = all ? r.all : r.unseen;
-    if (!list.length) { if (all) toast("Keine Neuigkeiten", "ok"); return; }
-    openNews(list, all);
+    const r = await api("/news");
+    if (all) { if (!r.all.length) toast("Keine Neuigkeiten", "ok"); else openNews(r.all); return; }
+    if (r.show) openNewsNotice(r);
   } catch { /* optional */ }
 }
-const markNewsSeen = ids => api("/news/seen", { json: { ids } }).catch(() => {});
+const markNewsSeen = (ids, version = false) => api("/news/seen", { json: { ids, version } }).catch(() => {});
 
-function openNews(list, all) {
-  const m = modal(all ? "Neuigkeiten" : "Neu in diesem Update", h("div", {},
-    all ? null : h("p", { class: "hint", style: "margin-top:0" }, "Das hat sich seit deinem letzten Besuch geändert. Wo es passt, kannst du es gleich ausprobieren oder einrichten."),
-    list.map(e => h("div", { class: "newsrow" },
-      h("div", { class: "grow" }, h("b", {}, e.title, e.seen ? h("span", { class: "tag", style: "margin-left:8px" }, "gesehen") : null), h("div", { class: "hint", style: "margin:3px 0 0" }, e.text)),
-      e.action ? h("button", { class: "btn sm primary", onclick: () => { m.close(); markNewsSeen([e.id]); runNewsAction(e.action.target); } }, e.action.label) : null))),
-    all ? null : [h("button", { class: "btn primary", onclick: () => { markNewsSeen(list.map(e => e.id)); m.close(); } }, "Alles gelesen"),
-      h("button", { class: "btn", onclick: () => m.close() }, "Später erinnern")]);
+function openNewsNotice(r) {
+  const done = () => { markNewsSeen([], true); m.close(); };
+  const m = modal(`Neu in Version ${r.version}`, h("div", {},
+    h("p", { class: "hint", style: "margin-top:0" }, `${pl(r.count, "Neuerung", "Neuerungen")}, zum Beispiel:`),
+    h("ul", { class: "newshl" }, r.highlights.map(t => h("li", {}, t))),
+    h("p", { class: "hint" }, "Alle Neuigkeiten findest du jederzeit unten in der Fußzeile unter „Neuigkeiten“.")),
+    [h("button", { class: "btn primary", onclick: () => { done(); openNews(); } }, "Alle ansehen"),
+      h("button", { class: "btn", onclick: done }, "Schließen")]);
+}
+
+async function openNews(list) {
+  if (!list) { try { list = (await api("/news")).all; } catch { return; } }
+  const byVer = new Map();
+  list.forEach(e => { if (!byVer.has(e.version)) byVer.set(e.version, []); byVer.get(e.version).push(e); });
+  const m = modal("Neuigkeiten", h("div", {},
+    [...byVer].map(([v, es]) => [h("h3", { class: "newsver" }, "Version " + v),
+      es.map(e => h("div", { class: "newsrow" },
+        h("div", { class: "grow" }, h("b", {}, e.title), h("div", { class: "hint", style: "margin:3px 0 0" }, e.text)),
+        e.action ? h("button", { class: "btn sm primary", onclick: () => { m.close(); markNewsSeen([e.id]); runNewsAction(e.action.target); } }, e.action.label) : null))])),
+    [h("button", { class: "btn primary", onclick: () => { markNewsSeen(list.map(e => e.id)); m.close(); } }, "Schließen")]);
 }
 
 async function runNewsAction(target) {
@@ -416,6 +431,31 @@ async function boot() {
   try { await loadState(); S.langs = await api("/languages"); } catch (e) { app.append(h("div", { class: "empty" }, "Backend nicht erreichbar: " + e.message)); return; }
   if (!S.st.onboarded) return wizard();
   dashboard();
+}
+
+// "/" jumps to the search field of the current page (start page or the list in an open window)
+document.addEventListener("keydown", e => {
+  if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey || e.target.closest("input,textarea,select,[contenteditable]")) return;
+  const wraps = document.querySelectorAll(".modalwrap"), top = wraps[wraps.length - 1];
+  const q = top ? top.querySelector("input[type=search]") : S.view === "dash" ? $("#q") : null;
+  if (q) { e.preventDefault(); q.focus(); q.select(); }
+});
+
+/** The logo always leads to the start page (not on the login page, not during the first setup). */
+function goHome() {
+  if (S.view === "login" || S.view === "wiz" && !S.wizSettings) return;
+  if (S.view === "wiz") return closeSettings();
+  if (S.view === "logs") clearInterval(S.logTimer);
+  if (S.view !== "dash") { S.q = ""; S.filter = DEFAULT_FILTER; dashboard(); return; }
+  S.q = ""; S.filter = DEFAULT_FILTER; S.letter = null; const q = $("#q"); if (q) q.value = "";
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  loadItems().then(() => { renderChips(); renderGrid(); });
+}
+function logoEl(word) {
+  const clickable = !(S.view === "wiz" && !S.wizSettings);
+  return h("div", { class: "logo" + (clickable ? " home" : ""), ...(clickable ? { role: "link", tabindex: "0", title: "Zur Startseite", onclick: goHome,
+    onkeydown: e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); goHome(); } } } : {}) },
+    h("i", { class: "logomark", "aria-hidden": "true" }, "p5"), h("span", {}, word, h("u", {}, "_")));
 }
 
 /* =============================================================== logs === */
@@ -472,7 +512,7 @@ async function logsPage() {
 
   fill(app,
     h("header", { class: "top" }, h("div", { class: "in" },
-      h("div", { class: "logo" }, h("i", { class: "logomark", "aria-hidden": "true" }, "p5"), h("span", {}, "logs", h("u", {}, "_"))),
+      logoEl("logs"),
       h("div", { class: "spacer" }),
       h("button", { class: "btn tb", onclick: async () => { clearInterval(S.logTimer); await checkAlerts(true); dashboard(); } }, icon("back"), h("span", { class: "lbl" }, "Zurück zum Dashboard")),
       h("button", { class: "btn tb icon", title: "Einstellungen", onclick: async () => { clearInterval(S.logTimer); await checkAlerts(true); wizard(true); } }, icon("gear", 20)))),
@@ -504,20 +544,20 @@ async function logsPage() {
 /* ========================================================== dashboard === */
 function dashboard() {
   S.view = "dash";
-  const qInput = h("input", { type: "search", placeholder: "Titel suchen …", id: "q", value: S.q, autocomplete: "off", enterkeyhint: "search", "aria-label": "Titel suchen", oninput: debounce(async e => { S.q = e.target.value; await loadItems(); renderGrid(); }, 150) });
+  const qInput = h("input", { type: "search", placeholder: "Titel suchen …", id: "q", value: S.q, autocomplete: "off", enterkeyhint: "search", "aria-label": "Titel suchen", oninput: debounce(async e => { S.q = e.target.value; await loadItems(); renderChips(); renderGrid(); }, 150) });
   setAccent();
   const ws = cfg().worlds;
   fill(app,
     h("header", { class: "top" }, h("div", { class: "in" },
-      h("div", { class: "logo" }, h("i", { class: "logomark", "aria-hidden": "true" }, "p5"), h("span", {}, "assets", h("u", {}, "_"))),
+      logoEl("assets"),
       ws.length > 1 ? h("div", { class: "worlds", title: "Welt wechseln" }, ws.map(w =>
         h("button", { class: w.id === S.world ? "on" : "", style: `--c:${worldColor(w)}`, title: w.name, onclick: () => switchWorld(w.id) }, planetSvg(w.hue ?? 140, 20), w.name))) : null,
       h("div", { class: "spacer" }),
       // desktop: one small group with two pickers (images/ZIP, whole folder); touch devices: the single normal button
-      h("div", { class: "upgroup" }, h("span", { class: "uplab" }, "Bilder hochladen:"),
-        h("button", { class: "upb", title: "Bilder oder ZIPs wählen – p5assets ordnet sie automatisch den Titeln zu", "aria-label": "Bilder oder ZIPs wählen", onclick: () => pickFiles(f => importFiles(f), true) }, icon("file", 18)),
+      h("div", { class: "upgroup" }, h("span", { class: "uplab" }, "Poster hochladen:"),
+        h("button", { class: "upb", title: "Poster-Dateien oder ZIPs wählen – p5assets ordnet sie automatisch den Titeln zu", "aria-label": "Bilder oder ZIPs wählen", onclick: () => pickFiles(f => importFiles(f), true) }, icon("file", 18)),
         h("button", { class: "upb", title: "Ordner wählen – oder Ordner und Dateien einfach ins Fenster ziehen", "aria-label": "Ordner wählen", onclick: () => pickFiles(f => importFiles(f), true, true) }, icon("folder", 18))),
-      h("button", { class: "btn tb uptouch", title: "Bilder oder ZIPs wählen – p5assets ordnet sie automatisch den Titeln zu", onclick: () => pickFiles(f => importFiles(f), true) }, icon("upload"), h("span", { class: "lbl" }, "Bilder hochladen")),
+      h("button", { class: "btn tb uptouch", title: "Poster-Dateien oder ZIPs wählen – p5assets ordnet sie automatisch den Titeln zu", onclick: () => pickFiles(f => importFiles(f), true) }, icon("upload"), h("span", { class: "lbl" }, "Poster hochladen")),
       h("span", { class: "vsep" }),
       h("button", { class: "btn tb", id: "scanbtn", title: "Plex, Sonarr/Radarr und die Assets-Ordner neu einlesen", onclick: doScan }, icon("sync"), h("span", { class: "lbl" }, "Scannen")),
       h("button", { class: "btn tb icon", title: "Papierkorb & Aufräumen: ersetzte Poster zurückholen (30 Tage) und verwaiste Ordner entfernen", onclick: () => openCleanup() }, icon("trash", 20)),
@@ -539,7 +579,7 @@ function switchWorld(id) {
   if (id === S.world) return;
   const w = cfg().worlds.find(x => x.id === id);
   worldTransition(w, async () => {
-    S.world = id; S.filter = "all"; S.q = ""; S.lib = ""; S.letter = null; S.letters = {}; S.stats = null; S.nopost = false; S.hist = [];
+    S.world = id; S.filter = DEFAULT_FILTER; S.q = ""; S.lib = ""; S.letter = null; S.letters = {}; S.stats = null; S.nopost = false; S.hist = [];
     try { localStorage.setItem("p5world", id); } catch { /* ignore */ }
     setAccent(); dashboard();
   });
@@ -642,15 +682,13 @@ function renderChips() {
   const el = $("#chips"); if (!el) return;
   const c = cfg(), cnt = (S.stats && S.stats.counts) || {};
   const hasExtra = c.arr.some(a => a.world === S.world);
-  const chip = (label, key, n, title) => h("button", { class: "chip" + (S.filter === key ? " on" : ""), title, onclick: async () => { S.filter = key; renderChips(); await loadItems(); renderGrid(); } },
+  const chip = (label, key, n, title) => h("button", { class: "chip" + (effFilter() === key ? " on" : ""), title, onclick: async () => { S.filter = key; S.q = ""; const q = $("#q"); if (q) { q.value = ""; q.parentElement.querySelector(".sclear")?.setAttribute("hidden", ""); } renderChips(); await loadItems(); renderGrid(); } },
     label, n != null ? h("small", {}, n) : null);
   fill(el,
-    chip("Alle", "all", cnt.all),
-    chip("Fehlende", "missing", cnt.missing),
-    chip("In Plex, Poster fehlt", "plexmissing", cnt.plexmissing, "In Plex vorhanden, aber bei Kometa fehlt ein Poster oder eine Staffel (ohne Titel, die nur in Sonarr/Radarr stehen)"),
-    chip("Vollständig", "complete", cnt.complete),
+    chip("In Plex, Poster fehlt", "plexmissing", cnt.plexmissing, "In Plex vorhanden, aber bei Kometa fehlt ein Poster oder eine Staffel – das, was in Plex ohne Bild erscheint"),
     cnt.comingsoon > 0 || S.filter === "comingsoon" ? chip("Coming Soon", "comingsoon", cnt.comingsoon, "Coming-Soon-Poster ({edition-Coming Soon}): in Plex schon sichtbar, brauchen zeitnah ein Poster") : null,
-    hasExtra || cnt.notplex > 0 || S.filter === "notplex" ? chip("Noch nicht in Plex", "notplex", cnt.notplex, "Sonarr/Radarr kennen den Titel, in Plex ist er noch nicht (noch keine Datei, noch nicht erschienen oder noch nicht eingelesen)") : null,
+    chip("Alle", "all", cnt.all),
+    chip("Alle fehlenden", "missing", cnt.missing, "Alles, was ein Poster oder eine Staffel braucht – auch Titel, die nur Sonarr/Radarr kennen und in Plex noch nicht sind"),
     chip("Schwache Poster", "weak", cnt.weak, "Bilder, die zu schmal sind oder nicht das Seitenverhältnis 2:3 haben (Schwellwerte wählst du selbst)"),
     S.filter === "weak" ? weakOptions() : null,
     S.filter === "comingsoon" ? h("label", { class: "chip" + (S.nopost ? " on" : ""), style: "display:inline-flex;gap:8px;align-items:center;cursor:pointer" },
@@ -682,18 +720,25 @@ function renderGrid() {
   updateHero();                                // statistic and tab counters belong to the chosen source
   renderAz();
   const g = $("#grid"); if (!g) return;
-  g.querySelectorAll("img").forEach(i => i.removeAttribute("src"));   // cancels pictures of the old list that are still loading
+  // cards of unchanged titles are reused (no flicker, no reloading of pictures); only the pictures of dropped cards are cancelled
+  const old = S.cards || new Map(), fresh = new Map();
+  const els = S.items.map(it => { const sig = JSON.stringify(it), c = old.get(it.id); const el = c && c.sig === sig ? c.el : card(it); fresh.set(it.id, { sig, el }); return el; });
+  S.cards = fresh;
+  const keep = new Set(els);
+  g.querySelectorAll(".card").forEach(c => { if (!keep.has(c)) c.querySelectorAll("img").forEach(i => i.removeAttribute("src")); });
   if (!S.items.length) {
     fill(g, h("div", { class: "empty" },
       S.st.summary.running ? h("h2", {}, "Scanne …") :
-      S.filter === "missing" && !S.q && scopeStats().items ? [h("div", { class: "big" }, "🎉"), h("h2", {}, "Alles vollständig!"), "Es fehlt kein Poster und keine Staffel."] :
+      (S.filter === "missing" || S.filter === "plexmissing") && !S.q && scopeStats().items ? [h("div", { class: "big" }, "🎉"), h("h2", {}, "Alles vollständig!"),
+        S.filter === "plexmissing" ? "In Plex fehlt kein Poster und keine Staffel." : "Es fehlt kein Poster und keine Staffel.",
+        h("div", { style: "margin-top:14px" }, h("button", { class: "btn", onclick: async () => { S.filter = "all"; renderChips(); await loadItems(); renderGrid(); } }, "Alle anzeigen"))] :
       !worldStats().items && S.st.summary.error ? [h("h2", {}, "Der Scan ist fehlgeschlagen"), "Details stehen oben und im Log. Prüfe die Verbindung zu Plex, Sonarr und Radarr und starte dann einen neuen Scan.",
         h("div", { style: "margin-top:14px" }, h("button", { class: "btn primary", onclick: doScan }, "Erneut scannen"))] :
       !worldStats().items ? [h("h2", {}, "Hier ist noch nichts"), "Ordne dieser Welt unter ⚙ Bibliotheken oder Sonarr/Radarr zu."] :
       [h("h2", {}, "Nichts gefunden"), "Passe Filter oder Suche an – oder starte einen neuen Scan."]));
     return;
   }
-  fill(g, h("div", { class: "grid", id: "gridin" }, S.items.map(card)));
+  fill(g, h("div", { class: "grid", id: "gridin" }, els));
   moreControl(g);
 }
 
@@ -709,7 +754,7 @@ function moreControl(g) {
     await loadItems(true);
     if (S.req !== gen + 1 || S.items.length === before) return;      // typing/filtering took over meanwhile
     const grid = $("#gridin"); if (!grid) return;
-    S.items.slice(before).forEach(it => grid.append(card(it)));
+    S.items.slice(before).forEach(it => { const el = card(it); (S.cards ||= new Map()).set(it.id, { sig: JSON.stringify(it), el }); grid.append(el); });
     moreControl($("#grid"));
   };
   if (S.items.length < MAX_AUTO) {
@@ -768,7 +813,7 @@ function metaText(it) {
   return [world && cfg().worlds.length > 1 ? `Welt: ${world.name}` : null, `Quellen: ${it.sources.join(" · ")}`, `Status: ${statusTags(it).map(t => t.text).join(" · ")}`].filter(Boolean).join("\n");
 }
 
-function card(item) {
+function card(item, local) {
   const movie = item.type === "movie";
   const el = h("div", { class: "card" + (movie ? " movie" : ""), onclick: movie ? null : () => openItem(item.id) });
   const box = posterBox(item, "poster");
@@ -784,7 +829,9 @@ function card(item) {
     h("div", { class: "s" }, [item.year, item.type === "show" ? pl(item.season_count, "Staffel", "Staffeln") : "Film"].filter(Boolean).join(" · ")));
   function changed(it) {
     const i = S.items.findIndex(x => x.id === it.id);
-    if (i >= 0) { S.items[i] = it; el.replaceWith(card(it)); }
+    if (i >= 0) S.items[i] = it;
+    if (i >= 0 || local) el.replaceWith(card(it, local));
+    if (local) local(it);
     api("/status").then(r => { S.st.summary = r; updateHero(); });
   }
   if (movie && item.folder) {
@@ -968,16 +1015,28 @@ function openPreview(it, key, draw) {
   ];
   if ((it.dupes || []).length) rows.push(["Hinweis", `Ordnername auch an anderer Stelle gefunden (wird nicht genutzt): ${it.dupes.join(", ")}`]);
   const touch = matchMedia("(hover: none)").matches;
+  // arrow keys / ‹ › flip through the posters of the movies on the start page (not while another window is open underneath)
+  const flip = key === "poster" && S.view === "dash" && it.type === "movie" && !document.querySelector(".modalwrap, .scrim") ? S.items.filter(x => x.type === "movie") : [];
+  const at = flip.findIndex(x => x.id === it.id), nb = flip.length > 1 && at >= 0;
+  const go = d => {
+    const next = flip[(at + d + flip.length) % flip.length];
+    close();
+    openPreview(next, "poster", x => { const i = S.items.findIndex(y => y.id === x.id); if (i >= 0) S.items[i] = x; renderGrid(); api("/status").then(r => { S.st.summary = r; updateHero(); }); });
+  };
   const img = src ? h("img", { src, alt: "", onload: e => { res.textContent = `${e.target.naturalWidth} × ${e.target.naturalHeight} px${exists ? "" : " (Plex-Vorschau)"}`; } })
     : h("div", { class: "noimg" }, h("b", {}, "＋"), "kein Bild");
   const pick = () => pickFiles(files => { close(); uploadSlot(it, key, files, draw); }, false);
   const wrap = h("div", { class: "modalwrap lightbox", onclick: e => { if (e.target === wrap) close(); } },
     h("div", { class: "lbox" },
-     h("header", { class: "lbhead" }, h("h2", { class: "grow" }, "Vorschau"), h("button", { class: "btn ghost sm", "aria-label": "Schließen", onclick: () => close() }, "✕")),     // the one close button: same place on desktop and phone
+     h("header", { class: "lbhead" }, h("h2", { class: "grow" }, "Vorschau"),
+      nb ? [h("button", { class: "btn ghost sm", "aria-label": "Voriges Poster", title: "Voriges Poster (←)", onclick: () => go(-1) }, "‹"),
+        h("button", { class: "btn ghost sm", "aria-label": "Nächstes Poster", title: "Nächstes Poster (→)", onclick: () => go(1) }, "›")] : null,
+      h("button", { class: "btn ghost sm", "aria-label": "Schließen", onclick: () => close() }, "✕")),     // the one close button: same place on desktop and phone
      h("div", { class: "lbbody" }, h("div", { class: "limg" }, img,
         touch && exists ? h("div", { class: "hint", style: "text-align:center" }, "Bild lange drücken → „Zu Fotos hinzufügen“ (Originalqualität)") : null),
       h("div", { class: "lside" },
         metaGroups(it),
+        it.type === "movie" ? collectionBoxes(it, close) : null,
         (it.mirror_folders || []).length ? h("div", { style: "margin-top:8px" }, h("span", { class: "tag ok", title: "Coming-Soon-Platzhalter: Poster werden auch im echten Film-Ordner abgelegt" }, "Coming Soon gespiegelt")) : null,
         h("dl", {}, rows.map(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]), src ? [h("dt", {}, "Auflösung"), res] : null),
         h("div", { class: "row wrap", style: "margin-top:20px" },
@@ -990,10 +1049,66 @@ function openPreview(it, key, draw) {
             close(); const r = await api(`/items/${it.id}/${key}`, { method: "DELETE" }); draw(r.item); undoToast("Gelöscht", r, draw);
           } }, "Löschen") : null),
         !it.folder ? h("div", { class: "status bad" }, "Für diesen Titel ist kein Ordnername bekannt – Upload nicht möglich.") : null))));
-  const onKey = e => { if (e.key === "Escape") close(); };
+  const onKey = e => {
+    if (e.key === "Escape") close();
+    else if (nb && !e.target.closest("input,textarea,select") && (e.key === "ArrowLeft" || e.key === "ArrowRight")) { e.preventDefault(); go(e.key === "ArrowLeft" ? -1 : 1); }
+  };
   function close() { wrap.remove(); document.removeEventListener("keydown", onKey); }
   document.addEventListener("keydown", onKey);
   document.body.append(wrap);
+}
+
+/** In the preview of a film: its Plex collections; a click opens the detail view of the collection (all its posters). */
+function collectionBoxes(it, close) {
+  const box = h("div", { class: "colboxes" });
+  if (!(it.collections || []).length) return box;
+  api(`/collections?world=${it.world}`).then(r => {
+    const mine = r.collections.filter(g => !g.hidden && g.members.some(m => m.id === it.id));
+    fill(box, mine.map(g => h("button", { class: "colbox", title: "Alle Poster dieser Collection ansehen und bearbeiten", onclick: () => { close(); openCollection(g.id); } },
+      h("b", {}, "Collection: " + g.title),
+      h("span", { class: "pill " + (g.with_poster === g.total ? "ok" : "warn") }, g.with_poster === g.total ? `vollständig (${g.total})` : `${g.with_poster} von ${g.total} Postern`),
+      h("span", { class: "chev", "aria-hidden": "true" }, "›"))));
+  }).catch(() => {});
+  return box;
+}
+
+/** Detail view of a Plex collection, like the one of a series: one tile per film (replace, upload, delete, preview), upload of a whole set. */
+async function openCollection(cid) {
+  let data;
+  try { data = await api("/collection?id=" + encodeURIComponent(cid)); } catch (e) { toast(e.message, "bad"); return; }
+  const scrim = h("div", { class: "scrim", onclick: e => { if (e.target === scrim) close(); } });
+  const drawer = h("div", { class: "drawer" });
+  scrim.append(drawer);
+  document.body.append(scrim);
+  const onKey = e => { if (e.key === "Escape" && !$(".modalwrap")) close(); };
+  document.addEventListener("keydown", onKey);
+  function close() {
+    scrim.remove(); document.removeEventListener("keydown", onKey);
+    api("/status").then(r => { S.st.summary = r; updateHero(); });
+    loadItems().then(renderGrid);
+  }
+  const reload = async () => { try { data = await api("/collection?id=" + encodeURIComponent(cid)); draw(); } catch { close(); } };
+  const pill = h("span", {});
+  const refreshPill = () => {
+    const have = data.members.filter(m => m.slots.poster && m.slots.poster.exists).length, total = data.members.length;
+    pill.className = "pill " + (have === total ? "ok" : "warn"); pill.textContent = have === total ? `vollständig (${total})` : `${have} von ${total} Postern`;
+  };
+  const onChange = it => { const k = data.members.findIndex(x => x.id === it.id); if (k >= 0) data.members[k] = it; refreshPill(); };
+  function draw() {
+    const total = data.members.length;
+    refreshPill();
+    fill(drawer,
+      h("header", {}, h("button", { class: "btn ghost", "aria-label": "Schließen", onclick: close }, "✕"),
+        h("div", { class: "grow" }, h("h2", {}, data.title), h("div", { class: "hint", style: "margin:2px 0" }, "Plex-Collection · ", pill))),
+      h("div", { class: "body" },
+        h("p", { class: "hint", style: "margin-top:0" }, "Poster auf eine Kachel ziehen oder anklicken, um es zu ersetzen. Mehrere Dateien, Ordner oder eine ZIP lassen sich über „Poster hochladen“ den Filmen zuordnen."),
+        h("div", { class: "row wrap", style: "margin-bottom:16px" },
+          h("button", { class: "btn sm primary", onclick: () => pickFiles(f => importFiles(f, null, reload), true) }, icon("upload", 14), "Poster hochladen"),
+          h("button", { class: "btn sm", title: "Diese Collection nicht mehr anzeigen (z. B. eine Sammel-Collection, die keine Filmreihe ist). Wieder einblenden: Einstellungen → Bibliotheken",
+            onclick: async () => { try { await api("/collections/hidden", { json: { id: cid, hidden: true, title: data.title, count: total } }); S.st.config.hidden_collections = [...(S.st.config.hidden_collections || []), { id: cid, title: data.title, count: total }]; toast("Collection ausgeblendet", "ok"); close(); } catch (e) { toast(e.message, "bad"); } } }, "Ausblenden")),
+        h("div", { class: "grid colgrid" }, data.members.map(m => card(m, onChange)))));
+  }
+  draw();
 }
 
 /** Use one existing asset for many tiles of the title at once (e.g. poster -> Season00 … Season50), named Kometa-conform. */
@@ -1346,9 +1461,22 @@ function checkSet(t, rows) {
 
 function reviewImport(res, onDone, fixed) {
   const rows = res.entries.map(e => ({ ...e, use: !!e.item_id && e.kind !== "ignore" }));
+  // two files for one tile: prefer the one named exactly "Title (Year)" (the other is probably a collection poster) and untick the rest
+  const byTile = new Map();
+  rows.filter(r => r.use).forEach(r => { const k = r.item_id + "|" + r.slot; byTile.set(k, [...(byTile.get(k) || []), r]); });
+  const norm = t => normText(t).replace(/[^a-z0-9]+/g, " ").trim();
+  byTile.forEach(rs => {
+    if (rs.length < 2) return;
+    const exact = rs.filter(r => norm(r.name.replace(/\.[^.]+$/, "").replace(/^.*\//, "")) === norm(`${r.item_title} ${r.item_year || ""}`));
+    if (exact.length === 1) rs.forEach(r => { if (r !== exact[0]) { r.use = false; r.autoSkipped = true; } });
+  });
   const targets = { ...(res.targets || {}) };
   if (fixed && !targets[fixed.id]) targets[fixed.id] = fixed;
   const list = h("div"), summary = h("div");
+  let colMap = {};       // Plex collections of the world: id -> {title, members:[{id,title,year,has_poster}]}, for the set check of films
+  if (Object.values(targets).some(t => (t.collections || []).length)) {
+    api(`/collections?world=${res.world}`).then(r => { colMap = Object.fromEntries(r.collections.map(g => [g.id, g])); draw(); }).catch(() => {});
+  }
   const count = () => rows.filter(r => r.use && r.item_id).length;
   const apply = h("button", { class: "btn primary" });
   let dupBlock = false;     // two files for the same tile: the review must be fixed first (a tile holds one image)
@@ -1387,7 +1515,9 @@ function reviewImport(res, onDone, fixed) {
     const chk = h("input", { type: "checkbox", checked: r.use, title: "Übernehmen", onchange: e => { r.use = e.target.checked; draw(); } });
     const pills = [];
     if (r.use && t && t.slots[r.slot] && t.slots[r.slot].exists) pills.push(h("span", { class: "pill warn", title: "Für diese Kachel gibt es schon ein Bild" }, "ersetzt vorhandenes Bild"));
+    if (r.collection && !r.item_id) pills.push(h("span", { class: "pill warn", title: "Der Dateiname deutet auf ein Collection-/Sammlungs-Poster hin – bitte selbst einen Titel wählen oder das Bild nicht übernehmen" }, "vermutlich Collection-Poster"));
     if (r.use && r.item_id && dups[r.item_id + "|" + r.slot] > 1) pills.push(h("span", { class: "pill bad", title: "Mehrere Dateien für dieselbe Kachel – nur die letzte bleibt" }, "doppelt belegt"));
+    if (r.autoSkipped && !r.use) pills.push(h("span", { class: "pill warn", title: "Für diese Kachel gibt es eine Datei, die genau „Titel (Jahr)“ heißt – sie wurde bevorzugt" }, "abgewählt: genauer Treffer vorhanden"));
     return h("div", { class: "imp" + (r.use ? "" : " skip") },
       h("img", { src: `/api/import/${res.session}/${r.id}`, loading: "lazy" }),
       h("div", { class: "fn" }, r.name, r.kind === "ignore" ? h("div", {}, h("span", { class: "pill bad" }, "Hintergrund/Banner – ignoriert")) : null),
@@ -1401,11 +1531,16 @@ function reviewImport(res, onDone, fixed) {
     const dups = {};
     rows.filter(r => r.use && r.item_id).forEach(r => { const k = r.item_id + "|" + r.slot; dups[k] = (dups[k] || 0) + 1; });
     // groups: one per series (with the completeness check), movies, and everything without a title
-    const series = new Map(), movies = [], loose = [];
+    const series = new Map(), movies = [], loose = [], cols = new Map();
     for (const r of rows) {
       const t = r.item_id ? targets[r.item_id] : null;
       if (t && t.type === "show") { if (!series.has(r.item_id)) series.set(r.item_id, []); series.get(r.item_id).push(r); }
-      else if (t) movies.push(r); else loose.push(r);
+      else if (t) {
+        // a film appears in every (visible) Plex collection it belongs to: the same row, the same tick box
+        const cids = (t.collections || []).map(c => c.id).filter(id => colMap[id] && !colMap[id].hidden);
+        cids.forEach(cid => { if (!cols.has(cid)) cols.set(cid, []); cols.get(cid).push(r); });
+        if (!cids.length) movies.push(r);
+      } else loose.push(r);
     }
     const checks = [...series].map(([id, rs]) => ({ id, rs, t: targets[id], chk: checkSet(targets[id], rs.filter(r => r.use)) }));
     const dupN = checks.filter(c => c.chk.dups).length, okN = checks.filter(c => c.chk.ok).length, incN = checks.length - okN - dupN;
@@ -1423,6 +1558,17 @@ function reviewImport(res, onDone, fixed) {
       checks.map(c => group(`${c.t.title}${c.t.year ? ` (${c.t.year})` : ""} · ${pl(c.rs.length, "Bild", "Bilder")}`,
         h("span", { class: "pill " + (c.chk.dups ? "bad" : c.chk.ok ? "ok" : "warn") }, c.chk.dups ? "doppelt belegt" : c.chk.ok ? "Set vollständig" : "unvollständig"),
         checks.length === 1 || !c.chk.ok, c.rs.map(r => buildRow(r, dups)), c.chk.lines)),
+      [...cols].sort((x, y) => colMap[x[0]].total - colMap[y[0]].total).map(([cid, rs]) => {
+        const g = colMap[cid], used = new Set(rs.filter(r => r.use).map(r => r.item_id));
+        const lacking = g.members.filter(mb => !mb.has_poster && !used.has(mb.id));
+        const dupC = rs.some(r => r.use && dups[r.item_id + "|" + r.slot] > 1);
+        return group(`${g.title} · ${pl(rs.length, "Bild", "Bilder")}`,
+          [h("span", { class: "pill " + (dupC ? "bad" : lacking.length ? "warn" : "ok") }, dupC ? "doppelt belegt" : lacking.length ? `${lacking.length} von ${g.total} ohne Poster` : "Collection vollständig"),
+            h("button", { class: "btn ghost sm", title: "Diese Collection ausblenden (gilt auch im Reiter „Collections“) – z. B. eine Sammel-Collection, die keine Filmreihe ist",
+              onclick: e => { e.preventDefault(); e.stopPropagation(); g.hidden = true; api("/collections/hidden", { json: { id: cid, hidden: true, title: g.title, count: g.total } }).then(() => { S.st.config.hidden_collections = [...(S.st.config.hidden_collections || []), { id: cid, title: g.title, count: g.total }]; }).catch(() => {}); draw(); } }, "Ausblenden")],
+          true, rs.map(r => buildRow(r, dups)), [{ cls: lacking.length ? "warn" : "ok",
+            text: lacking.length ? `Plex-Collection „${g.title}“: es fehlt noch ein Poster für ${lacking.map(x => x.title + (x.year ? " (" + x.year + ")" : "")).join(", ")}` : `Plex-Collection „${g.title}“: alle ${g.total} Filme haben ein Poster` }]);
+      }),
       movies.length ? group(`Filme · ${pl(movies.length, "Bild", "Bilder")}`, movieDup ? h("span", { class: "pill bad" }, "doppelt belegt") : null, true, movies.map(r => buildRow(r, dups))) : null,
       loose.length ? group(`${checks.length || movies.length ? "Nicht zugeordnet" : "Bilder"} · ${pl(loose.length, "Bild", "Bilder")}`, loose.some(r => r.kind !== "ignore") ? h("span", { class: "pill warn" }, "bitte Titel wählen") : null, true, loose.map(r => buildRow(r, dups))) : null);
     refreshBtn();
@@ -1540,12 +1686,14 @@ function wAuth(nav) {
 }
 
 const STEP_LABELS = { welcome: "Start", plex: "Plex", libs: "Bibliotheken", arr: "Sonarr/Radarr", worlds: "Welten", assign: "Zuordnung", apis: "Quellen", notify: "Benachrichtigungen", auth: "Anmeldung", done: "Fertig" };
+const STEP_GROUPS = [["Verbindungen", ["plex", "libs", "arr"]], ["Welten", ["worlds", "assign"]], ["Weiteres", ["apis", "notify", "auth"]]];
 // "Zuordnung" only exists when there is more than one world
 const stepList = () => ["welcome", "plex", "libs", "arr", "worlds", ...(cfg().worlds.length > 1 ? ["assign"] : []), "apis", "notify", "auth", "done"];
 
 async function wizard(settings = false) {
   S.view = "wiz";
   S.wizSettings = settings;
+  S.navList = settings;        // on phones the settings start with the list of pages
   await loadState();
   S.settingsSig = settings ? scanSig() : null;     // remembered to decide on closing whether a rescan is needed
   S.step = settings ? "plex" : (stepList().includes(S.step) ? S.step : "welcome");
@@ -1556,6 +1704,7 @@ async function wizard(settings = false) {
 function goStep(name) {
   const list = stepList();
   S.step = list.includes(name) ? name : "worlds";
+  S.navList = false;
   S.reached = Math.max(S.reached || 0, list.indexOf(S.step));
   drawWiz();
 }
@@ -1572,16 +1721,38 @@ function drawWiz() {
     h("span", { class: "spacer" }),
     h("button", { class: "btn primary", disabled, onclick: next || stepNext }, label));
   const view = { welcome: wWelcome, plex: wPlex, libs: wLibs, arr: wArr, worlds: wWorlds, assign: wAssign, apis: wApis, notify: wNotify, auth: wAuth, done: wDone }[S.step];
-  // labelled step navigation: in settings every step is reachable, during onboarding only the ones visited so far
+  // phones: settings = list of pages (iOS style) → page with "‹ Einstellungen"; onboarding = progress bar instead of a navigation
+  const mobile = matchMedia("(max-width:820px), (max-height:520px)").matches;      // phones, also in landscape (the sidebar would not fit)
+  if (mobile && S.wizSettings && S.navList) {
+    const rows = names => names.filter(n => list.includes(n)).map(n => h("button", { class: "mrow", onclick: () => goStep(n) }, h("span", {}, STEP_LABELS[n]), h("i", { "aria-hidden": "true" }, "›")));
+    return fill(app, h("div", { class: "wiz" }, logoEl("assets"), h("div", { class: "mlist" }, h("h1", {}, "Einstellungen"),
+      STEP_GROUPS.map(([g, names]) => [h("div", { class: "navgrp" }, g), h("div", { class: "mgroup" }, rows(names))]),
+      h("div", { style: "margin-top:22px" }, h("button", { class: "btn", onclick: closeSettings }, "Schließen")))));
+  }
+  const top = !mobile ? null : S.wizSettings
+    ? h("button", { class: "mback", onclick: () => { S.navList = true; drawWiz(); } }, "‹ Einstellungen")
+    : h("div", { class: "mprog" }, h("div", { class: "hint", style: "margin:0 0 6px" }, `Schritt ${idx + 1} von ${list.length} · ${STEP_LABELS[S.step]}`),
+      h("div", { class: "bar" }, h("i", { style: `width:${Math.round(((idx + 1) / list.length) * 100)}%` })));
+  // sidebar: grouped steps; in settings every step is reachable, during onboarding only the ones visited so far
   const shown = list.map((name, i) => ({ name, i })).filter(s => !(S.wizSettings && (s.name === "welcome" || s.name === "done")));
+  const stepBtn = (s, n) => {
+    const reachable = S.wizSettings || s.i <= (S.reached || 0);
+    return h("button", { class: (s.name === S.step ? "on " : "") + (s.i < idx ? "done" : ""), disabled: !reachable, title: reachable ? `Zu „${STEP_LABELS[s.name]}“ springen` : "Erst die vorherigen Schritte abschließen",
+      "aria-current": s.name === S.step ? "step" : null, onclick: () => goStep(s.name) }, S.wizSettings ? null : h("b", {}, String(n + 1).padStart(2, "0")), STEP_LABELS[s.name]);
+  };
+  const side = [];
+  let lastGroup = null;
+  shown.forEach((s, n) => {
+    const g = (STEP_GROUPS.find(([, names]) => names.includes(s.name)) || [null])[0];
+    if (g !== lastGroup && g) side.push(h("div", { class: "navgrp" }, g));
+    lastGroup = g;
+    side.push(stepBtn(s, n));
+  });
   fill(app, h("div", { class: "wiz" },
-    h("div", { class: "logo" }, h("i", { class: "logomark", "aria-hidden": "true" }, "p5"), h("span", {}, "assets", h("u", {}, "_"))),
-    h("nav", { class: "stepnav" }, shown.map((s, n) => {
-      const reachable = S.wizSettings || s.i <= (S.reached || 0);
-      return h("button", { class: (s.name === S.step ? "on " : "") + (s.i < idx ? "done" : ""), disabled: !reachable, title: reachable ? `Zu „${STEP_LABELS[s.name]}“ springen` : "Erst die vorherigen Schritte abschließen",
-        onclick: () => goStep(s.name) }, h("b", {}, String(n + 1).padStart(2, "0")), STEP_LABELS[s.name]);
-    })),
-    h("div", { class: "wcard" }, view(nav, cfg()))));
+    logoEl("assets"),
+    h("div", { class: "wlayout" },
+      mobile ? top : h("nav", { class: "stepnav", "aria-label": S.wizSettings ? "Einstellungen" : "Einrichtung" }, side),
+      h("div", { class: "wcard" }, view(nav, cfg())))));
 }
 
 /** What influences the title list: if one of these changed while the settings were open, closing them rescans. */
@@ -1679,6 +1850,25 @@ function wPlex(nav, c) {
     st, n);
 }
 
+/** Hidden Plex collections: foldable list with the names, show again one by one or all at once. */
+function hiddenCollections() {
+  const box = h("div");
+  const load = async () => {
+    let list; try { list = (await api("/collections/hidden")).hidden; } catch { return; }
+    const show = async ids => { for (const id of ids) await api("/collections/hidden", { json: { id, hidden: false } }); await loadState(); load(); };
+    if (!list.length) return fill(box);
+    fill(box, h("details", { class: "impgroup", style: "margin-top:16px" },
+      h("summary", {}, h("b", {}, pl(list.length, "ausgeblendete Collection", "ausgeblendete Collections"))),
+      h("div", { class: "hint", style: "padding:0 14px" }, "Diese Collections erscheinen nicht in der Vorschau und im Import."),
+      list.map(x => h("div", { class: "opt compact", style: "margin:0;border-radius:0;border-width:1px 0 0" },
+        h("div", { class: "grow" }, x.gone ? "Collection nicht mehr vorhanden" : x.title, h("small", {}, x.gone ? x.id : pl(x.count, "Film", "Filme"))),
+        h("button", { class: "btn sm", onclick: () => show([x.id]) }, x.gone ? "Entfernen" : "Einblenden"))),
+      list.length > 1 ? h("div", { style: "padding:10px 14px" }, h("button", { class: "btn sm", onclick: () => show(list.map(x => x.id)) }, "Alle einblenden")) : null));
+  };
+  load();
+  return box;
+}
+
 function wLibs(nav, c) {
   const libs = c.libraries.map(l => ({ ...l }));
   const intervals = [[0, "Nur manuell"], [15, "alle 15 Minuten"], [60, "stündlich"], [360, "alle 6 Stunden"], [1440, "täglich"]];
@@ -1690,6 +1880,7 @@ function wLibs(nav, c) {
     h("label", { class: "f" }, "Automatischer Scan"),
     h("select", { onchange: e => savePatch({ scan_interval_minutes: +e.target.value }) },
       intervals.map(([v, l]) => h("option", { value: v, selected: c.scan_interval_minutes === v }, l))),
+    hiddenCollections(),
     h("p", { class: "hint" }, "p5assets gleicht Plex, Sonarr/Radarr und die Assets-Ordner im Hintergrund ab und aktualisiert die Liste der fehlenden Poster. Dabei wird nichts heruntergeladen oder verändert."),
     nav());
 }
@@ -1949,7 +2140,7 @@ function wNotify(nav, c) {
 function wDone() {
   return h("div", { style: "text-align:center" }, h("div", { class: "big" }, "🚀"), h("h1", {}, "Alles bereit!"),
     h("p", { class: "lead" }, "p5assets scannt jetzt deine Bibliotheken und zeigt dir, was fehlt."),
-    h("button", { class: "btn primary", onclick: async () => { await api("/onboarding/finish", { method: "POST" }); await loadState(); S.filter = "all"; dashboard(); } }, "Scan starten"),
+    h("button", { class: "btn primary", onclick: async () => { await api("/onboarding/finish", { method: "POST" }); await loadState(); S.filter = DEFAULT_FILTER; dashboard(); } }, "Scan starten"),
     h("div", { style: "margin-top:16px" }, h("button", { class: "btn ghost", onclick: stepPrev }, "Zurück")));
 }
 

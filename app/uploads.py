@@ -34,7 +34,7 @@ def normalize_image(data: bytes, convert_to_jpg: bool) -> tuple[bytes, str]:
         img = Image.open(io.BytesIO(data))
         fmt = (img.format or "").upper()
         img.verify()
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         raise ValueError("Keine gültige Bilddatei") from e
     if fmt == "JPEG":
         return data, ".jpg"
@@ -67,7 +67,9 @@ def write_assets(item: dict, slots: list[str], data: bytes, undo: dict | None = 
     body, ext = normalize_image(data, acfg["convert_to_jpg"])
     depth = item.get("search_depth", 3)
     index = kometa.get_index(root, acfg["asset_folders"], depth)
-    from . import scanner  # late import: scanner does not import uploads, keeps the module graph simple
+    from . import (
+        scanner,  # late import: scanner does not import uploads, keeps the module graph simple
+    )
     if not index.knows(item["folder"]):
         # new title (or a folder created outside p5assets since the last scan): look again once before creating one
         index = kometa.get_index(root, acfg["asset_folders"], depth, fresh=True)

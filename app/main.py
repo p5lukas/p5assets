@@ -8,21 +8,43 @@ import os
 import re
 import tempfile
 import zipfile
+from collections import Counter
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Annotated
 
 import httpx
 from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    Response,
+    StreamingResponse,
+)
 from fastapi.staticfiles import StaticFiles
-from collections import Counter
-
 from pydantic import BaseModel
 
-from .text import plural
+from . import arr as arrmod
+from . import (
+    auth,
+    config,
+    history,
+    kometa,
+    logs,
+    notify,
+    providers,
+    scanner,
+    thumbs,
+    trash,
+    uploads,
+    version,
+)
+from . import languages as langmod
+from . import plex as plexmod
 from .errors import short
-from . import arr as arrmod, auth, config, history, kometa, languages as langmod, logs, notify, thumbs, trash, version, plex as plexmod, providers, scanner, uploads
 from .plex import Plex, PlexError
+from .text import plural
 
 STATIC = Path(__file__).parent / "static"
 log = logs.get("app")
@@ -110,6 +132,7 @@ def _public_item(it: dict, full: bool = False) -> dict:
     out = {k: it[k] for k in ("id", "world", "type", "title", "year", "folder", "library_title", "missing",
                               "updated", "in_plex", "sources", "dupes")}
     out["mirror_folders"] = it.get("mirror_folders") or []
+    out["collections"] = it.get("collections") or []
     out["coming_soon"] = bool(it.get("coming_soon"))
     out["missing_plex"] = it.get("missing_plex", 0)
     out["arr_folders"] = it.get("arr_folders") or []
@@ -222,29 +245,51 @@ def _news() -> list[dict]:
         return []
 
 
+def _vkey(v: str) -> tuple:
+    try:
+        return tuple(int(x) for x in (v or "0").split("."))
+    except ValueError:
+        return (0,)
+
+
+def _seen_version(cfg: dict) -> str:
+    """Last version whose news the user has been shown. Installs from before this setting but with seen entries count as 0.4.0."""
+    return cfg.get("news_version_seen") or ("0.4.0" if cfg.get("seen_news") else "")
+
+
 @app.get("/api/news")
 async def news():
-    """What is new since the user last looked: entries whose ID is not in ``seen_news`` (the first onboarding marks all as seen)."""
-    seen = set(config.get().get("seen_news") or [])
+    """``show``: news of a version the user has not been told about yet (one short notice per version);
+    ``unseen``/``all``: the single entries (by ID) for the full list in the footer."""
+    cfg = config.get()
+    seen = set(cfg.get("seen_news") or [])
     entries = _news()
-    return {"unseen": [e for e in entries if e["id"] not in seen], "all": [{**e, "seen": e["id"] in seen} for e in entries]}
+    current = version.BASE_VERSION
+    newer = [e for e in entries if _vkey(e["version"]) > _vkey(_seen_version(cfg)) and _vkey(e["version"]) <= _vkey(current)]
+    return {"version": current, "show": bool(newer) and bool(cfg.get("onboarded")), "count": len(newer), "highlights": [e["title"] for e in newer[:4]],
+            "unseen": [e for e in entries if e["id"] not in seen],
+            "all": [{**e, "seen": e["id"] in seen} for e in entries]}
 
 
 class NewsSeen(BaseModel):
-    ids: list[str]
+    ids: list[str] = []
+    version: bool = False        # also remember that the notice for the current version was shown
 
 
 @app.post("/api/news/seen")
 async def news_seen(body: NewsSeen):
     known = {e["id"] for e in _news()}
-    cur = list(config.get().get("seen_news") or [])
-    config.update({"seen_news": list(dict.fromkeys(cur + [i for i in body.ids if i in known]))})
+    cfg = config.get()
+    patch: dict = {"seen_news": list(dict.fromkeys(list(cfg.get("seen_news") or []) + [i for i in body.ids if i in known]))}
+    if body.version:
+        patch["news_version_seen"] = version.BASE_VERSION
+    config.update(patch)
     return {"ok": True}
 
 
 @app.post("/api/onboarding/finish")
 async def finish_onboarding():
-    config.update({"onboarded": True, "seen_news": [e["id"] for e in _news()]})   # a fresh install has nothing "new"
+    config.update({"onboarded": True, "seen_news": [e["id"] for e in _news()], "news_version_seen": version.BASE_VERSION})   # a fresh install has nothing "new"
     log.info("Onboarding abgeschlossen")
     asyncio.create_task(scanner.scan())
     return {"ok": True}
@@ -439,11 +484,10 @@ def _scope_stats(items: list[dict], weak_w: int = 0, weak_r: bool = False) -> di
         c["missing"] += 1 if i["missing"] else 0
         c["complete"] += 0 if i["missing"] else 1
         c["comingsoon"] += 1 if i.get("coming_soon") else 0
-        c["notplex"] += 0 if i["in_plex"] else 1
         c["plexmissing"] += 1 if i.get("missing_plex") else 0
     return {"items": c["items"], "slots": c["slots"], "missing": c["missing_slots"], "complete_items": c["complete"],
-            "counts": {"all": c["items"], "missing": c["missing"], "complete": c["complete"],
-                       "comingsoon": c["comingsoon"], "notplex": c["notplex"], "plexmissing": c["plexmissing"], "weak": c["weak"]},
+            "counts": {"all": c["items"], "missing": c["missing"],
+                       "comingsoon": c["comingsoon"], "plexmissing": c["plexmissing"], "weak": c["weak"]},
             "dims": {"known": c["dims_known"], "total": c["dims_total"]}}
 
 
@@ -462,10 +506,6 @@ async def items(world: str = "", q: str = "", filter: str = "all", library: str 
     stats = _scope_stats(res, weak_w, weak_r)          # for the chosen source, independent of tab, letter and search
     if filter == "missing":
         res = [i for i in res if i["missing"]]
-    elif filter == "complete":
-        res = [i for i in res if not i["missing"]]
-    elif filter == "notplex":
-        res = [i for i in res if not i["in_plex"]]
     elif filter == "plexmissing":     # already in Plex, but a poster/season is missing in the Kometa assets
         res = [i for i in res if i.get("missing_plex")]
     elif filter == "comingsoon":      # Coming-Soon placeholders already visible in Plex: the ones without a poster first
@@ -487,6 +527,91 @@ async def items(world: str = "", q: str = "", filter: str = "all", library: str 
             "items": [_public_item(i) for i in res[offset:offset + limit]]}
 
 
+def _hidden_list() -> list[dict]:
+    """Hidden collections as [{id, title, count}]; older versions stored plain IDs."""
+    return [c if isinstance(c, dict) else {"id": str(c), "title": str(c), "count": 0} for c in config.get().get("hidden_collections") or []]
+
+
+def _hidden_collections() -> frozenset:
+    return frozenset(c["id"] for c in _hidden_list())
+
+
+def collection_overview(items: list[dict], q: str = "", hidden: set | frozenset = frozenset()) -> list[dict]:
+    """Plex collections of one world with the state of their members' posters (only collections with at least two films)."""
+    groups: dict[str, dict] = {}
+    for it in items:
+        for c in it.get("collections") or []:
+            g = groups.setdefault(c["id"], {"id": c["id"], "title": c["title"], "members": []})
+            g["members"].append({"id": it["id"], "title": it["title"], "year": it["year"], "has_poster": bool(it["slots"].get("poster", {}).get("exists"))})
+    nq = kometa.normalize(q) if q else ""
+    out = []
+    for g in groups.values():
+        if len(g["members"]) < 2 or (nq and nq not in kometa.normalize(g["title"])):
+            continue
+        g["members"].sort(key=lambda m: (m["year"] or 0, m["title"].casefold()))
+        g["hidden"] = g["id"] in hidden
+        g["total"] = len(g["members"])
+        g["with_poster"] = sum(1 for m in g["members"] if m["has_poster"])
+        out.append(g)
+    out.sort(key=lambda g: (g["with_poster"] == g["total"], g["title"].casefold()))
+    return out
+
+
+@app.get("/api/collection")
+async def collection_detail(id: str):
+    """One Plex collection with its films (public items) for the detail view."""
+    films = [i for i in scanner.STATE["items"] if any(c["id"] == id for c in i.get("collections") or [])]
+    if not films:
+        raise HTTPException(404, "Collection nicht gefunden – bitte neu scannen")
+    title = next(c["title"] for c in films[0]["collections"] if c["id"] == id)
+    films.sort(key=lambda i: (i["year"] or 0, i["title"].casefold()))
+    return {"id": id, "title": title, "hidden": id in _hidden_collections(), "members": [_public_item(i, True) for i in films]}
+
+
+@app.get("/api/collections")
+async def collections(world: str = "", q: str = ""):
+    wid = _world(world)["id"]
+    return {"collections": collection_overview([i for i in scanner.STATE["items"] if i["world"] == wid and i["type"] == "movie"], q, _hidden_collections())}
+
+
+@app.get("/api/collections/hidden")
+async def collections_hidden():
+    """The hidden collections with names and film counts; IDs saved by older versions get their name from the last scan (and keep it)."""
+    names: dict[str, str] = {}
+    counts: Counter = Counter()
+    for i in scanner.STATE["items"]:
+        for c in i.get("collections") or []:
+            names[c["id"]] = c["title"]
+            counts[c["id"]] += 1
+    out = []
+    changed = any(not isinstance(c, dict) for c in config.get().get("hidden_collections") or [])      # legacy plain IDs get converted
+    for hc in _hidden_list():
+        known = hc["id"] in names
+        new = {**hc, "title": names[hc["id"]], "count": counts[hc["id"]]} if known else dict(hc)
+        changed = changed or new != hc
+        out.append({**new, "gone": bool(scanner.STATE["items"]) and not known})
+    if changed:
+        config.update({"hidden_collections": [{k: v for k, v in o.items() if k != "gone"} for o in out]})
+    return {"hidden": out}
+
+
+class CollectionHide(BaseModel):
+    id: str
+    hidden: bool = True
+    title: str = ""
+    count: int = 0
+
+
+@app.post("/api/collections/hidden")
+async def collection_hide(body: CollectionHide):
+    """Hide a Plex collection (e.g. a huge one that is no film series) from the overview and the import check, or show it again."""
+    cur = [c for c in _hidden_list() if c["id"] != body.id]
+    if body.hidden:
+        cur.append({"id": body.id, "title": body.title[:200] or body.id, "count": body.count})
+    config.update({"hidden_collections": cur})
+    return {"ok": True}
+
+
 @app.get("/api/items/{item_id}")
 async def item_detail(item_id: str):
     return _public_item(_item(item_id), True)
@@ -500,7 +625,7 @@ async def _plex_image(path: str) -> Response:
         data = await p.image(path)
     finally:
         await p.close()
-    return Response(data, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=3600"})
+    return Response(data, media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/api/asset/{item_id}/{slot}")
@@ -548,7 +673,7 @@ async def download_asset(item_id: str, slot: str):
 
 
 def _build_zip(entries: list[tuple[Path, str]]):
-    tmp = tempfile.TemporaryFile()  # spills to disk, so a big series does not sit in RAM
+    tmp = tempfile.TemporaryFile()  # noqa: SIM115 – handed to the streaming response, which closes it
     with zipfile.ZipFile(tmp, "w", zipfile.ZIP_STORED, allowZip64=True) as zf:  # posters are compressed already
         for src, arc in entries:
             zf.write(src, arc)
@@ -598,7 +723,7 @@ async def season_thumb(item_id: str, slot: str):
 
 
 @app.post("/api/items/{item_id}/{slot}/upload")
-async def upload_slot(item_id: str, slot: str, file: UploadFile = File(...)):
+async def upload_slot(item_id: str, slot: str, file: Annotated[UploadFile, File()]):
     it = _item(item_id)
     _slot_check(it, slot)
     data = await file.read()
@@ -876,6 +1001,9 @@ def _suggest(entry: dict, fixed: dict | None, pool: list[dict], index: dict | No
     out["slot"] = None
     if entry["kind"] == "ignore":
         return out
+    if kometa.is_collection_name(entry["name"]):          # a poster for a whole collection: the user decides where it belongs
+        out["collection"] = True
+        return out
     item = fixed or kometa.match_item(entry["title"], entry["year"], pool, index)
     if item:
         slot = "poster" if entry["kind"] == "poster" else kometa.slot_key(entry["season"])
@@ -939,7 +1067,7 @@ async def slot_options(world: str = "", q: str = "", limit: int = 30):
         if i["world"] == wid and (not nq or nq in kometa.normalize(i["title"])):
             keys = ["poster"]
             if i["type"] == "show":
-                keys += [kometa.slot_key(n) for n in range(0, kometa.MAX_SEASON + 1)]
+                keys += [kometa.slot_key(n) for n in range(kometa.MAX_SEASON + 1)]
                 keys += [k for k in i["slots"] if k not in keys]
             out.append({"id": i["id"], "title": i["title"], "year": i["year"], "type": i["type"],
                         "slots": [{"slot": k, "label": kometa.slot_label(kometa.parse_slot_key(k))} for k in keys]})
@@ -1045,6 +1173,11 @@ async def index():
     v = _asset_version()
     for name in ("style.css", "planets.js", "app.js"):
         html = html.replace(f"/static/{name}", f"/static/{name}?v={v}")
+    # versioned icon addresses: browsers keep favicons very long, so a new version number makes them load the new icon
+    ver = version.BASE_VERSION
+    for name in ("favicon-32.png", "favicon-48.png", "apple-touch-icon.png"):
+        html = html.replace(f"/static/{name}", f"/static/{name}?v={ver}")
+    html = html.replace('href="/favicon.ico"', f'href="/favicon.ico?v={ver}"').replace('href="/manifest.webmanifest"', f'href="/manifest.webmanifest?v={ver}"')
     return HTMLResponse(html, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 
@@ -1055,15 +1188,15 @@ async def manifest():
         "name": "p5assets", "short_name": "p5assets", "description": "Fehlende Poster für Plex und Kometa finden und ersetzen",
         "start_url": "/", "scope": "/", "display": "standalone", "orientation": "any", "lang": "de",
         "background_color": "#02100a", "theme_color": "#02100a",
-        "icons": [{"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
-                  {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
-                  {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}],
-    }, media_type="application/manifest+json", headers={"Cache-Control": "public, max-age=3600"})
+        "icons": [{"src": f"/static/icon-192.png?v={version.BASE_VERSION}", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+                  {"src": f"/static/icon-512.png?v={version.BASE_VERSION}", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+                  {"src": f"/static/icon-512.png?v={version.BASE_VERSION}", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}],
+    }, media_type="application/manifest+json", headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/favicon.ico")
 async def favicon():
-    return FileResponse(STATIC / "icon.png", media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
+    return FileResponse(STATIC / "favicon.ico", media_type="image/x-icon", headers={"Cache-Control": "no-cache"})
 
 
 class _RevalidatingStatic(StaticFiles):

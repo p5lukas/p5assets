@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import httpx
 
-from .errors import short
 from . import kometa
+from .errors import short
 
 
 class ArrError(Exception):

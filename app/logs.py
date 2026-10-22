@@ -57,10 +57,10 @@ class Redactor(logging.Filter):
             for s in secrets:
                 if s and len(s) >= 4:
                     msg = msg.replace(s, "***")
-            msg = re.sub(r"(X-Plex-Token=|api_key=|apikey=)[^&\s]+", r"\1***", msg, flags=re.I)
+            msg = re.sub(r"(X-Plex-Token=|api_key=|apikey=)[^&\s]+", r"\1***", msg, flags=re.IGNORECASE)
             record.msg, record.args = msg, ()
         except Exception:  # noqa: BLE001 – logging must never break the app
-            pass
+            return True
         return True
 
 
