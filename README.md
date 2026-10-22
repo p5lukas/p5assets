@@ -30,7 +30,7 @@ Ein schlanker Docker-Container im Matrix-Look. Er vergleicht deine Bibliotheken 
 ### Lücken finden
 Plex, Sonarr und Radarr werden zusammengeführt (über TMDb/TVDB/IMDb-IDs). Reiter zeigen sofort, was zu tun ist:
 **In Plex, Poster fehlt** (die Startansicht: was in Plex ohne Bild erscheint), **Coming Soon**, **Alle**, **Alle fehlenden** (auch Titel, die nur Sonarr/Radarr kennen und in Plex noch nicht sind, mit dem Etikett „Noch nicht in Plex“) und **Schwache Poster**.
-Dazu eine Quellenauswahl, schnelle Suche (rechts neben den Reitern), A–Z-Leiste und eine Abdeckungsanzeige mit kleinem Verlauf pro Scan.
+Dazu eine Quellenauswahl, schnelle Suche (rechts neben den Reitern, durchsucht immer alle Titel der Welt), A–Z-Leiste und eine Abdeckungsanzeige mit kleinem Verlauf pro Scan.
 Große Bibliotheken sind kein Problem: mit über 6000 Titeln antworten die Listen in rund 30 ms.
 
 ### Ersetzen per Drag & Drop
@@ -61,6 +61,7 @@ und welche vorhandenen Bilder ersetzt würden.
 
 - Kacheln für Poster und **Season00 – Season50**, auch für Staffeln, die es noch nicht gibt
 - Poster per Drag & Drop auf eine andere Kachel **kopieren**, oder mit **„Auf alle …“** auf mehrere Kacheln übertragen
+- **Plex-Collections:** Filme zeigen ihre Collection in der Vorschau; ein Klick öffnet die Detailansicht der Collection mit allen Postern (ersetzen, hochladen, Set-Upload). Beim Import werden Filme nach Plex-Collection gruppiert und p5assets sagt, welche Filme der Collection danach noch ohne Poster sind. Dateien wie „… Collection“ ordnet der Import nicht automatisch einem Film zu; große Sammel-Collections, die keine Filmreihen sind, lassen sich ausblenden (Einstellungen → Bibliotheken zeigt und holt sie zurück)
 - **Herunterladen** in Originalqualität: einzelne Poster oder eine Auswahl als ZIP (auf iPhone/iPad öffnet sich das Original in p5assets: Bild lange drücken → „Zu Fotos hinzufügen“)
 
 ### Online-Suche
@@ -119,7 +120,8 @@ Ausgangsstand fest. Einrichten im Onboarding (überspringbar) oder später in de
 ### Logs, Neuigkeiten, Mobil
 - **Log-Seite** (Symbol `>_`): Live-Log mit Suche, Level-Filter und Download. Bei neuen Warnungen oder Fehlern leuchtet das Symbol auf und zeigt die Anzahl. Tokens und API-Keys werden nie protokolliert.
 - **Neu in diesem Update**: nach einem Update zeigt p5assets, was neu ist, und bietet neue Funktionen direkt zum Einrichten an (später jederzeit über „Neuigkeiten“ in der Fußzeile).
-- **Als App** auf iPhone/iPad (Teilen → Zum Home-Bildschirm), mit kompakter Kopfleiste und großen Tippflächen.
+- **Als App** auf iPhone/iPad (Teilen → Zum Home-Bildschirm), mit kompakter Kopfleiste und großen Tippflächen; die Einstellungen sind dort eine Liste mit Gruppen (am Desktop eine Seitenleiste).
+- **Tastaturkürzel:** `/` springt ins Suchfeld, `Esc` leert es, in der Poster-Vorschau blättern `←`/`→` durch die Filme. Ein Klick auf das Logo führt immer zur Startseite.
 
 <table>
 <tr>
