@@ -96,7 +96,7 @@ def normalize(cfg: dict, legacy_path: str | None = None) -> bool:
         if not w.get("id"):
             w["id"] = uuid.uuid4().hex[:8]; changed = True
         if not w.get("name"):
-            w["name"] = f"Welt {i + 1}"; changed = True
+            w["name"] = f"World {i + 1}"; changed = True
         if not isinstance(w.get("hue"), int):
             w["hue"] = WORLD_HUES[i % len(WORLD_HUES)]; changed = True
         w.pop("color", None)

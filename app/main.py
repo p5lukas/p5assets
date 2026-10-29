@@ -30,6 +30,7 @@ from . import (
     auth,
     config,
     history,
+    i18n,
     kometa,
     logs,
     notify,
@@ -43,6 +44,7 @@ from . import (
 from . import languages as langmod
 from . import plex as plexmod
 from .errors import short
+from .i18n import tr
 from .plex import Plex, PlexError
 from .text import plural
 
@@ -56,7 +58,7 @@ async def lifespan(app: FastAPI):
     config.load()
     auth.startup()
     v = version.info()
-    log.info("p5assets %s gestartet (Branch %s, Commit %s)", v["version"], v["branch"] or "-", v["commit_short"] or "-")
+    log.info("p5assets %s started (branch %s, commit %s)", v["version"], v["branch"] or "-", v["commit_short"] or "-")
     await asyncio.to_thread(thumbs.cleanup_old)
     task = asyncio.create_task(scanner.loop())
     yield
@@ -94,6 +96,19 @@ async def security_headers(request: Request, call_next):
     return response
 
 
+@app.middleware("http")
+async def language(request: Request, call_next):
+    """Outermost middleware: the browser's language (header X-Lang) applies to all messages of this request, also the login gate's."""
+    i18n.set_lang(request.headers.get("x-lang"))
+    return await call_next(request)
+
+
+@app.get("/i18n.js")
+async def i18n_js():
+    """English texts for the browser (German is the source language of the UI)."""
+    return Response(i18n.js(), media_type="text/javascript", headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/api/health")
 async def health():
     """For the Docker health check: answers without a login and without any data."""
@@ -115,7 +130,7 @@ async def arr_error(_: Request, exc: arrmod.ArrError):
 
 @app.exception_handler(ValueError)
 async def value_error(_: Request, exc: ValueError):
-    log.warning("Ungültige Anfrage: %s", exc)
+    log.warning("Invalid request: %s", exc)
     return JSONResponse({"detail": str(exc)}, status_code=400)
 
 
@@ -124,7 +139,7 @@ async def value_error(_: Request, exc: ValueError):
 def _item(item_id: str) -> dict:
     it = next((i for i in scanner.STATE["items"] if i["id"] == item_id), None)
     if not it:
-        raise HTTPException(404, "Titel nicht gefunden – bitte neu scannen")
+        raise HTTPException(404, tr("Titel nicht gefunden – bitte neu scannen"))
     return it
 
 
@@ -154,7 +169,7 @@ def _world(world_id: str | None) -> dict:
     if world_id:
         w = next((w for w in worlds if w["id"] == world_id), None)
         if not w:
-            raise HTTPException(404, "Welt nicht gefunden")
+            raise HTTPException(404, tr("Welt nicht gefunden"))
         return w
     return worlds[0]
 
@@ -162,14 +177,14 @@ def _world(world_id: str | None) -> dict:
 def _plex() -> Plex:
     c = config.get()
     if not c["plex"]["url"] or not c["plex"]["token"]:
-        raise HTTPException(400, "Plex nicht verbunden")
+        raise HTTPException(400, tr("Plex nicht verbunden"))
     return Plex(c["plex"]["url"], c["plex"]["token"], c["client_id"])
 
 
 def _slot_check(it: dict, slot: str) -> int | None:
     season = kometa.parse_slot_key(slot)
     if not kometa.slot_allowed(it["type"], set(it["slots"]), slot):
-        raise HTTPException(404, "Slot existiert nicht für diesen Titel")
+        raise HTTPException(404, tr("Slot existiert nicht für diesen Titel"))
     return season
 
 
@@ -203,10 +218,10 @@ async def _store(it: dict, slot: str, data: bytes) -> dict:
     path = (await asyncio.to_thread(uploads.write_assets, it, [slot], data, undo))[0]
     await asyncio.to_thread(scanner.refresh_item, it["id"])
     warn = await _plex_push(it, [slot], data)
-    log.info("Gespeichert: %s / %s → %s%s", it["title"], slot, path,
-             f" (+ Spiegel: {', '.join(it['mirror_folders'])})" if it.get("mirror_folders") else "")
+    log.info("Saved: %s / %s → %s%s", it["title"], slot, path,
+             f" (+ mirror: {', '.join(it['mirror_folders'])})" if it.get("mirror_folders") else "")
     if warn:
-        log.warning("Plex-Upload für %s / %s: %s", it["title"], slot, warn)
+        log.warning("Plex upload for %s / %s: %s", it["title"], slot, warn)
     return {"ok": True, "path": str(path), "warning": warn, "trash": undo.get("gid"), "item": _public_item(_item(it["id"]), True)}
 
 
@@ -230,19 +245,25 @@ async def set_config(body: ConfigPatch):
     if "worlds" in patch:
         worlds = patch["worlds"]
         if not isinstance(worlds, list) or not worlds:
-            raise HTTPException(400, "Mindestens eine Welt wird benötigt")
+            raise HTTPException(400, tr("Mindestens eine Welt wird benötigt"))
         for w in worlds:
             w["name"] = (w.get("name") or "").strip()
             w["assets_path"] = (w.get("assets_path") or "").strip()
-    log.info("Einstellungen geändert: %s", ", ".join(sorted(patch)) or "-")
+    log.info("Settings changed: %s", ", ".join(sorted(patch)) or "-")
     return config.public(config.update(patch))
 
 
 def _news() -> list[dict]:
+    """Release notes (German source texts in news.json), translated for the language of the request."""
     try:
-        return json.loads((Path(__file__).parent / "news.json").read_text("utf-8"))
+        entries = json.loads((Path(__file__).parent / "news.json").read_text("utf-8"))
     except (OSError, ValueError):
         return []
+    for e in entries:
+        e["title"], e["text"] = tr(e["title"]), tr(e["text"])
+        if e.get("action"):
+            e["action"] = {**e["action"], "label": tr(e["action"]["label"])}
+    return entries
 
 
 def _vkey(v: str) -> tuple:
@@ -290,7 +311,7 @@ async def news_seen(body: NewsSeen):
 @app.post("/api/onboarding/finish")
 async def finish_onboarding():
     config.update({"onboarded": True, "seen_news": [e["id"] for e in _news()], "news_version_seen": version.BASE_VERSION})   # a fresh install has nothing "new"
-    log.info("Onboarding abgeschlossen")
+    log.info("Onboarding finished")
     asyncio.create_task(scanner.scan())
     return {"ok": True}
 
@@ -326,9 +347,9 @@ async def plex_connect(body: Connect):
     if not url and body.connections:
         url = await plexmod.first_reachable(body.connections, token, cfg["client_id"]) or ""
         if not url:
-            raise PlexError("Keine der Server-Adressen war erreichbar – bitte URL manuell eingeben")
+            raise PlexError(tr("Keine der Server-Adressen war erreichbar – bitte URL manuell eingeben"))
     if not url or not token:
-        raise HTTPException(400, "URL und Token werden benötigt")
+        raise HTTPException(400, tr("URL und Token werden benötigt"))
     if "://" not in url:
         url = "http://" + url
     ident = await plexmod.test_connection(url, token, cfg["client_id"])
@@ -346,7 +367,7 @@ async def plex_connect(body: Connect):
     cur = config.get()
     cur["libraries"] = merged
     config.save(cur)
-    log.info("Plex verbunden: %s (%s), %d Bibliotheken", ident["name"], url, len(merged))
+    log.info("Plex connected: %s (%s), %d libraries", ident["name"], url, len(merged))
     return {"server": ident, "url": url, "libraries": merged}
 
 
@@ -369,7 +390,7 @@ async def test_provider(provider: str, body: ApiTest):
     key = body.key if body.key and body.key != "********" else apis.get(provider, "")
     pin = body.pin if body.pin and body.pin != "********" else apis.get("tvdb_pin", "")
     if not key:
-        raise HTTPException(400, "Kein API Key angegeben")
+        raise HTTPException(400, tr("Kein API Key angegeben"))
     try:
         if provider == "tmdb":
             await providers.tmdb_test(key)
@@ -378,14 +399,14 @@ async def test_provider(provider: str, body: ApiTest):
         elif provider == "fanart":
             await providers.fanart_test(key)
         else:
-            raise HTTPException(404, "Unbekannter Anbieter")
+            raise HTTPException(404, tr("Unbekannter Anbieter"))
     except httpx.HTTPStatusError as e:
-        log.warning("API-Test %s: ungültiger Key (HTTP %s)", provider, e.response.status_code)
-        raise HTTPException(400, f"Ungültiger Key (HTTP {e.response.status_code})")
+        log.warning("API test %s: invalid key (HTTP %s)", provider, e.response.status_code)
+        raise HTTPException(400, tr("Ungültiger Key (HTTP {0})", e.response.status_code))
     except httpx.HTTPError as e:
-        log.warning("API-Test %s: nicht erreichbar (%s)", provider, e)
-        raise HTTPException(502, f"Nicht erreichbar: {short(e)}") from None
-    log.info("API-Test %s: OK", provider)
+        log.warning("API test %s: not reachable (%s)", provider, e)
+        raise HTTPException(502, tr("Nicht erreichbar: {0}", short(e))) from None
+    log.info("API test %s: OK", provider)
     return {"ok": True}
 
 
@@ -399,12 +420,12 @@ class ArrTest(BaseModel):
 @app.post("/api/arr/test")
 async def arr_test(body: ArrTest):
     if body.kind not in ("sonarr", "radarr"):
-        raise HTTPException(400, "Unbekannter Typ")
+        raise HTTPException(400, tr("Unbekannter Typ"))
     key = body.api_key
     if key == config.MASK:
         key = next((a["api_key"] for a in config.get()["arr"] if a.get("id") == body.id), "")
     if not body.url or not key:
-        raise HTTPException(400, "URL und API-Key werden benötigt")
+        raise HTTPException(400, tr("URL und API-Key werden benötigt"))
     res = await arrmod.test(body.kind, body.url.strip(), key)
     log.info("%s-Test (%s): OK, Version %s", body.kind.capitalize(), body.url.strip(), res.get("version", "?"))
     return res
@@ -416,7 +437,7 @@ async def arr_test(body: ArrTest):
 async def browse(path: str = "/"):
     p = Path(path or "/")
     if not p.is_dir():
-        raise HTTPException(404, "Ordner nicht gefunden")
+        raise HTTPException(404, tr("Ordner nicht gefunden"))
     dirs = []
     try:
         for e in sorted(p.iterdir(), key=lambda x: x.name.casefold()):
@@ -562,7 +583,7 @@ async def collection_detail(id: str):
     """One Plex collection with its films (public items) for the detail view."""
     films = [i for i in scanner.STATE["items"] if any(c["id"] == id for c in i.get("collections") or [])]
     if not films:
-        raise HTTPException(404, "Collection nicht gefunden – bitte neu scannen")
+        raise HTTPException(404, tr("Collection nicht gefunden – bitte neu scannen"))
     title = next(c["title"] for c in films[0]["collections"] if c["id"] == id)
     films.sort(key=lambda i: (i["year"] or 0, i["title"].casefold()))
     return {"id": id, "title": title, "hidden": id in _hidden_collections(), "members": [_public_item(i, True) for i in films]}
@@ -666,7 +687,7 @@ async def download_asset(item_id: str, slot: str):
     it = _item(item_id)
     path = it["slots"].get(slot, {}).get("path")
     if not path or not Path(path).is_file():
-        raise HTTPException(404, "Kein Bild vorhanden")
+        raise HTTPException(404, tr("Kein Bild vorhanden"))
     p = Path(path)
     log.info("Download: %s / %s", it["title"], slot)
     return FileResponse(p, filename=_download_name(it, slot, p), headers={"Cache-Control": "no-store"})
@@ -695,9 +716,9 @@ async def download_zip(item_id: str, slots: str = ""):
             p = Path(sl["path"])
             entries.append((p, f"{folder}/{kometa.slot_basename(kometa.parse_slot_key(key))}{p.suffix.lower()}"))
     if not entries:
-        raise HTTPException(404, "Keine Bilder zum Herunterladen")
+        raise HTTPException(404, tr("Keine Bilder zum Herunterladen"))
     tmp, size = await asyncio.to_thread(_build_zip, entries)
-    log.info("Download ZIP: %s (%d Bilder, %.1f MB)", it["title"], len(entries), size / 1048576)
+    log.info("Download ZIP: %s (%d images, %.1f MB)", it["title"], len(entries), size / 1048576)
 
     def chunks():
         try:
@@ -740,11 +761,11 @@ async def copy_slot(item_id: str, slot: str, body: CopyBody):
     it = _item(item_id)
     _slot_check(it, slot)
     if body.source == slot:
-        raise HTTPException(400, "Quelle und Ziel sind identisch")
+        raise HTTPException(400, tr("Quelle und Ziel sind identisch"))
     src = it["slots"].get(body.source, {}).get("path")
     if not src or not Path(src).is_file():
-        raise HTTPException(404, "Das Quellbild wurde im Assets-Ordner nicht gefunden")
-    log.info("Kopieren: %s / %s → %s", it["title"], body.source, slot)
+        raise HTTPException(404, tr("Das Quellbild wurde im Assets-Ordner nicht gefunden"))
+    log.info("Copy: %s / %s → %s", it["title"], body.source, slot)
     return await _store(it, slot, Path(src).read_bytes())
 
 
@@ -760,7 +781,7 @@ async def copy_all(item_id: str, body: CopyAllBody):
     it = _item(item_id)
     src = it["slots"].get(body.source, {}).get("path")
     if not src or not Path(src).is_file():
-        raise HTTPException(404, "Das Quellbild wurde im Assets-Ordner nicht gefunden")
+        raise HTTPException(404, tr("Das Quellbild wurde im Assets-Ordner nicht gefunden"))
     known = set(it["slots"])
     targets, skipped = [], []
     for t in dict.fromkeys(body.targets):
@@ -778,7 +799,7 @@ async def copy_all(item_id: str, body: CopyAllBody):
     data = Path(src).read_bytes()
     undo: dict = {}
     await asyncio.to_thread(uploads.write_assets, it, targets, data, undo)
-    log.info("Auf alle: %s / %s → %d Kacheln (%d übersprungen)", it["title"], body.source, len(targets), len(skipped))
+    log.info("Apply to all: %s / %s → %d tiles (%d skipped)", it["title"], body.source, len(targets), len(skipped))
     await asyncio.to_thread(scanner.refresh_item, it["id"])
     warn = await _plex_push(it, targets, data)
     return {"ok": True, "written": targets, "skipped": skipped, "warning": warn, "trash": undo.get("gid"), "item": _public_item(_item(it["id"]), True)}
@@ -791,12 +812,12 @@ class UrlBody(BaseModel):
 async def _download(url: str) -> bytes:
     u = httpx.URL(url)
     if u.scheme != "https" or u.host not in providers.ALLOWED_HOSTS:
-        raise HTTPException(400, "Download nur von TMDb, TVDB und fanart.tv erlaubt")
+        raise HTTPException(400, tr("Download nur von TMDb, TVDB und fanart.tv erlaubt"))
     async with httpx.AsyncClient(timeout=60, follow_redirects=False) as c:
         r = await c.get(url)
         r.raise_for_status()
         if len(r.content) > 40 * 1024 * 1024:
-            raise HTTPException(400, "Bild zu groß")
+            raise HTTPException(400, tr("Bild zu groß"))
         return r.content
 
 
@@ -814,15 +835,15 @@ async def search_posters(item_id: str, slot: str):
     season = _slot_check(it, slot)
     apis = config.get()["apis"]
     if not (apis["tmdb"] or apis["tvdb"] or apis["fanart"]):
-        raise HTTPException(400, "Keine API-Keys hinterlegt (Einstellungen → Quellen)")
+        raise HTTPException(400, tr("Keine API-Keys hinterlegt (Einstellungen → Quellen)"))
     world = next((w for w in config.get()["worlds"] if w["id"] == it["world"]), None)
     res = await providers.search(apis, it["type"], it["ids"], it["title"], it["year"], season,
                                  (world or {}).get("languages"))
-    log.info("Online-Suche %s / %s: %d Poster (%s)", it["title"], slot, len(res["images"]),
+    log.info("Online search %s / %s: %d posters (%s)", it["title"], slot, len(res["images"]),
              ", ".join(f"{p['name']}: {p['count'] if p['state'] == 'ok' else p['state']}" for p in res["providers"]))
     for p in res["providers"]:
         if p["state"] == "error":
-            log.warning("Online-Suche %s: %s", p["name"], p["error"])
+            log.warning("Online search %s: %s", p["name"], p["error"])
     return res
 
 
@@ -847,9 +868,9 @@ async def delete_slot(item_id: str, slot: str):
         gid = trash.begin("delete", item_id=it["id"], world=it["world"], title=it["title"], slot=slot, type=it["type"])
         for extra in uploads.mirror_files(it, slot):  # keep the Coming-Soon mirror folder in sync
             trash.stash(gid, extra, move=True, label=slot)
-            log.info("Gelöscht (Spiegel): %s / %s (%s)", it["title"], slot, extra)
+            log.info("Deleted (mirror): %s / %s (%s)", it["title"], slot, extra)
         trash.stash(gid, Path(path), move=True, label=slot)      # moved to the trash: can be undone for 30 days
-        log.info("Gelöscht: %s / %s (%s)", it["title"], slot, path)
+        log.info("Deleted: %s / %s (%s)", it["title"], slot, path)
     await asyncio.to_thread(scanner.refresh_item, item_id)
     return {"ok": True, "trash": gid, "item": _public_item(_item(item_id), True)}
 
@@ -866,7 +887,7 @@ async def trash_restore(gid: str):
     try:
         meta = await asyncio.to_thread(trash.restore, gid)
     except FileNotFoundError:
-        raise HTTPException(404, "Eintrag nicht mehr vorhanden")
+        raise HTTPException(404, tr("Eintrag nicht mehr vorhanden"))
     kometa.drop_indexes()
     item = next((i for i in scanner.STATE["items"] if i["id"] == meta.get("item_id")), None)
     if item:
@@ -894,7 +915,7 @@ async def trash_remove(gid: str):
     try:
         trash.remove(gid)
     except FileNotFoundError:
-        raise HTTPException(404, "Eintrag nicht mehr vorhanden")
+        raise HTTPException(404, tr("Eintrag nicht mehr vorhanden"))
     return {"ok": True}
 
 
@@ -915,9 +936,9 @@ def _orphans(world_id: str) -> tuple[dict, list[dict], str]:
         return w, [], ""
     failed = scanner.STATE.get("failed", {}).get(w["id"], [])
     if scanner.STATE.get("error") or not scanner.STATE.get("scanned_at"):
-        return w, [], "Der letzte Scan ist fehlgeschlagen oder fehlt – bitte zuerst erfolgreich scannen, sonst würden Titel fälschlich als verwaist gelten."
+        return w, [], tr("Der letzte Scan ist fehlgeschlagen oder fehlt – bitte zuerst erfolgreich scannen, sonst würden Titel fälschlich als verwaist gelten.")
     if failed:   # an unreachable Sonarr/Radarr would make all its titles look like orphans
-        return w, [], f"{', '.join(failed)} war beim letzten Scan nicht erreichbar – die Liste wäre unvollständig. Bitte erneut scannen."
+        return w, [], tr("{0} war beim letzten Scan nicht erreichbar – die Liste wäre unvollständig. Bitte erneut scannen.", ", ".join(failed))
     index = kometa.get_index(root, True, w.get("search_depth", 3))
     known: set[str] = set()
     for it in scanner.STATE["items"]:
@@ -957,7 +978,7 @@ async def orphans_trash(body: OrphanBody):
     allowed = {o["path"]: o for o in found}
     root = Path(w["assets_path"])
     moved = 0
-    gid = trash.begin("orphan", world=w["id"], title=plural(len(body.paths), "verwaister Ordner", "verwaiste Ordner"), slot="")
+    gid = trash.begin("orphan", world=w["id"], title=plural(len(body.paths), "orphaned folder", "orphaned folders"), slot="")
     for rel in body.paths:
         if rel in allowed and (root / rel).is_dir():     # only folders that are really orphans, nothing outside the assets folder
             trash.stash(gid, root / rel, move=True, label=allowed[rel]["name"])
@@ -976,13 +997,13 @@ class NotifyTest(BaseModel):
 async def notify_test(body: NotifyTest):
     """Sends a test message through ONE channel with the saved settings."""
     if body.channel not in ("discord", "telegram", "ntfy"):
-        raise HTTPException(400, "Unbekannter Kanal")
+        raise HTTPException(400, tr("Unbekannter Kanal"))
     if body.channel not in notify.channels():
-        raise HTTPException(400, "Kanal ist nicht aktiviert oder unvollständig eingerichtet")
+        raise HTTPException(400, tr("Kanal ist nicht aktiviert oder unvollständig eingerichtet"))
     title, text = notify.compose([{"title": "Beispiel-Film", "year": 2026, "world": "HD", "coming_soon": True},
                                   {"title": "Beispiel-Serie", "year": 2025, "world": "HD", "coming_soon": False}], False,
                                  (config.get()["notify"].get("base_url") or "").strip())
-    res = await notify.send_all("Testnachricht von p5assets", f"So sieht eine Benachrichtigung aus:\n\n{title}\n{text}", [body.channel])
+    res = await notify.send_all("Test message from p5assets", f"This is what a notification looks like:\n\n{title}\n{text}", [body.channel])
     if res[body.channel]:
         raise HTTPException(502, res[body.channel])
     return {"ok": True}
@@ -1099,9 +1120,9 @@ async def import_apply(sid: str, body: ApplyBody):
         except (ValueError, HTTPException, FileNotFoundError) as e:
             failed.append({"file": a.file, "error": getattr(e, "detail", None) or str(e)})
     uploads.drop_session(sid)
-    log.info("Import: %d Dateien übernommen, %d fehlgeschlagen", len(done), len(failed))
+    log.info("Import: %d files applied, %d failed", len(done), len(failed))
     for f in failed:
-        log.warning("Import fehlgeschlagen: %s", f["error"])
+        log.warning("Import failed: %s", f["error"])
     return {"done": done, "failed": failed, "summary": scanner.summary()}
 
 
@@ -1133,7 +1154,7 @@ async def log_read(file: str = logs.LOG_NAME, tail: int = Query(1000, ge=1, le=2
     try:
         return logs.read(file, tail, offset)
     except ValueError:
-        raise HTTPException(400, "Ungültige Logdatei") from None
+        raise HTTPException(400, tr("Ungültige Logdatei")) from None
 
 
 @app.get("/api/logs/download")
@@ -1141,9 +1162,9 @@ async def log_download(file: str = logs.LOG_NAME):
     try:
         p = logs.path_of(file)
     except ValueError:
-        raise HTTPException(400, "Ungültige Logdatei") from None
+        raise HTTPException(400, tr("Ungültige Logdatei")) from None
     if not p.is_file():
-        raise HTTPException(404, "Logdatei nicht gefunden")
+        raise HTTPException(404, tr("Logdatei nicht gefunden"))
     return FileResponse(p, media_type="text/plain", filename=file)
 
 
@@ -1152,8 +1173,8 @@ async def log_clear(file: str = logs.LOG_NAME):
     try:
         logs.clear(file)
     except ValueError:
-        raise HTTPException(400, "Ungültige Logdatei") from None
-    log.info("Logdatei geleert: %s", file)
+        raise HTTPException(400, tr("Ungültige Logdatei")) from None
+    log.info("Log file cleared: %s", file)
     return {"ok": True}
 
 
@@ -1185,7 +1206,7 @@ async def index():
 async def manifest():
     """Makes p5assets installable as an app on the home screen (iPhone/iPad: Share > Add to Home Screen)."""
     return JSONResponse({
-        "name": "p5assets", "short_name": "p5assets", "description": "Fehlende Poster für Plex und Kometa finden und ersetzen",
+        "name": "p5assets", "short_name": "p5assets", "description": "Find and replace missing posters for Plex and Kometa",
         "start_url": "/", "scope": "/", "display": "standalone", "orientation": "any", "lang": "de",
         "background_color": "#02100a", "theme_color": "#02100a",
         "icons": [{"src": f"/static/icon-192.png?v={version.BASE_VERSION}", "sizes": "192x192", "type": "image/png", "purpose": "any"},

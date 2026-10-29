@@ -40,7 +40,7 @@ jobs:
           # dev  -> Branch "dev"  (Testen)
           # latest -> Branch "main" (stabil)
           # 1.2.3 -> Git-Tag v1.2.3
-          # sha-… -> immer, damit nie ohne Tag gebaut wird
+          # sha-… -> always, so a build never goes without a tag
           tags: |
             type=raw,value=dev,enable=${{ github.ref == 'refs/heads/dev' }}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}

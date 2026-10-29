@@ -34,7 +34,7 @@ def _write(state: dict) -> None:
         tmp.write_text(json.dumps(state), "utf-8")
         tmp.replace(STATE_FILE)
     except OSError as e:
-        log.warning("Benachrichtigungs-Zustand nicht speicherbar: %s", e)
+        log.warning("Notification state could not be saved: %s", e)
 
 
 def channels(cfg: dict | None = None) -> list[str]:
@@ -68,10 +68,10 @@ async def _send(channel: str, title: str, text: str, n: dict) -> str | None:
                     body["click"] = link
                 r = await c.post(t["url"].rstrip("/") + "/", json=body, headers={"Authorization": f"Bearer {t['token']}"} if t.get("token") else {})
         if r.status_code >= 400:
-            return f"HTTP {r.status_code}" + (" – Zugangsdaten oder Adresse prüfen" if r.status_code in (401, 403, 404) else "")
+            return f"HTTP {r.status_code}" + (" – check credentials or address" if r.status_code in (401, 403, 404) else "")
         return None
     except httpx.HTTPError as e:
-        return type(e).__name__ + " – nicht erreichbar"
+        return type(e).__name__ + " – not reachable"
     except Exception as e:  # noqa: BLE001
         return type(e).__name__
 
@@ -82,19 +82,19 @@ async def send_all(title: str, text: str, only: list[str] | None = None) -> dict
     for ch in (only or channels(cfg)):
         res[ch] = await _send(ch, title, text, cfg["notify"])
         if res[ch]:
-            log.warning("Benachrichtigung (%s) fehlgeschlagen: %s", ch, res[ch])
+            log.warning("Notification (%s) failed: %s", ch, res[ch])
     return res
 
 
 def compose(new: list[dict], multi_world: bool, link: str) -> tuple[str, str]:
     """(title, text) for the new titles without poster; ``new`` = [{title, year, world, coming_soon}]."""
     n, soon = len(new), sum(1 for x in new if x["coming_soon"])
-    head = f"{n} neue{'r' if n == 1 else ''} Titel ohne Poster" + (f", {soon} davon Coming Soon" if soon else "")
+    head = f"{n} new title{'' if n == 1 else 's'} without poster" + (f", {soon} of them Coming Soon" if soon else "")
     ordered = sorted(new, key=lambda x: (not x["coming_soon"], x["title"].casefold()))   # Coming Soon first
     lines = [f"• {'[' + x['world'] + '] ' if multi_world else ''}{x['title']}{' (' + str(x['year']) + ')' if x['year'] else ''}"
              f"{' – Coming Soon' if x['coming_soon'] else ''}" for x in ordered[:MAX_LISTED]]
     if n > MAX_LISTED:
-        lines.append(f"… und {n - MAX_LISTED} weitere")
+        lines.append(f"… and {n - MAX_LISTED} more")
     if link:
         lines.append(link)
     return "p5assets: " + head, "\n".join(lines)
@@ -121,14 +121,14 @@ async def after_scan(items: list[dict], worlds: list[dict], failed: dict[str, li
             if new and not first and channels(cfg):
                 title, text = compose(new, len(worlds) > 1, (cfg["notify"].get("base_url") or "").strip())
                 res = await send_all(title, text)
-                log.info("Benachrichtigung: %s (%s)", title, ", ".join(f"{k}: {'ok' if v is None else v}" for k, v in res.items()))
+                log.info("Notification: %s (%s)", title, ", ".join(f"{k}: {'ok' if v is None else v}" for k, v in res.items()))
         # --- 2: errors, once per error state
         names_failed = [n for lst in failed.values() for n in lst]
-        sig = error or (", ".join(sorted(set(names_failed))) + " nicht erreichbar" if names_failed else "")
+        sig = error or (", ".join(sorted(set(names_failed))) + " not reachable" if names_failed else "")
         if sig and sig != state.get("error_sig") and channels(cfg):
-            res = await send_all("p5assets: Fehler beim Scan", sig)
-            log.info("Benachrichtigung: Scan-Fehler (%s)", ", ".join(f"{k}: {'ok' if v is None else v}" for k, v in res.items()))
+            res = await send_all("p5assets: scan error", sig)
+            log.info("Notification: scan error (%s)", ", ".join(f"{k}: {'ok' if v is None else v}" for k, v in res.items()))
         state["error_sig"] = sig
         _write(state)
     except Exception as e:  # noqa: BLE001 – a notification problem must never break a scan
-        log.warning("Benachrichtigung konnte nicht verarbeitet werden: %s", type(e).__name__)
+        log.warning("Notification could not be processed: %s", type(e).__name__)

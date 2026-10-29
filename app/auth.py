@@ -27,6 +27,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from . import config, logs
+from .i18n import tr
 
 log = logs.get("auth")
 COOKIE = "p5_session"
@@ -113,15 +114,15 @@ _DUMMY = "scrypt$32768$8$1$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAAAAAAAA
 def _check_user(user: str) -> str:
     user = (user or "").strip()
     if not 1 <= len(user) <= 64:
-        raise HTTPException(400, "Der Benutzername muss 1 bis 64 Zeichen lang sein")
+        raise HTTPException(400, tr("Der Benutzername muss 1 bis 64 Zeichen lang sein"))
     return user
 
 
 def _check_password(password: str) -> str:
     if len(password or "") < MIN_PASSWORD:
-        raise HTTPException(400, f"Das Passwort braucht mindestens {MIN_PASSWORD} Zeichen")
+        raise HTTPException(400, tr("Das Passwort braucht mindestens {0} Zeichen", MIN_PASSWORD))
     if len(password) > 200:
-        raise HTTPException(400, "Das Passwort ist zu lang (höchstens 200 Zeichen)")
+        raise HTTPException(400, tr("Das Passwort ist zu lang (höchstens 200 Zeichen)"))
     return password
 
 
@@ -241,24 +242,24 @@ class Login(BaseModel):
 async def login(body: Login, request: Request, response: Response):
     d = _read()
     if not d:
-        raise HTTPException(400, "Die Anmeldung ist nicht eingerichtet")
+        raise HTTPException(400, tr("Die Anmeldung ist nicht eingerichtet"))
     ip = request.client.host if request.client else "?"
     keys = [f"ip:{ip}", f"user:{body.username.strip().lower()}"]
     wait = _blocked_for(keys)
     if wait:
-        log.warning("Anmeldung gesperrt für %s (noch %d s)", ip, wait)
-        raise HTTPException(429, f"Zu viele Fehlversuche. Bitte in {wait} Sekunden erneut versuchen.")
+        log.warning("Login blocked for %s (%d s left)", ip, wait)
+        raise HTTPException(429, tr("Zu viele Fehlversuche. Bitte in {0} Sekunden erneut versuchen.", wait))
     same_user = hmac.compare_digest(body.username.strip().lower().encode(), str(d["user"]).lower().encode())
     ok = await asyncio.to_thread(verify_password, body.password, d["hash"] if same_user else None)
     if not ok:
         _failed(keys)
-        log.warning("Anmeldung fehlgeschlagen (von %s)", ip)
+        log.warning("Login failed (from %s)", ip)
         await asyncio.sleep(0.4)
-        raise HTTPException(401, "Benutzername oder Passwort falsch")
+        raise HTTPException(401, tr("Benutzername oder Passwort falsch"))
     _cleared(keys)
     token, life = new_session(body.remember)
     _set_cookie(request, response, token, life, body.remember)
-    log.info("Angemeldet: %s (von %s)", d["user"], ip)
+    log.info("Signed in: %s (from %s)", d["user"], ip)
     return {"ok": True, "user": d["user"]}
 
 
@@ -279,12 +280,12 @@ class Setup(BaseModel):
 async def setup(body: Setup, request: Request, response: Response):
     """Switch the login on (only while it is off: with a login already set, changes go through /change)."""
     if enabled():
-        raise HTTPException(409, "Die Anmeldung ist schon eingerichtet")
+        raise HTTPException(409, tr("Die Anmeldung ist schon eingerichtet"))
     user, password = _check_new(body.username, body.password)
     _save({"user": user, "hash": await asyncio.to_thread(hash_password, password), "fun": True, "created": int(time.time())})
     token, life = new_session(body.remember)
     _set_cookie(request, response, token, life, body.remember)
-    log.info("Anmeldung eingerichtet (Benutzer %s)", user)
+    log.info("Login set up (user %s)", user)
     return {"ok": True, "user": user}
 
 
@@ -300,12 +301,12 @@ async def change(body: Change, request: Request, response: Response):
     """Change user name and/or password (needs the current password) or the fun switch (does not)."""
     d = _read()
     if not d or not current_user(request):
-        raise HTTPException(401, "Anmeldung erforderlich")
+        raise HTTPException(401, tr("Anmeldung erforderlich"))
     d = dict(d)
     new_hash = None
     if body.username is not None or body.new_password:
         if not await asyncio.to_thread(verify_password, body.current_password, d["hash"]):
-            raise HTTPException(403, "Das aktuelle Passwort ist falsch")
+            raise HTTPException(403, tr("Das aktuelle Passwort ist falsch"))
         if body.username is not None:
             d["user"] = _check_user(body.username)
         if body.new_password:
@@ -318,7 +319,7 @@ async def change(body: Change, request: Request, response: Response):
         end_all_sessions()                  # other devices have to log in again
         token, life = new_session(True)
         _set_cookie(request, response, token, life, True)
-        log.info("Passwort geändert")
+        log.info("Password changed")
     return {"ok": True, "user": d["user"]}
 
 
@@ -330,12 +331,12 @@ class Disable(BaseModel):
 async def disable(body: Disable, request: Request, response: Response):
     d = _read()
     if not d or not current_user(request):
-        raise HTTPException(401, "Anmeldung erforderlich")
+        raise HTTPException(401, tr("Anmeldung erforderlich"))
     if not await asyncio.to_thread(verify_password, body.password, d["hash"]):
-        raise HTTPException(403, "Das Passwort ist falsch")
+        raise HTTPException(403, tr("Das Passwort ist falsch"))
     _remove_all()
     response.delete_cookie(COOKIE, path="/")
-    log.warning("Anmeldung ausgeschaltet")
+    log.warning("Login turned off")
     return {"ok": True}
 
 
@@ -347,10 +348,10 @@ def gate(request: Request) -> Response | None:
         return None
     if not valid_session(request.cookies.get(COOKIE)):
         from fastapi.responses import JSONResponse
-        return JSONResponse({"detail": "Anmeldung erforderlich", "auth": True}, status_code=401)
+        return JSONResponse({"detail": tr("Anmeldung erforderlich"), "auth": True}, status_code=401)
     if request.method not in ("GET", "HEAD", "OPTIONS") and request.headers.get(CSRF_HEADER) != CSRF_VALUE:
         from fastapi.responses import JSONResponse
-        return JSONResponse({"detail": "Ungültige Anfrage (Herkunft)"}, status_code=403)
+        return JSONResponse({"detail": tr("Ungültige Anfrage (Herkunft)")}, status_code=403)
     return None
 
 
@@ -368,9 +369,9 @@ def startup() -> None:
     if os.environ.get("P5_AUTH_RESET", "").lower() in ("1", "true", "yes"):
         if _file().exists():
             _remove_all()
-            log.warning("Anmeldung wurde zurückgesetzt (P5_AUTH_RESET). Bitte die Variable wieder entfernen und die Anmeldung neu einrichten.")
+            log.warning("Login was reset (P5_AUTH_RESET). Please remove the variable and set up login again.")
         else:
-            log.info("P5_AUTH_RESET gesetzt, aber es gibt keine Anmeldung")
+            log.info("P5_AUTH_RESET is set, but there is no login")
 
 
 # -------------------------------------------------------------------- CLI ---
@@ -382,12 +383,12 @@ def _cli(argv: list[str]) -> int:
         return 0
     if cmd == "reset":
         d = _read()
-        print("Anmeldung zurücksetzen" + (f" (aktueller Benutzer: {d['user']})" if d else " (derzeit aus)"))
+        print("Reset login" + (f" (current user: {d['user']})" if d else " (currently off)"))
         print("  1) Neues Passwort setzen\n  2) Anmeldung ausschalten")
         choice = input("Auswahl [1/2]: ").strip()
         if choice == "2":
             _remove_all()
-            print("Die Anmeldung ist ausgeschaltet.")
+            print("Login is turned off.")
             return 0
         if choice != "1":
             print("Abgebrochen.")
@@ -395,7 +396,7 @@ def _cli(argv: list[str]) -> int:
         user = input(f"Benutzername [{d['user'] if d else 'admin'}]: ").strip() or (d["user"] if d else "admin")
         pw, pw2 = getpass.getpass("Neues Passwort: "), getpass.getpass("Passwort wiederholen: ")
         if pw != pw2:
-            print("Die Passwörter stimmen nicht überein.")
+            print("The passwords do not match.")
             return 1
         try:
             user, pw = _check_new(user, pw)

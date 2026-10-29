@@ -21,6 +21,8 @@ import unicodedata
 from collections import deque
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
+from .i18n import tr
+
 IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
 MAX_SEASON = 50  # Staffel-Slots, die immer angeboten werden (auch ohne dass Plex sie kennt)
 UPLOAD_EXTS = IMAGE_EXTS + (".gif", ".bmp", ".tif", ".tiff", ".avif")
@@ -37,7 +39,7 @@ def parse_slot_key(slot: str) -> int | None:
         return None
     m = re.fullmatch(r"season-(\d{1,4})", slot)
     if not m:
-        raise ValueError(f"Unbekannter Slot: {slot}")
+        raise ValueError(tr("Unbekannter Slot: {0}", slot))
     return int(m.group(1))
 
 
@@ -60,7 +62,7 @@ def slot_basename(season: int | None) -> str:
 def slot_label(season: int | None) -> str:
     if season is None:
         return "Poster"
-    return "Specials" if season == 0 else f"Staffel {season}"
+    return "Specials" if season == 0 else f"Season {season}"
 
 
 # ------------------------------------------------------- folder naming ---

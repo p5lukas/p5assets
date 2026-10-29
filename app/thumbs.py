@@ -32,7 +32,7 @@ def cleanup_old() -> None:
         old = config.CACHE_DIR / name
         if old.is_dir():
             shutil.rmtree(old, ignore_errors=True)
-            log.info("Alter Vorschaubild-Cache entfernt (%s)", name)
+            log.info("Old thumbnail cache removed (%s)", name)
 
 
 def thumb_path(src: Path, width: int = WIDTH) -> Path:
@@ -64,7 +64,7 @@ def get(src: Path, width: int = WIDTH) -> Path:
                 im.convert("RGB").save(tmp, "JPEG", quality=QUALITY, optimize=True)
                 tmp.replace(out)
         except Exception as e:  # noqa: BLE001
-            log.warning("Vorschaubild für %s nicht möglich (%s) – Original wird verwendet", src.name, e)
+            log.warning("No thumbnail possible for %s (%s) – using the original", src.name, e)
             return src
     return out
 
@@ -92,4 +92,4 @@ def prune(max_bytes: int = MAX_CACHE_BYTES) -> None:
         total -= size
         if total <= max_bytes * 0.8:
             break
-    log.info("Vorschaubild-Cache bereinigt (%.0f MB)", total / 1048576)
+    log.info("Thumbnail cache cleaned (%.0f MB)", total / 1048576)

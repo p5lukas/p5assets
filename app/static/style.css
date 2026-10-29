@@ -574,3 +574,18 @@ input[type=search]::-webkit-search-cancel-button,input[type=search]::-webkit-sea
 .mrow:first-child{border-top:0}.mrow i{font-style:normal;color:var(--accent);font-size:22px;line-height:1}.mrow:active{background:var(--dim)}
 .mback{background:transparent;border:0;color:var(--accent);font-size:16px;padding:6px 2px;text-align:left;align-self:flex-start}
 .mprog{width:100%}.mprog .bar{height:4px;border-radius:2px;background:var(--line);overflow:hidden}.mprog .bar i{display:block;height:100%;background:var(--accent);box-shadow:0 0 10px var(--glow)}
+.big.term{font-family:var(--mono,ui-monospace,Menlo,Consolas,monospace);font-size:30px;font-weight:700;letter-spacing:.04em;color:var(--accent);text-shadow:0 0 16px var(--glow);margin:6px 0 14px}
+.opt.step .stepno{color:var(--accent);font-weight:700;font-size:15px;min-width:26px}
+
+/* language switch: terminal prompt `$ EN/de_` */
+.langsw{display:inline-flex;align-items:center;font:inherit;font-size:12.5px;letter-spacing:.04em;padding:6px 10px;border:1px solid var(--line);border-radius:var(--r);background:transparent;color:var(--muted);cursor:pointer;white-space:nowrap}
+.langsw .pr{color:var(--faint);margin-right:7px}
+.langsw b{font-weight:600;padding:1px 5px;border-radius:3px;color:var(--muted)}
+.langsw b.on{color:var(--bg,#02100a);background:var(--accent);box-shadow:0 0 10px var(--glow)}
+.langsw .sep{opacity:.4;margin:0 2px}
+.langsw u{text-decoration:none;color:var(--accent);margin-left:4px;animation:blink 1.1s steps(1) infinite}
+.langsw:hover,.langsw:focus-visible{border-color:var(--accent);color:var(--accent)}
+.wizbar{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.loginlang{position:fixed;top:calc(env(safe-area-inset-top,0px) + 14px);right:16px;z-index:5}
+@media(prefers-reduced-motion:reduce){.langsw u{animation:none}}
+@media(max-width:760px){.langsw .pr,.langsw u{display:none}.langsw{padding:5px 8px}}

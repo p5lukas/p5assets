@@ -6,6 +6,7 @@ import asyncio
 import httpx
 
 from .errors import short
+from .i18n import tr
 
 PRODUCT = "p5assets"
 VERSION = "1.0.0"
@@ -47,11 +48,11 @@ class Plex:
         try:
             r = await self.client.get(path, params=params)
         except httpx.HTTPError as e:
-            raise PlexError(f"Plex nicht erreichbar: {short(e)}") from e
+            raise PlexError(tr("Plex nicht erreichbar: {0}", short(e))) from e
         if r.status_code == 401:
-            raise PlexError("Plex-Token ungültig (401)")
+            raise PlexError(tr("Plex-Token ungültig (401)"))
         if r.status_code >= 400:
-            raise PlexError(f"Plex antwortete mit HTTP {r.status_code}")
+            raise PlexError(tr("Plex antwortete mit HTTP {0}", r.status_code))
         return r.json().get("MediaContainer", {})
 
     async def identity(self) -> dict:
@@ -119,7 +120,7 @@ class Plex:
     async def upload_poster(self, rating_key: str, data: bytes) -> None:
         r = await self.client.post(f"/library/metadata/{rating_key}/posters", content=data)
         if r.status_code >= 400:
-            raise PlexError(f"Upload zu Plex fehlgeschlagen (HTTP {r.status_code})")
+            raise PlexError(tr("Upload zu Plex fehlgeschlagen (HTTP {0})", r.status_code))
 
 
 # ------------------------------------------------------------ plex.tv ---

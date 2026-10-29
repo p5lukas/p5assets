@@ -1,6 +1,6 @@
 #!/bin/sh
-# Läuft mit PUID/PGID (Unraid-Standard: 99/100 = nobody/users), damit Dateien im Assets-Ordner
-# dem richtigen Benutzer gehören.
+# Runs with PUID/PGID (Unraid default: 99/100 = nobody/users) so that files in the assets folder
+# belong to the right user.
 set -e
 PUID="${PUID:-99}"
 PGID="${PGID:-100}"

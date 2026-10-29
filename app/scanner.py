@@ -8,6 +8,7 @@ from collections import Counter
 from pathlib import Path
 
 from . import arr, config, dims, history, kometa, logs, notify, providers, thumbs, trash
+from .i18n import tr
 from .plex import Plex, PlexError
 
 STATE: dict = {
@@ -50,6 +51,11 @@ def _slot_info(f: Path, root: Path) -> dict:
     if d:
         out["w"], out["h"] = d
     return out
+
+
+def render(msg) -> str:
+    """Scan messages are stored language-neutral as [German text, args…] and translated when the status is requested."""
+    return tr(msg[0], *msg[1:]) if isinstance(msg, list) and msg else (msg or "")
 
 
 def build_slots(item: dict, index: kometa.AssetIndex, ignore_specials: bool) -> None:
@@ -99,7 +105,7 @@ async def _plex_items(cfg: dict, world: dict, plex: Plex, warnings: list[str]) -
     for lib in cfg["libraries"]:
         if not lib.get("enabled") or lib.get("world") != world["id"]:
             continue
-        STATE["progress"] = f"{world['name']}: scanne {lib['title']} …"
+        STATE["progress"] = ["{0}: scanne {1} …", world["name"], lib["title"]]
         raw = await plex.items(lib["key"])
         seasons_by_show: dict[str, list[dict]] = {}
         locations: dict[str, list[str]] = {}
@@ -113,7 +119,7 @@ async def _plex_items(cfg: dict, world: dict, plex: Plex, warnings: list[str]) -
                 })
             need = [str(m["ratingKey"]) for m in raw if not m.get("Location")]
             if need:
-                STATE["progress"] = f"{world['name']}: lese Pfade ({lib['title']}) …"
+                STATE["progress"] = ["{0}: lese Pfade ({1}) …", world["name"], lib["title"]]
                 locations = await plex.show_locations(need)
         in_collection: dict[str, list[dict]] = {}
         if lib["type"] == "movie":     # what Plex shows as collections (optional: a failure only costs the collection overview)
@@ -122,7 +128,7 @@ async def _plex_items(cfg: dict, world: dict, plex: Plex, warnings: list[str]) -
                     for member in await plex.collection_members(str(c["ratingKey"])):
                         in_collection.setdefault(member, []).append({"id": f"{lib['key']}:{c['ratingKey']}", "title": c.get("title", "")})
             except PlexError as e:
-                warnings.append(f"Collections von „{lib['title']}“ nicht gelesen: {e}")
+                warnings.append(["Collections von „{0}“ nicht gelesen: {1}", lib["title"], str(e)])
         for md in raw:
             rk = str(md["ratingKey"])
             if lib["type"] == "movie":
@@ -147,16 +153,16 @@ async def _arr_items(cfg: dict, world: dict, warnings: list[str]) -> list[dict]:
     for inst in cfg["arr"]:
         if inst.get("world") != world["id"] or not inst.get("url") or not inst.get("api_key"):
             continue
-        STATE["progress"] = f"{world['name']}: lese {inst['name']} …"
+        STATE["progress"] = ["{0}: lese {1} …", world["name"], inst["name"]]
         try:
             entries = await arr.fetch(inst)
             if inst.get("hide_unmonitored"):
                 hidden = sum(1 for e in entries if not e["monitored"])
                 entries = [e for e in entries if e["monitored"]]
-                log.info("%s: %d nicht überwachte Titel ausgeblendet", inst["name"], hidden)
+                log.info("%s: %d unmonitored titles hidden", inst["name"], hidden)
             out.extend(entries)
         except arr.ArrError as e:
-            warnings.append(f"{inst['name']}: {e}")
+            warnings.append(["{0}: {1}", inst["name"], str(e)])
             STATE["failed"].setdefault(world["id"], []).append(inst["name"])   # their titles are missing from this scan
     return out
 
@@ -239,20 +245,20 @@ async def scan() -> None:
         return
     async with _lock:
         cfg = config.get()
-        STATE.update(running=True, error=None, warnings=[], progress="Starte Scan …", failed={})
+        STATE.update(running=True, error=None, warnings=[], progress=["Starte Scan …"], failed={})
         t0 = time.time()
-        log.info("Scan gestartet (%d Welt(en))", len(cfg["worlds"]))
+        log.info("Scan started (%d world(s))", len(cfg["worlds"]))
         try:
             warnings: list[str] = []
             plex: Plex | None = None
             if cfg["plex"]["url"] and cfg["plex"]["token"]:
                 plex = Plex(cfg["plex"]["url"], cfg["plex"]["token"], cfg["client_id"])
             elif any(l.get("enabled") for l in cfg["libraries"]):
-                raise PlexError("Plex ist noch nicht verbunden")
+                raise PlexError("Plex is not connected yet")
             all_items: list[dict] = []
             try:
                 for world in cfg["worlds"]:
-                    STATE["progress"] = f"{world['name']}: lese Assets-Ordner …"
+                    STATE["progress"] = ["{0}: lese Assets-Ordner …", world["name"]]
                     index = await asyncio.to_thread(
                         kometa.get_index, Path(world["assets_path"]), cfg["assets"]["asset_folders"],
                         world.get("search_depth", 3), True)
@@ -263,25 +269,25 @@ async def scan() -> None:
                     all_items.extend(done)
                     history.record(world["id"], len(done), sum(len([s for s in i["slots"].values() if not s.get("extra")]) for i in done),
                                    sum(i["missing"] for i in done))
-                    log.info("Welt „%s“: %d Titel (%d aus Plex, %d nur Sonarr/Radarr/Ordner), %d Slots fehlen, Assets-Ordner %s",
+                    log.info("World “%s”: %d titles (%d from Plex, %d only Sonarr/Radarr/folder), %d slots missing, assets folder %s",
                              world["name"], len(done), sum(1 for i in done if i["in_plex"]), sum(1 for i in done if not i["in_plex"]),
                              sum(i["missing"] for i in done), world["assets_path"])
                     if not Path(world["assets_path"]).is_dir():
-                        warnings.append(f"{world['name']}: Assets-Ordner {world['assets_path']} nicht gefunden")
+                        warnings.append(["{0}: Assets-Ordner {1} nicht gefunden", world["name"], world["assets_path"]])
             finally:
                 if plex:
                     await plex.close()
             all_items.sort(key=lambda i: i["title"].casefold())
             STATE.update(items=all_items, scanned_at=int(time.time()), progress="", warnings=warnings)
             for w in warnings:
-                log.warning("Scan: %s", w)
-            log.info("Scan fertig: %d Titel in %.1f s", len(all_items), time.time() - t0)
+                log.warning("Scan: %s", render(w))
+            log.info("Scan finished: %d titles in %.1f s", len(all_items), time.time() - t0)
             await asyncio.to_thread(thumbs.prune)
             await asyncio.to_thread(trash.purge)
             asyncio.create_task(_measure_later(all_items))
             await notify.after_scan(all_items, cfg["worlds"], STATE["failed"], None)
         except Exception as e:
-            log.error("Scan fehlgeschlagen: %s", e, exc_info=not isinstance(e, PlexError))
+            log.error("Scan failed: %s", e, exc_info=not isinstance(e, PlexError))
             STATE.update(error=str(e) or e.__class__.__name__, progress="")
             await notify.after_scan([], cfg["worlds"], {}, STATE["error"])
         finally:
@@ -293,7 +299,7 @@ async def _measure_later(items: list[dict]) -> None:
     try:
         await asyncio.to_thread(dims.fill, items)
     except Exception as e:  # noqa: BLE001
-        log.warning("Bildgrößen konnten nicht gelesen werden: %s", e)
+        log.warning("Image sizes could not be read: %s", e)
 
 
 def _parent_of(it: dict, root: Path) -> Path | None:
@@ -363,7 +369,7 @@ def summary() -> dict:
         }
     return {
         "worlds": worlds, "scanned_at": STATE["scanned_at"], "running": STATE["running"],
-        "error": STATE["error"], "warnings": STATE["warnings"], "progress": STATE["progress"],
+        "error": STATE["error"], "warnings": [render(w) for w in STATE["warnings"]], "progress": render(STATE["progress"]),
     }
 
 

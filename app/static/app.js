@@ -20,14 +20,34 @@ function h(tag, attrs = {}, ...kids) {
 }
 const fill = (el, ...kids) => { el.replaceChildren(...clean(kids)); return el; };
 
+/* ---------------------------------------------------------------- i18n --- */
+// German is the source language of the texts in this file; English comes from window.P5_EN (app/i18n/en.json, served as /i18n.js).
+// T(key, a, b) fills the placeholders {0}, {1} …; TP(n, keyOne, keyMany, …) picks by number ({0} = n).
+const LANG = (() => { try { return localStorage.getItem("p5lang") === "de" ? "de" : "en"; } catch { return "en"; } })();
+const LOCALE = LANG === "de" ? "de-DE" : "en-GB";
+const T = (key, ...args) => {
+  const s = LANG === "en" && window.P5_EN && key in window.P5_EN ? window.P5_EN[key] : key;
+  return args.length ? s.replace(/\{(\d+)\}/g, (m, i) => (args[+i] ?? m)) : s;
+};
+const TP = (n, one, many, ...rest) => T(n === 1 ? one : many, n, ...rest);
+/** Terminal-style language switch: `$ EN/de_` (the active language is lit). */
+function langSwitch() {
+  const opt = code => h("b", { class: code === LANG ? "on" : "" }, code.toUpperCase());
+  return h("button", { class: "langsw", type: "button", title: "Language / Sprache", "aria-label": "Language / Sprache", onclick: () => setLang(LANG === "en" ? "de" : "en") },
+    h("span", { class: "pr", "aria-hidden": "true" }, "$"), opt("en"), h("span", { class: "sep", "aria-hidden": "true" }, "/"), opt("de"), h("u", { "aria-hidden": "true" }, "_"));
+}
+function setLang(l) { try { localStorage.setItem("p5lang", l); } catch { /* private mode */ } location.reload(); }
+document.documentElement.lang = LANG;
+{ const dv = $("#dropveil"); if (dv) { dv.querySelector("b").textContent = T("Hier ablegen"); dv.querySelector("span").textContent = T("Bilder, Ordner oder ZIP – p5assets benennt alles Kometa-konform um"); } }
+
 async function api(path, opts = {}) {
-  const o = { ...opts, headers: { "X-Requested-With": "p5assets", ...(opts.headers || {}) } };     // the header protects writing requests when a login is set (CSRF)
+  const o = { ...opts, headers: { "X-Requested-With": "p5assets", "X-Lang": LANG, ...(opts.headers || {}) } };     // the header protects writing requests when a login is set (CSRF)
   if (o.json !== undefined) { o.method = o.method || "POST"; o.headers["Content-Type"] = "application/json"; o.body = JSON.stringify(o.json); delete o.json; }
   const r = await fetch("/api" + path, o);
   let data = null;
   try { data = await r.json(); } catch { /* not json */ }
-  if (r.status === 401 && data && data.auth && !path.startsWith("/auth/")) { showLogin(); throw new Error("Anmeldung erforderlich"); }     // session expired or logged out elsewhere
-  if (!r.ok) throw new Error((data && data.detail) || `Fehler ${r.status}`);
+  if (r.status === 401 && data && data.auth && !path.startsWith("/auth/")) { showLogin(); throw new Error(T("Anmeldung erforderlich")); }     // session expired or logged out elsewhere
+  if (!r.ok) throw new Error((data && data.detail) || T("Fehler {0}", r.status));
   return data;
 }
 
@@ -39,10 +59,10 @@ function toast(msg, kind = "", action = null) {
 }
 /** "Ersetzt ✓ [Rückgängig]": the previous poster is in the trash for 30 days, one tap brings it back. */
 function undoToast(msg, r, draw) {
-  toast(msg, "ok", r && r.trash ? { label: "Rückgängig", fn: async () => {
+  toast(msg, "ok", r && r.trash ? { label: T("Rückgängig"), fn: async () => {
     try {
       const res = await api(`/trash/${r.trash}/restore`, { method: "POST" });
-      toast("Wiederhergestellt ✓", "ok");
+      toast(T("Wiederhergestellt ✓"), "ok");
       if (res.item) { S.rain.add(res.item.id + "|poster"); draw ? draw(res.item) : loadItems().then(renderGrid); }
       else loadItems().then(renderGrid);
     } catch (e) { toast(e.message, "bad"); }
@@ -55,7 +75,7 @@ const busy = async (btn, fn) => {
 const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 const uid = p => p + Math.random().toString(36).slice(2, 8);
 const seasonNum = k => k === "poster" ? -1 : parseInt(k.split("-")[1], 10);
-const slotLabel = (k, type) => k === "poster" ? (type === "movie" ? "Poster" : "Serienposter") : seasonNum(k) === 0 ? "Specials" : "Staffel " + seasonNum(k);
+const slotLabel = (k, type) => k === "poster" ? (type === "movie" ? T("Poster") : T("Serienposter")) : seasonNum(k) === 0 ? T("Specials") : T("Staffel ") + seasonNum(k);
 
 /* ---------------------------------------------------------------- icons --- */
 const ICONS = {
@@ -229,27 +249,32 @@ async function loadVersion() {
     const v = await api("/version"), foot = $("#foot");
     const link = (text, href) => href ? h("a", { href, target: "_blank", rel: "noopener" }, text) : h("span", {}, text);
     fill(foot, h("span", {}, "p5assets ", h("b", {}, v.version)),
-      v.branch ? link(`Branch: ${v.branch}`, v.branch_url) : null,
-      v.commit_short ? link(`Commit ${v.commit_short}`, v.commit_url) : null,
-      h("a", { href: "#", onclick: e => { e.preventDefault(); checkNews(true); } }, "Neuigkeiten"),
-      h("a", { href: "#", onclick: e => { e.preventDefault(); location.reload(); } }, "Neu laden"),
-      S.auth && S.auth.enabled ? h("a", { href: "#", onclick: async e => { e.preventDefault(); await api("/auth/logout", { method: "POST" }); location.reload(); } }, "Abmelden") : null,
+      v.branch ? link(T("Branch: {0}", v.branch), v.branch_url) : null,
+      v.commit_short ? link(T("Commit {0}", v.commit_short), v.commit_url) : null,
+      h("a", { href: "#", onclick: e => { e.preventDefault(); checkNews(true); } }, T("Neuigkeiten")),
+      h("a", { href: "#", onclick: e => { e.preventDefault(); location.reload(); } }, T("Neu laden")),
+      S.auth && S.auth.enabled ? h("a", { href: "#", onclick: async e => { e.preventDefault(); await api("/auth/logout", { method: "POST" }); location.reload(); } }, T("Abmelden")) : null,
       link("GitHub ↗", v.repo));
   } catch { /* footer is optional */ }
 }
 
 /* ----------------------------------------------- trash / orphans / cleanup --- */
 /** "1 Titel" / "3 Titel": the number with the right singular or plural form. */
-const pl = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+// number + noun: German forms are used as written; English comes from the table (lower case; "Ordner#sg" / "Ordner#pl" for words that look the same in both numbers in German)
+const pl = (n, one, many) => {
+  const word = n === 1 ? one : many;
+  if (LANG === "de") return `${n} ${word}`;
+  return `${n} ${T(one === many ? word + (n === 1 ? "#sg" : "#pl") : word).toLowerCase()}`;
+};
 /** Verb form that goes with a count: "1 Kachel fehlt", "3 Kacheln fehlen". */
-const fehlt = n => n === 1 ? "fehlt" : "fehlen";
-const fmtBytes = b => b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB";
-const fmtWhen = ts => new Date(ts * 1000).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-const REASON = { replace: "ersetzt", delete: "gelöscht", orphan: "verwaister Ordner", restore: "vor Wiederherstellung" };
+const fehlt = n => T(n === 1 ? "fehlt" : "fehlen");
+const fmtBytes = b => b >= 1048576 ? (b / 1048576).toFixed(1) + T(" MB") : Math.max(1, Math.round(b / 1024)) + T(" KB");
+const fmtWhen = ts => new Date(ts * 1000).toLocaleString(LOCALE, { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+const REASON = { replace: T("ersetzt"), delete: T("gelöscht"), orphan: T("verwaister Ordner"), restore: T("vor Wiederherstellung") };
 
 /** "✕" that clears a search field with one tap (only visible while there is text); Esc in the field does the same. */
 function clearBtn(input) {
-  const btn = h("button", { type: "button", class: "sclear", "aria-label": "Suche leeren", title: "Suche leeren", hidden: !input.value,
+  const btn = h("button", { type: "button", class: "sclear", "aria-label": T("Suche leeren"), title: T("Suche leeren"), hidden: !input.value,
     onclick: () => { input.value = ""; input.dispatchEvent(new Event("input", { bubbles: true })); btn.hidden = true; input.focus(); } }, "✕");
   input.addEventListener("input", () => { btn.hidden = !input.value; });
   input.addEventListener("keydown", e => { if (e.key === "Escape" && input.value) { e.stopPropagation(); btn.click(); } });
@@ -259,7 +284,7 @@ const normText = t => (t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
 const LIST_SEARCH_MIN = 8;      // a search field is only worth it for longer lists
 /** Small search field for a list inside a window; calls onInput(normalized text) while typing. */
 function listSearch(onInput) {
-  const input = h("input", { type: "search", placeholder: "Suchen …", autocomplete: "off", enterkeyhint: "search", oninput: e => onInput(normText(e.target.value).trim()) });
+  const input = h("input", { type: "search", placeholder: T("Suchen …"), autocomplete: "off", enterkeyhint: "search", oninput: e => onInput(normText(e.target.value).trim()) });
   return h("div", { class: "search lsearch" }, icon("search", 16), input, clearBtn(input));
 }
 
@@ -267,7 +292,7 @@ function listSearch(onInput) {
 function openCleanup(initial = "trash") {
   let tab = initial;
   const body = h("div"), tabs = h("div", { class: "tabs", style: "position:static" });
-  const m = modal("Papierkorb & Aufräumen", h("div", {}, tabs, body));
+  const m = modal(T("Papierkorb & Aufräumen"), h("div", {}, tabs, body));
   const slotNames = g => (g.slot || "").split(", ").filter(Boolean).map(k => { try { return slotLabel(k, g.type || "show"); } catch { return k; } }).join(", ");
   const refresh = () => { loadItems().then(renderGrid); api("/status").then(r => { S.st.summary = r; updateHero(); }); };
 
@@ -281,35 +306,35 @@ function openCleanup(initial = "trash") {
       const days = Math.max(0, Math.ceil((g.expires * 1000 - Date.now()) / 86400000));
       const slots = slotNames(g);
       return h("div", { class: "trow" },
-        file ? h("img", { loading: "lazy", alt: "", src: `/api/trash/${g.id}/file/${file.n}` }) : h("div", { class: "noth" }, g.files.some(f => f.dir) ? "📁" : "＋"),
+        file ? h("img", { loading: "lazy", alt: "", src: `/api/trash/${g.id}/file/${file.n}` }) : h("div", { class: "noth" }, g.files.some(f => f.dir) ? icon("folder", 20) : "＋"),
         h("div", { class: "grow" }, h("b", {}, g.title || "—"), h("div", { class: "hint", style: "margin:0" }, [slots, REASON[g.reason] || g.reason].filter(Boolean).join(" · ")),
-          h("div", { class: "hint", style: "margin:0" }, `${fmtWhen(g.ts)} · ${fmtBytes(g.size)} · noch ${pl(days, "Tag", "Tage")}`)),
+          h("div", { class: "hint", style: "margin:0" }, T("{0} · {1} · noch {2}", fmtWhen(g.ts), fmtBytes(g.size), pl(days, "Tag", "Tage")))),
         h("button", { class: "btn sm primary", onclick: async e => {
-          try { await busy(e.currentTarget, () => api(`/trash/${g.id}/restore`, { method: "POST" })); toast("Wiederhergestellt ✓", "ok"); refresh(); drawTrash(); }
+          try { await busy(e.currentTarget, () => api(`/trash/${g.id}/restore`, { method: "POST" })); toast(T("Wiederhergestellt ✓"), "ok"); refresh(); drawTrash(); }
           catch (err) { toast(err.message, "bad"); }
-        } }, "Wiederherstellen"),
-        h("button", { class: "btn sm danger", title: "Endgültig löschen", onclick: async () => { await api("/trash/" + g.id, { method: "DELETE" }); drawTrash(); } }, icon("trash", 14)));
+        } }, T("Wiederherstellen")),
+        h("button", { class: "btn sm danger", title: T("Endgültig löschen"), onclick: async () => { await api("/trash/" + g.id, { method: "DELETE" }); drawTrash(); } }, icon("trash", 14)));
     };
     const items = gs.map(g => ({ el: rowEl(g), hay: normText([g.title, slotNames(g), REASON[g.reason] || g.reason, ...g.files.map(f => f.orig)].join(" ")) }));
     const apply = q => {
       const vis = items.filter(i => !q || i.hay.includes(q));
-      fill(list, vis.length ? vis.map(i => i.el) : h("div", { class: "empty", style: "padding:30px" }, "Nichts gefunden."));
-      count.textContent = (q ? `${vis.length} von ${gs.length} ${gs.length === 1 ? "Eintrag" : "Einträgen"}` : pl(gs.length, "Eintrag", "Einträge")) + ` · ${fmtBytes(total)}`;
+      fill(list, vis.length ? vis.map(i => i.el) : h("div", { class: "empty", style: "padding:30px" }, T("Nichts gefunden.")));
+      count.textContent = (q ? T("{0} von {1} {2}", vis.length, gs.length, gs.length === 1 ? T("Eintrag") : T("Einträgen")) : pl(gs.length, "Eintrag", "Einträge")) + ` · ${fmtBytes(total)}`;
     };
     apply("");
     fill(body,
-      h("p", { class: "hint", style: "margin-top:0" }, `Ersetzte und gelöschte Poster bleiben ${pl(r.keep_days, "Tag", "Tage")} hier (höchstens 2 GB). „Wiederherstellen“ legt das alte Bild zurück.`),
+      h("p", { class: "hint", style: "margin-top:0" }, T("Ersetzte und gelöschte Poster bleiben {0} hier (höchstens 2 GB). „Wiederherstellen“ legt das alte Bild zurück.", pl(r.keep_days, "Tag", "Tage"))),
       gs.length ? h("div", { class: "row wrap", style: "margin-bottom:10px" }, count, h("span", { class: "spacer" }),
         gs.length >= LIST_SEARCH_MIN ? listSearch(apply) : null,
-        h("button", { class: "btn sm danger", onclick: async () => { if (!confirm("Papierkorb ganz leeren? Das kann nicht rückgängig gemacht werden.")) return; await api("/trash", { method: "DELETE" }); drawTrash(); } }, "Papierkorb leeren")) : null,
-      gs.length ? list : h("div", { class: "empty", style: "padding:30px" }, "Der Papierkorb ist leer."));
+        h("button", { class: "btn sm danger", onclick: async () => { if (!confirm(T("Papierkorb ganz leeren? Das kann nicht rückgängig gemacht werden."))) return; await api("/trash", { method: "DELETE" }); drawTrash(); } }, T("Papierkorb leeren"))) : null,
+      gs.length ? list : h("div", { class: "empty", style: "padding:30px" }, T("Der Papierkorb ist leer.")));
   }
 
   async function drawOrphans() {
-    fill(body, h("div", { class: "empty", style: "padding:30px" }, h("span", { class: "spin" }), " Suche verwaiste Ordner …"));
+    fill(body, h("div", { class: "empty", style: "padding:30px" }, h("span", { class: "spin" }), T(" Suche verwaiste Ordner …")));
     const r = await api("/orphans?world=" + encodeURIComponent(S.world));
-    if (!r.folders) { fill(body, h("div", { class: "empty" }, "Verwaiste Ordner lassen sich nur bei Ordner-Struktur (asset_folders) prüfen.")); return; }
-    if (r.blocked) { fill(body, h("div", { class: "status bad" }, "⚠ " + r.blocked)); return; }
+    if (!r.folders) { fill(body, h("div", { class: "empty" }, T("Verwaiste Ordner lassen sich nur bei Ordner-Struktur (asset_folders) prüfen."))); return; }
+    if (r.blocked) { fill(body, h("div", { class: "status bad" }, "[ !! ] " + r.blocked)); return; }
     const sel = new Set();
     const list = h("div"), go = h("button", { class: "btn primary", disabled: true });
     let visible = [], filtered = false;
@@ -322,35 +347,35 @@ function openCleanup(initial = "trash") {
     const toggleAll = h("button", { class: "btn sm", onclick: () => {
       const all = visible.length && visible.every(i => sel.has(i.o.path));
       visible.forEach(i => { i.input.checked = !all; i.input.dispatchEvent(new Event("change")); });
-    } }, "Alle wählen");
+    } }, T("Alle wählen"));
     const sync = () => {
-      go.textContent = `${sel.size} in den Papierkorb`; go.disabled = !sel.size;
+      go.textContent = T("{0} in den Papierkorb", sel.size); go.disabled = !sel.size;
       const all = visible.length && visible.every(i => sel.has(i.o.path));
-      toggleAll.textContent = (filtered ? "Treffer " : "Alle ") + (all ? "abwählen" : "wählen");
+      toggleAll.textContent = T(filtered ? (all ? "Treffer abwählen" : "Treffer wählen") : (all ? "Alle abwählen" : "Alle wählen"));
     };
     const count = h("span", { class: "hint", style: "margin:0" });
     const apply = q => {
       filtered = !!q; visible = items.filter(i => !q || i.hay.includes(q));
-      fill(list, visible.length ? visible.map(i => i.el) : h("div", { class: "empty", style: "padding:30px" }, "Nichts gefunden."));
-      count.textContent = q ? `${visible.length} von ${items.length} ${items.length === 1 ? "Ordner" : "Ordnern"}` : pl(items.length, "Ordner", "Ordner");
+      fill(list, visible.length ? visible.map(i => i.el) : h("div", { class: "empty", style: "padding:30px" }, T("Nichts gefunden.")));
+      count.textContent = q ? T("{0} von {1} {2}", visible.length, items.length, items.length === 1 ? T("Ordner") : T("Ordnern")) : pl(items.length, "Ordner", "Ordner");
       sync();
     };
     go.onclick = async () => {
-      if (!confirm(`${pl(sel.size, "Ordner", "Ordner")} in den Papierkorb verschieben? ${sel.size === 1 ? "Er lässt" : "Sie lassen"} sich dort 30 Tage lang wiederherstellen.`)) return;
+      if (!confirm(TP(sel.size, "Ein Ordner in den Papierkorb verschieben? Er lässt sich dort 30 Tage lang wiederherstellen.", "{0} Ordner in den Papierkorb verschieben? Sie lassen sich dort 30 Tage lang wiederherstellen."))) return;
       const res = await busy(go, () => api("/orphans/trash", { json: { world: S.world, paths: [...sel] } }));
-      toast(`${pl(res.moved, "Ordner", "Ordner")} im Papierkorb`, "ok", res.trash ? { label: "Rückgängig", fn: async () => { await api(`/trash/${res.trash}/restore`, { method: "POST" }); toast("Wiederhergestellt ✓", "ok"); } } : null);
+      toast(T("{0} im Papierkorb", pl(res.moved, "Ordner", "Ordner")), "ok", res.trash ? { label: T("Rückgängig"), fn: async () => { await api(`/trash/${res.trash}/restore`, { method: "POST" }); toast(T("Wiederhergestellt ✓"), "ok"); } } : null);
       drawOrphans();
     };
     apply("");
     fill(body,
-      h("p", { class: "hint", style: "margin-top:0" }, `Ordner in „${curWorld().name}“ mit Postern oder Staffelbildern, zu denen es keinen Titel mehr gibt: weder in Plex noch in Sonarr/Radarr. Titel, die Sonarr oder Radarr noch kennen (auch angekündigte), bleiben geschützt.`),
+      h("p", { class: "hint", style: "margin-top:0" }, T("Ordner in „{0}“ mit Postern oder Staffelbildern, zu denen es keinen Titel mehr gibt: weder in Plex noch in Sonarr/Radarr. Titel, die Sonarr oder Radarr noch kennen (auch angekündigte), bleiben geschützt.", curWorld().name)),
       r.orphans.length ? [h("div", { class: "row wrap", style: "margin-bottom:8px" }, toggleAll, count, h("span", { class: "spacer" }),
           r.orphans.length >= LIST_SEARCH_MIN ? listSearch(apply) : null, go), list]
-        : h("div", { class: "empty", style: "padding:30px" }, "🎉 Keine verwaisten Ordner gefunden."));
+        : h("div", { class: "empty", style: "padding:30px" }, T("[ OK ] Keine verwaisten Ordner gefunden.")));
   }
 
   const draw = () => {
-    fill(tabs, [["trash", "Papierkorb"], ["orphans", "Verwaiste Ordner"]].map(([k, label]) => h("button", { class: "tab" + (tab === k ? " on" : ""), onclick: () => { tab = k; draw(); } }, label)));
+    fill(tabs, [["trash", T("Papierkorb")], ["orphans", T("Verwaiste Ordner")]].map(([k, label]) => h("button", { class: "tab" + (tab === k ? " on" : ""), onclick: () => { tab = k; draw(); } }, label)));
     (tab === "trash" ? drawTrash : drawOrphans)().catch(e => fill(body, h("div", { class: "status bad" }, e.message)));
   };
   draw();
@@ -361,7 +386,7 @@ function openCleanup(initial = "trash") {
 async function checkNews(all = false) {
   try {
     const r = await api("/news");
-    if (all) { if (!r.all.length) toast("Keine Neuigkeiten", "ok"); else openNews(r.all); return; }
+    if (all) { if (!r.all.length) toast(T("Keine Neuigkeiten"), "ok"); else openNews(r.all); return; }
     if (r.show) openNewsNotice(r);
   } catch { /* optional */ }
 }
@@ -369,24 +394,24 @@ const markNewsSeen = (ids, version = false) => api("/news/seen", { json: { ids, 
 
 function openNewsNotice(r) {
   const done = () => { markNewsSeen([], true); m.close(); };
-  const m = modal(`Neu in Version ${r.version}`, h("div", {},
-    h("p", { class: "hint", style: "margin-top:0" }, `${pl(r.count, "Neuerung", "Neuerungen")}, zum Beispiel:`),
+  const m = modal(T("Neu in Version {0}", r.version), h("div", {},
+    h("p", { class: "hint", style: "margin-top:0" }, T("{0}, zum Beispiel:", pl(r.count, "Neuerung", "Neuerungen"))),
     h("ul", { class: "newshl" }, r.highlights.map(t => h("li", {}, t))),
-    h("p", { class: "hint" }, "Alle Neuigkeiten findest du jederzeit unten in der Fußzeile unter „Neuigkeiten“.")),
-    [h("button", { class: "btn primary", onclick: () => { done(); openNews(); } }, "Alle ansehen"),
-      h("button", { class: "btn", onclick: done }, "Schließen")]);
+    h("p", { class: "hint" }, T("Alle Neuigkeiten findest du jederzeit unten in der Fußzeile unter „Neuigkeiten“."))),
+    [h("button", { class: "btn primary", onclick: () => { done(); openNews(); } }, T("Alle ansehen")),
+      h("button", { class: "btn", onclick: done }, T("Schließen"))]);
 }
 
 async function openNews(list) {
   if (!list) { try { list = (await api("/news")).all; } catch { return; } }
   const byVer = new Map();
   list.forEach(e => { if (!byVer.has(e.version)) byVer.set(e.version, []); byVer.get(e.version).push(e); });
-  const m = modal("Neuigkeiten", h("div", {},
-    [...byVer].map(([v, es]) => [h("h3", { class: "newsver" }, "Version " + v),
+  const m = modal(T("Neuigkeiten"), h("div", {},
+    [...byVer].map(([v, es]) => [h("h3", { class: "newsver" }, T("Version ") + v),
       es.map(e => h("div", { class: "newsrow" },
         h("div", { class: "grow" }, h("b", {}, e.title), h("div", { class: "hint", style: "margin:3px 0 0" }, e.text)),
         e.action ? h("button", { class: "btn sm primary", onclick: () => { m.close(); markNewsSeen([e.id]); runNewsAction(e.action.target); } }, e.action.label) : null))])),
-    [h("button", { class: "btn primary", onclick: () => { markNewsSeen(list.map(e => e.id)); m.close(); } }, "Schließen")]);
+    [h("button", { class: "btn primary", onclick: () => { markNewsSeen(list.map(e => e.id)); m.close(); } }, T("Schließen"))]);
 }
 
 async function runNewsAction(target) {
@@ -418,17 +443,17 @@ function paintAlert() {
   b.classList.toggle("nearred", a.errors > 0 && nearRed);
   b.classList.toggle("nearamber", !a.errors && a.warnings > 0 && nearAmber);
   $(".lbadge", b).textContent = a.errors || a.warnings || "";
-  const parts = [a.errors ? `${a.errors} neue${a.errors === 1 ? "r Fehler" : " Fehler"}` : null, a.warnings ? `${a.warnings} neue Warnung${a.warnings === 1 ? "" : "en"}` : null].filter(Boolean);
-  b.title = parts.length ? "Logs – " + parts.join(", ") : "Logs";
+  const parts = [a.errors ? TP(a.errors, "{0} neuer Fehler", "{0} neue Fehler") : null, a.warnings ? TP(a.warnings, "{0} neue Warnung", "{0} neue Warnungen") : null].filter(Boolean);
+  b.title = parts.length ? T("Logs – ") + parts.join(", ") : T("Logs");
 }
 setInterval(() => { if (S.view === "dash") checkAlerts(); }, 60000);
 
 /* ------------------------------------------------------------ routing --- */
 async function boot() {
-  try { S.auth = await api("/auth/state"); } catch (e) { app.append(h("div", { class: "empty" }, "Backend nicht erreichbar: " + e.message)); return; }
+  try { S.auth = await api("/auth/state"); } catch (e) { app.append(h("div", { class: "empty" }, T("Backend nicht erreichbar: ") + e.message)); return; }
   if (S.auth.enabled && !S.auth.authenticated) return showLogin();
   loadVersion();
-  try { await loadState(); S.langs = await api("/languages"); } catch (e) { app.append(h("div", { class: "empty" }, "Backend nicht erreichbar: " + e.message)); return; }
+  try { await loadState(); S.langs = await api("/languages"); } catch (e) { app.append(h("div", { class: "empty" }, T("Backend nicht erreichbar: ") + e.message)); return; }
   if (!S.st.onboarded) return wizard();
   dashboard();
 }
@@ -453,7 +478,7 @@ function goHome() {
 }
 function logoEl(word) {
   const clickable = !(S.view === "wiz" && !S.wizSettings);
-  return h("div", { class: "logo" + (clickable ? " home" : ""), ...(clickable ? { role: "link", tabindex: "0", title: "Zur Startseite", onclick: goHome,
+  return h("div", { class: "logo" + (clickable ? " home" : ""), ...(clickable ? { role: "link", tabindex: "0", title: T("Zur Startseite"), onclick: goHome,
     onkeydown: e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); goHome(); } } } : {}) },
     h("i", { class: "logomark", "aria-hidden": "true" }, "p5"), h("span", {}, word, h("u", {}, "_")));
 }
@@ -465,9 +490,9 @@ async function logsPage() {
   clearInterval(S.logTimer);
   const st = { file: "p5assets.log", entries: [], offset: 0, level: "ALL", q: "", auto: true, live: true, full: false, files: await api("/logs") };
   const LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR"];
-  const fmtSize = b => b >= 1048576 ? (b / 1048576).toFixed(2) + " MB" : (b / 1024).toFixed(2) + " KB";
+  const fmtSize = b => b >= 1048576 ? (b / 1048576).toFixed(2) + T(" MB") : (b / 1024).toFixed(2) + T(" KB");
   const view = h("div", { class: "logview" }), count = h("span", { class: "hint" }), title = h("div"), liveBadge = h("button", { class: "livebadge" });
-  const chips = h("div", { class: "lvlchips" }), fileSel = h("select"), q = h("input", { type: "search", placeholder: "Zum Filtern tippen …", value: "" });
+  const chips = h("div", { class: "lvlchips" }), fileSel = h("select"), q = h("input", { type: "search", placeholder: T("Zum Filtern tippen …"), value: "" });
   const toggle = h("input", { type: "checkbox", checked: true, onchange: e => { st.auto = e.target.checked; if (st.auto) view.scrollTop = view.scrollHeight; } });
 
   const visible = () => st.entries.filter(e => (st.level === "ALL" || e.level === st.level) && (!st.q || `${e.ts} ${e.level} ${e.src} ${e.msg}`.toLowerCase().includes(st.q.toLowerCase())));
@@ -476,19 +501,19 @@ async function logsPage() {
     fill(view, shown.length ? shown.map(e => h("div", { class: "ll lv-" + e.level },
       e.ts ? h("span", { class: "ts" }, `[${e.ts}]`) : null, " ", h("span", { class: "lvl" }, `[${e.level}]`), " ",
       e.src ? [h("span", { class: "src" }, e.src), h("span", { class: "sep" }, " | ")] : null, h("span", { class: "msg" }, e.msg)))
-      : h("div", { class: "empty", style: "padding:30px" }, st.entries.length ? "Keine Einträge für diesen Filter." : "Noch keine Einträge."));
-    count.textContent = `${list.length} entries${list.length > shown.length ? ` (letzte ${shown.length} angezeigt)` : ""}`;
+      : h("div", { class: "empty", style: "padding:30px" }, st.entries.length ? T("Keine Einträge für diesen Filter.") : T("Noch keine Einträge.")));
+    count.textContent = TP(list.length, "{0} Eintrag", "{0} Einträge") + (list.length > shown.length ? T(" (letzte {0} angezeigt)", shown.length) : "");
     if (st.auto) view.scrollTop = view.scrollHeight;
   }
   function renderHead() {
     const f = st.files.find(x => x.name === st.file) || { size: 0 };
-    fill(title, h("div", { class: "row" }, icon("file", 20), h("div", {}, h("b", {}, st.file), h("div", { class: "hint", style: "margin:0" }, st.full ? "Showing all entries" : "Showing last 1000 entries"))));
+    fill(title, h("div", { class: "row" }, icon("file", 20), h("div", {}, h("b", {}, st.file), h("div", { class: "hint", style: "margin:0" }, st.full ? T("Alle Einträge werden angezeigt") : T("Die letzten 1000 Einträge werden angezeigt")))));
     fill(fileSel, st.files.map(x => h("option", { value: x.name, selected: x.name === st.file }, `${x.name}  (${fmtSize(x.size)})`)));
     const isLive = st.live && st.file === "p5assets.log";
     liveBadge.className = "livebadge" + (isLive ? " on" : "");
-    fill(liveBadge, h("i"), isLive ? "Live" : "Pausiert");
+    fill(liveBadge, h("i"), isLive ? T("Live") : T("Pausiert"));
     const counts = Object.fromEntries(LEVELS.map(l => [l, st.entries.filter(e => e.level === l).length]));
-    fill(chips, h("button", { class: "lvl-chip all" + (st.level === "ALL" ? " on" : ""), onclick: () => { st.level = "ALL"; renderHead(); renderLines(); } }, "All Levels", h("small", {}, st.entries.length)),
+    fill(chips, h("button", { class: "lvl-chip all" + (st.level === "ALL" ? " on" : ""), onclick: () => { st.level = "ALL"; renderHead(); renderLines(); } }, T("All Levels"), h("small", {}, st.entries.length)),
       LEVELS.map(l => h("button", { class: `lvl-chip lv-${l}` + (st.level === l ? " on" : ""), onclick: () => { st.level = l; renderHead(); renderLines(); } }, `[${l}]`, h("small", {}, counts[l]))));
   }
   async function load(full = false) {
@@ -514,27 +539,27 @@ async function logsPage() {
     h("header", { class: "top" }, h("div", { class: "in" },
       logoEl("logs"),
       h("div", { class: "spacer" }),
-      h("button", { class: "btn tb", onclick: async () => { clearInterval(S.logTimer); await checkAlerts(true); dashboard(); } }, icon("back"), h("span", { class: "lbl" }, "Zurück zum Dashboard")),
-      h("button", { class: "btn tb icon", title: "Einstellungen", onclick: async () => { clearInterval(S.logTimer); await checkAlerts(true); wizard(true); } }, icon("gear", 20)))),
+      h("button", { class: "btn tb", onclick: async () => { clearInterval(S.logTimer); await checkAlerts(true); dashboard(); } }, icon("back"), h("span", { class: "lbl" }, T("Zurück zum Dashboard"))),
+      h("button", { class: "btn tb icon", title: T("Einstellungen"), onclick: async () => { clearInterval(S.logTimer); await checkAlerts(true); wizard(true); } }, icon("gear", 20)))),
     h("main", {},
       h("div", { class: "logcard" },
         h("div", { class: "row wrap", style: "align-items:flex-end" },
-          h("div", { style: "min-width:260px;flex:1;max-width:440px" }, h("label", { class: "f", style: "margin-top:0" }, "Logdatei wählen"), fileSel),
+          h("div", { style: "min-width:260px;flex:1;max-width:440px" }, h("label", { class: "f", style: "margin-top:0" }, T("Logdatei wählen")), fileSel),
           h("div", { class: "spacer" }),
-          h("label", { class: "switch", title: "Automatisch ans Ende scrollen" }, h("span", {}, "Auto-scroll"), toggle, h("i")),
-          h("button", { class: "btn", onclick: () => load(st.full) }, icon("sync", 16), "Refresh"),
-          h("button", { class: "btn", onclick: () => load(true) }, icon("file", 16), "Load full log file"),
-          h("a", { class: "btn", href: "#", onclick: e => { e.currentTarget.href = `/api/logs/download?file=${encodeURIComponent(st.file)}`; } }, icon("download", 16), "Download"),
+          h("label", { class: "switch", title: T("Automatisch ans Ende scrollen") }, h("span", {}, T("Auto-scroll")), toggle, h("i")),
+          h("button", { class: "btn", onclick: () => load(st.full) }, icon("sync", 16), T("Refresh")),
+          h("button", { class: "btn", onclick: () => load(true) }, icon("file", 16), T("Load full log file")),
+          h("a", { class: "btn", href: "#", onclick: e => { e.currentTarget.href = `/api/logs/download?file=${encodeURIComponent(st.file)}`; } }, icon("download", 16), T("Download")),
           h("button", { class: "btn danger", onclick: async () => {
-            if (!confirm(`„${st.file}“ wirklich leeren? Das kann nicht rückgängig gemacht werden.`)) return;
-            await api(`/logs?file=${encodeURIComponent(st.file)}`, { method: "DELETE" }); await load(false); toast("Log geleert", "ok");
-          } }, icon("trash", 16), "Clear")),
+            if (!confirm(T("„{0}“ wirklich leeren? Das kann nicht rückgängig gemacht werden.", st.file))) return;
+            await api(`/logs?file=${encodeURIComponent(st.file)}`, { method: "DELETE" }); await load(false); toast(T("Log geleert"), "ok");
+          } }, icon("trash", 16), T("Clear"))),
         h("div", { class: "row wrap", style: "align-items:flex-end;margin-top:16px;border-top:1px solid var(--line);padding-top:14px" },
-          h("div", { class: "grow", style: "min-width:240px" }, h("label", { class: "f", style: "margin-top:0" }, "Logs durchsuchen"), h("div", { class: "clearwrap" }, q, clearBtn(q))),
-          h("div", {}, h("label", { class: "f", style: "margin-top:0" }, "Nach Level filtern"), chips))),
+          h("div", { class: "grow", style: "min-width:240px" }, h("label", { class: "f", style: "margin-top:0" }, T("Logs durchsuchen")), h("div", { class: "clearwrap" }, q, clearBtn(q))),
+          h("div", {}, h("label", { class: "f", style: "margin-top:0" }, T("Nach Level filtern")), chips))),
       h("div", { class: "logcard", style: "padding:0;margin-top:18px" },
         h("div", { class: "row loghead" }, title, h("div", { class: "spacer" }), count, liveBadge),
-        h("div", { class: "loghint" }, h("b", {}, "Tipp: "), "Mit der Suche und den Level-Filtern grenzt du die Anzeige ein. Warnungen und Fehler sind farbig markiert. Tokens und API-Keys werden nie ins Log geschrieben."),
+        h("div", { class: "loghint" }, h("b", {}, T("Tipp: ")), T("Mit der Suche und den Level-Filtern grenzt du die Anzeige ein. Warnungen und Fehler sind farbig markiert. Tokens und API-Keys werden nie ins Log geschrieben.")),
         view)));
   await load(false);
   S.logTimer = setInterval(tick, 2000);
@@ -544,25 +569,26 @@ async function logsPage() {
 /* ========================================================== dashboard === */
 function dashboard() {
   S.view = "dash";
-  const qInput = h("input", { type: "search", placeholder: "Titel suchen …", id: "q", value: S.q, autocomplete: "off", enterkeyhint: "search", "aria-label": "Titel suchen", oninput: debounce(async e => { S.q = e.target.value; await loadItems(); renderChips(); renderGrid(); }, 150) });
+  const qInput = h("input", { type: "search", placeholder: T("Titel suchen …"), id: "q", value: S.q, autocomplete: "off", enterkeyhint: "search", "aria-label": T("Titel suchen"), oninput: debounce(async e => { S.q = e.target.value; await loadItems(); renderChips(); renderGrid(); }, 150) });
   setAccent();
   const ws = cfg().worlds;
   fill(app,
     h("header", { class: "top" }, h("div", { class: "in" },
       logoEl("assets"),
-      ws.length > 1 ? h("div", { class: "worlds", title: "Welt wechseln" }, ws.map(w =>
+      ws.length > 1 ? h("div", { class: "worlds", title: T("Welt wechseln") }, ws.map(w =>
         h("button", { class: w.id === S.world ? "on" : "", style: `--c:${worldColor(w)}`, title: w.name, onclick: () => switchWorld(w.id) }, planetSvg(w.hue ?? 140, 20), w.name))) : null,
+      langSwitch(),
       h("div", { class: "spacer" }),
       // desktop: one small group with two pickers (images/ZIP, whole folder); touch devices: the single normal button
-      h("div", { class: "upgroup" }, h("span", { class: "uplab" }, "Poster hochladen:"),
-        h("button", { class: "upb", title: "Poster-Dateien oder ZIPs wählen – p5assets ordnet sie automatisch den Titeln zu", "aria-label": "Bilder oder ZIPs wählen", onclick: () => pickFiles(f => importFiles(f), true) }, icon("file", 18)),
-        h("button", { class: "upb", title: "Ordner wählen – oder Ordner und Dateien einfach ins Fenster ziehen", "aria-label": "Ordner wählen", onclick: () => pickFiles(f => importFiles(f), true, true) }, icon("folder", 18))),
-      h("button", { class: "btn tb uptouch", title: "Poster-Dateien oder ZIPs wählen – p5assets ordnet sie automatisch den Titeln zu", onclick: () => pickFiles(f => importFiles(f), true) }, icon("upload"), h("span", { class: "lbl" }, "Poster hochladen")),
+      h("div", { class: "upgroup" }, h("span", { class: "uplab" }, T("Poster hochladen:")),
+        h("button", { class: "upb", title: T("Poster-Dateien oder ZIPs wählen – p5assets ordnet sie automatisch den Titeln zu"), "aria-label": T("Bilder oder ZIPs wählen"), onclick: () => pickFiles(f => importFiles(f), true) }, icon("file", 18)),
+        h("button", { class: "upb", title: T("Ordner wählen – oder Ordner und Dateien einfach ins Fenster ziehen"), "aria-label": T("Ordner wählen"), onclick: () => pickFiles(f => importFiles(f), true, true) }, icon("folder", 18))),
+      h("button", { class: "btn tb uptouch", title: T("Poster-Dateien oder ZIPs wählen – p5assets ordnet sie automatisch den Titeln zu"), onclick: () => pickFiles(f => importFiles(f), true) }, icon("upload"), h("span", { class: "lbl" }, T("Poster hochladen"))),
       h("span", { class: "vsep" }),
-      h("button", { class: "btn tb", id: "scanbtn", title: "Plex, Sonarr/Radarr und die Assets-Ordner neu einlesen", onclick: doScan }, icon("sync"), h("span", { class: "lbl" }, "Scannen")),
-      h("button", { class: "btn tb icon", title: "Papierkorb & Aufräumen: ersetzte Poster zurückholen (30 Tage) und verwaiste Ordner entfernen", onclick: () => openCleanup() }, icon("trash", 20)),
-      h("button", { class: "btn tb icon logbtn", id: "logbtn", title: "Logs", onclick: logsPage }, icon("terminal", 20), h("span", { class: "lbadge" })),
-      h("button", { class: "btn tb icon", title: "Einstellungen", onclick: () => wizard(true) }, icon("gear", 20)),
+      h("button", { class: "btn tb", id: "scanbtn", title: T("Plex, Sonarr/Radarr und die Assets-Ordner neu einlesen"), onclick: doScan }, icon("sync"), h("span", { class: "lbl" }, T("Scannen"))),
+      h("button", { class: "btn tb icon", title: T("Papierkorb & Aufräumen: ersetzte Poster zurückholen (30 Tage) und verwaiste Ordner entfernen"), onclick: () => openCleanup() }, icon("trash", 20)),
+      h("button", { class: "btn tb icon logbtn", id: "logbtn", title: T("Logs"), onclick: logsPage }, icon("terminal", 20), h("span", { class: "lbadge" })),
+      h("button", { class: "btn tb icon", title: T("Einstellungen"), onclick: () => wizard(true) }, icon("gear", 20)),
     )),
     h("main", {}, h("div", { id: "hero" }), h("div", { id: "tabrow", class: "tabrow" }, h("div", { id: "chips" }), h("div", { class: "search" }, icon("search", 16), qInput, clearBtn(qInput))), h("div", { id: "az", class: "azbar" }), h("div", { id: "grid" }), h("div", { id: "az2", class: "azbar" })),
   );
@@ -604,18 +630,18 @@ function updateHero() {
   box.firstElementChild.style.setProperty("--p", pct);
   fill(box.firstElementChild, h("b", {}, pct + "%"));
   fill($("#hmain"),
-    s.running ? h("div", { class: "row", style: "margin-bottom:10px" }, h("span", { class: "spin" }), s.progress || "Scanne …") : null,
-    s.error ? h("div", { class: "status bad" }, "⚠ " + s.error) : null,
-    (s.warnings || []).map(w => h("div", { class: "status bad" }, "⚠ " + w)),
+    s.running ? h("div", { class: "row", style: "margin-bottom:10px" }, h("span", { class: "spin" }), s.progress || T("Scanne …")) : null,
+    s.error ? h("div", { class: "status bad" }, "[ !! ] " + s.error) : null,
+    (s.warnings || []).map(w => h("div", { class: "status bad" }, "[ !! ] " + w)),
     h("div", { class: "stats" },
-      stat(ws.items, "Titel"), stat(ws.slots - ws.missing, "Assets vorhanden", "ok"), stat(ws.missing, "Fehlen", ws.missing ? "bad" : "ok"),
-      stat(ws.complete_items, "Vollständig")),
+      stat(ws.items, T("Titel")), stat(ws.slots - ws.missing, T("Assets vorhanden"), "ok"), stat(ws.missing, T("Fehlen"), ws.missing ? "bad" : "ok"),
+      stat(ws.complete_items, T("Vollständig"))),
     sparkline());
   const sig = JSON.stringify([S.world, S.lib, c.libraries.map(l => [l.title, l.enabled, l.world]), c.arr.map(a => [a.name, a.world])]);
   if (box.dataset.sig !== sig) { box.dataset.sig = sig; fill($("#hsrc"), sourceSelect()); }
   const hasSrc = !!$("#hsrc").firstChild;
   box.classList.toggle("hassrc", hasSrc);
-  fill($("#hhint"), s.scanned_at ? "Zuletzt gescannt\n" + new Date(s.scanned_at * 1000).toLocaleString("de-DE") : "");
+  fill($("#hhint"), s.scanned_at ? T("Zuletzt gescannt\n") + new Date(s.scanned_at * 1000).toLocaleString(LOCALE) : "");
   renderChips();
 }
 const stat = (n, label, cls = "") => h("div", { class: "stat " + cls }, h("b", {}, n ?? 0), h("span", {}, label));
@@ -637,8 +663,8 @@ function sparkline() {
   const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg");
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("width", W); svg.setAttribute("height", H); svg.setAttribute("class", "spark-svg");
   svg.innerHTML = `<polyline points="${line} ${lx.toFixed(1)},${H} 4,${H}" fill="var(--dim)" stroke="none"/><polyline points="${line}" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="2.6" fill="var(--accent)"/>`;
-  return h("div", { class: "spark", title: `Abdeckung ${first}% → ${last}% in ${days} Tag${days === 1 ? "" : "en"} (ganze Welt, ein Punkt pro Scan)` },
-    svg, h("span", {}, `Abdeckung ${pl(days, "Tag", "Tage")}: `, h("b", {}, `${last}%`), h("span", { class: diff >= 0 ? "up" : "down" }, ` ${diff >= 0 ? "▲" : "▼"} ${Math.abs(diff)}`)));
+  return h("div", { class: "spark", title: TP(days, "Abdeckung {1}% → {2}% in {0} Tag (ganze Welt, ein Punkt pro Scan)", "Abdeckung {1}% → {2}% in {0} Tagen (ganze Welt, ein Punkt pro Scan)", first, last) },
+    svg, h("span", {}, T("Abdeckung {0}: ", pl(days, "Tag", "Tage")), h("b", {}, `${last}%`), h("span", { class: diff >= 0 ? "up" : "down" }, ` ${diff >= 0 ? "▲" : "▼"} ${Math.abs(diff)}`)));
 }
 
 /** Source filter in the statistic block: all / all movie / all series sources (combined, every title counted once) /
@@ -649,17 +675,17 @@ function sourceSelect() {
   const hasMovie = libs.some(l => l.type === "movie") || arrs.some(a => a.kind === "radarr");
   const hasShow = libs.some(l => l.type === "show") || arrs.some(a => a.kind === "sonarr");
   const groups = [
-    hasMovie && hasShow ? [null, [{ v: "type:movie", label: "Alle Filmquellen (kombiniert)" }, { v: "type:show", label: "Alle Serienquellen (kombiniert)" }]] : null,
-    libs.length ? ["Plex-Bibliotheken", libs.map(l => ({ v: "lib:" + l.title, label: l.title }))] : null,
-    arrs.length ? ["Sonarr / Radarr", arrs.map(a => ({ v: "src:" + a.name, label: a.name }))] : null,
+    hasMovie && hasShow ? [null, [{ v: "type:movie", label: T("Alle Filmquellen (kombiniert)") }, { v: "type:show", label: T("Alle Serienquellen (kombiniert)") }]] : null,
+    libs.length ? [T("Plex-Bibliotheken"), libs.map(l => ({ v: "lib:" + l.title, label: l.title }))] : null,
+    arrs.length ? [T("Sonarr / Radarr"), arrs.map(a => ({ v: "src:" + a.name, label: a.name }))] : null,
   ].filter(Boolean);
   const all = groups.flatMap(g => g[1]);
   if (S.lib && !all.some(o => o.v === S.lib)) S.lib = "";
   const opt = o => h("option", { value: o.v, selected: S.lib === o.v }, o.label);
   if (all.length < 2) return null;               // only one source: nothing to choose
-  return h("div", { class: "srccell" }, h("label", { class: "srclab" }, "Quelle"),
-    h("select", { title: "Statistik und Liste nach Quelle einschränken", onchange: async e => { S.lib = e.target.value; S.letter = null; await loadItems(); renderGrid(); } },
-      h("option", { value: "" }, "Alle Quellen"),
+  return h("div", { class: "srccell" }, h("label", { class: "srclab" }, T("Quelle")),
+    h("select", { title: T("Statistik und Liste nach Quelle einschränken"), onchange: async e => { S.lib = e.target.value; S.letter = null; await loadItems(); renderGrid(); } },
+      h("option", { value: "" }, T("Alle Quellen")),
       groups.map(([label, os]) => label ? h("optgroup", { label }, os.map(opt)) : os.map(opt))));
 }
 
@@ -672,10 +698,10 @@ function weakOptions() {
     S.dimTimer = setTimeout(async () => { await loadItems(); renderGrid(); }, 4000);
   }
   return h("div", { class: "weakopts" },
-    h("label", { class: "opt compact" }, h("input", { type: "checkbox", checked: c.wOn, onchange: e => change({ wOn: e.target.checked }) }), "Breite unter",
+    h("label", { class: "opt compact" }, h("input", { type: "checkbox", checked: c.wOn, onchange: e => change({ wOn: e.target.checked }) }), T("Breite unter"),
       h("select", { onchange: e => change({ w: +e.target.value, wOn: true }) }, [600, 800, 1000, 1200, 1500].map(v => h("option", { value: v, selected: v === c.w }, v + " px")))),
-    h("label", { class: "opt compact" }, h("input", { type: "checkbox", checked: c.rOn, onchange: e => change({ rOn: e.target.checked }) }), "Seitenverhältnis nicht 2:3"),
-    dm.known < dm.total ? h("span", { class: "hint" }, `Bildgrößen werden geprüft … ${dm.known} von ${dm.total}`) : null);
+    h("label", { class: "opt compact" }, h("input", { type: "checkbox", checked: c.rOn, onchange: e => change({ rOn: e.target.checked }) }), T("Seitenverhältnis nicht 2:3")),
+    dm.known < dm.total ? h("span", { class: "hint" }, T("Bildgrößen werden geprüft … {0} von {1}", dm.known, dm.total)) : null);
 }
 
 function renderChips() {
@@ -685,14 +711,14 @@ function renderChips() {
   const chip = (label, key, n, title) => h("button", { class: "chip" + (effFilter() === key ? " on" : ""), title, onclick: async () => { S.filter = key; S.q = ""; const q = $("#q"); if (q) { q.value = ""; q.parentElement.querySelector(".sclear")?.setAttribute("hidden", ""); } renderChips(); await loadItems(); renderGrid(); } },
     label, n != null ? h("small", {}, n) : null);
   fill(el,
-    chip("In Plex, Poster fehlt", "plexmissing", cnt.plexmissing, "In Plex vorhanden, aber bei Kometa fehlt ein Poster oder eine Staffel – das, was in Plex ohne Bild erscheint"),
-    cnt.comingsoon > 0 || S.filter === "comingsoon" ? chip("Coming Soon", "comingsoon", cnt.comingsoon, "Coming-Soon-Poster ({edition-Coming Soon}): in Plex schon sichtbar, brauchen zeitnah ein Poster") : null,
-    chip("Alle", "all", cnt.all),
-    chip("Alle fehlenden", "missing", cnt.missing, "Alles, was ein Poster oder eine Staffel braucht – auch Titel, die nur Sonarr/Radarr kennen und in Plex noch nicht sind"),
-    chip("Schwache Poster", "weak", cnt.weak, "Bilder, die zu schmal sind oder nicht das Seitenverhältnis 2:3 haben (Schwellwerte wählst du selbst)"),
+    chip(T("In Plex, Poster fehlt"), "plexmissing", cnt.plexmissing, T("In Plex vorhanden, aber bei Kometa fehlt ein Poster oder eine Staffel – das, was in Plex ohne Bild erscheint")),
+    cnt.comingsoon > 0 || S.filter === "comingsoon" ? chip(T("Coming Soon"), "comingsoon", cnt.comingsoon, T("Coming-Soon-Poster ({edition-Coming Soon}): in Plex schon sichtbar, brauchen zeitnah ein Poster")) : null,
+    chip(T("Alle"), "all", cnt.all),
+    chip(T("Alle fehlenden"), "missing", cnt.missing, T("Alles, was ein Poster oder eine Staffel braucht – auch Titel, die nur Sonarr/Radarr kennen und in Plex noch nicht sind")),
+    chip(T("Schwache Poster"), "weak", cnt.weak, T("Bilder, die zu schmal sind oder nicht das Seitenverhältnis 2:3 haben (Schwellwerte wählst du selbst)")),
     S.filter === "weak" ? weakOptions() : null,
     S.filter === "comingsoon" ? h("label", { class: "chip" + (S.nopost ? " on" : ""), style: "display:inline-flex;gap:8px;align-items:center;cursor:pointer" },
-      h("input", { type: "checkbox", checked: S.nopost, style: "accent-color:var(--accent)", onchange: async e => { S.nopost = e.target.checked; renderChips(); await loadItems(); renderGrid(); } }), "nur ohne Poster") : null,
+      h("input", { type: "checkbox", checked: S.nopost, style: "accent-color:var(--accent)", onchange: async e => { S.nopost = e.target.checked; renderChips(); await loadItems(); renderGrid(); } }), T("nur ohne Poster")) : null,
   );
 }
 
@@ -709,9 +735,9 @@ function renderAz() {
     const el = $(id); if (!el) continue;
     el.hidden = !show;
     if (!show) { el.replaceChildren(); continue; }
-    const b = (label, l, n) => h("button", { class: "az" + (S.letter === l ? " on" : ""), disabled: l !== "" && !n, title: l === "" ? `Alle Titel (${S.allTotal})` : n ? `${n} Titel` : "keine Titel",
+    const b = (label, l, n) => h("button", { class: "az" + (S.letter === l ? " on" : ""), disabled: l !== "" && !n, title: l === "" ? T("Alle Titel ({0})", S.allTotal) : n ? pl(n, "Titel", "Titel") : T("keine Titel"),
       onclick: () => setLetter(l, bottom) }, label);
-    fill(el, b("Alle", "", S.allTotal), b("#", "#", S.letters["#"]), "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").map(c => b(c, c, S.letters[c])));
+    fill(el, b(T("Alle"), "", S.allTotal), b("#", "#", S.letters["#"]), "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").map(c => b(c, c, S.letters[c])));
   }
 }
 
@@ -728,14 +754,14 @@ function renderGrid() {
   g.querySelectorAll(".card").forEach(c => { if (!keep.has(c)) c.querySelectorAll("img").forEach(i => i.removeAttribute("src")); });
   if (!S.items.length) {
     fill(g, h("div", { class: "empty" },
-      S.st.summary.running ? h("h2", {}, "Scanne …") :
-      (S.filter === "missing" || S.filter === "plexmissing") && !S.q && scopeStats().items ? [h("div", { class: "big" }, "🎉"), h("h2", {}, "Alles vollständig!"),
-        S.filter === "plexmissing" ? "In Plex fehlt kein Poster und keine Staffel." : "Es fehlt kein Poster und keine Staffel.",
-        h("div", { style: "margin-top:14px" }, h("button", { class: "btn", onclick: async () => { S.filter = "all"; renderChips(); await loadItems(); renderGrid(); } }, "Alle anzeigen"))] :
-      !worldStats().items && S.st.summary.error ? [h("h2", {}, "Der Scan ist fehlgeschlagen"), "Details stehen oben und im Log. Prüfe die Verbindung zu Plex, Sonarr und Radarr und starte dann einen neuen Scan.",
-        h("div", { style: "margin-top:14px" }, h("button", { class: "btn primary", onclick: doScan }, "Erneut scannen"))] :
-      !worldStats().items ? [h("h2", {}, "Hier ist noch nichts"), "Ordne dieser Welt unter ⚙ Bibliotheken oder Sonarr/Radarr zu."] :
-      [h("h2", {}, "Nichts gefunden"), "Passe Filter oder Suche an – oder starte einen neuen Scan."]));
+      S.st.summary.running ? h("h2", {}, T("Scanne …")) :
+      (S.filter === "missing" || S.filter === "plexmissing") && !S.q && scopeStats().items ? [h("div", { class: "big term" }, T("[ OK ]")), h("h2", {}, T("Alles vollständig!")),
+        S.filter === "plexmissing" ? T("In Plex fehlt kein Poster und keine Staffel.") : T("Es fehlt kein Poster und keine Staffel."),
+        h("div", { style: "margin-top:14px" }, h("button", { class: "btn", onclick: async () => { S.filter = "all"; renderChips(); await loadItems(); renderGrid(); } }, T("Alle anzeigen")))] :
+      !worldStats().items && S.st.summary.error ? [h("h2", {}, T("Der Scan ist fehlgeschlagen")), T("Details stehen oben und im Log. Prüfe die Verbindung zu Plex, Sonarr und Radarr und starte dann einen neuen Scan."),
+        h("div", { style: "margin-top:14px" }, h("button", { class: "btn primary", onclick: doScan }, T("Erneut scannen")))] :
+      !worldStats().items ? [h("h2", {}, T("Hier ist noch nichts")), T("Ordne dieser Welt unter Einstellungen → Bibliotheken oder Sonarr/Radarr zu.")] :
+      [h("h2", {}, T("Nichts gefunden")), T("Passe Filter oder Suche an – oder starte einen neuen Scan.")]));
     return;
   }
   fill(g, h("div", { class: "grid", id: "gridin" }, els));
@@ -762,7 +788,7 @@ function moreControl(g) {
     g.append(sentinel);
     S.io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { S.io.disconnect(); loadMore(); } }, { rootMargin: "900px" });
     S.io.observe(sentinel);
-  } else g.append(h("button", { class: "btn more", onclick: async e => { e.currentTarget.disabled = true; await loadMore(); } }, `Mehr laden (${S.total - S.items.length})`));
+  } else g.append(h("button", { class: "btn more", onclick: async e => { e.currentTarget.disabled = true; await loadMore(); } }, T("Mehr laden ({0})", S.total - S.items.length)));
 }
 
 /** `known` = slot counts as "missing" when empty; otherwise it is an optional empty tile. */
@@ -773,27 +799,27 @@ function posterBox(item, slot, known = true) {
   const placeholder = txt => wrap.append(h("div", { class: "ph" }, h("div", {}, h("b", {}, "＋"), txt)));
   if (exists) {
     wrap.append(h("img", { loading: "lazy", alt: "", draggable: false, src: `/api/thumb/${item.id}/${slot}?v=${sl.mtime}`, onload: e => e.target.classList.add("loaded"),
-      onerror: e => { e.target.remove(); placeholder("Bild defekt"); } }));
+      onerror: e => { e.target.remove(); placeholder(T("Bild defekt")); } }));
   } else if (item.in_plex && known && sl && sl.plex_thumb) {
-    wrap.append(h("img", { loading: "lazy", alt: "", draggable: false, src: `/api/season-thumb/${item.id}/${slot}`, onload: e => { e.target.classList.add("loaded"); wrap.append(h("span", { class: "badge warn b", title: "Nur Vorschau aus Plex (kann Overlays enthalten) – kein Kometa-Asset, nicht kopierbar" }, "Plex-Vorschau")); },
-      onerror: e => { e.target.remove(); placeholder("fehlt"); } }));
-  } else placeholder(known ? "fehlt" : "leer");
+    wrap.append(h("img", { loading: "lazy", alt: "", draggable: false, src: `/api/season-thumb/${item.id}/${slot}`, onload: e => { e.target.classList.add("loaded"); wrap.append(h("span", { class: "badge warn b", title: T("Nur Vorschau aus Plex (kann Overlays enthalten) – kein Kometa-Asset, nicht kopierbar") }, T("Plex-Vorschau"))); },
+      onerror: e => { e.target.remove(); placeholder(T("fehlt")); } }));
+  } else placeholder(known ? T("fehlt") : T("leer"));
   const key = item.id + "|" + slot;
   if (S.rain.has(key)) { S.rain.delete(key); wrap.append(rainEl()); }
   return wrap;
 }
 
-const NOT_IN_PLEX = "Noch nicht in Plex";   // one label for everything Sonarr/Radarr know but Plex does not have yet (no file, not released …)
+const NOT_IN_PLEX = T("Noch nicht in Plex");   // one label for everything Sonarr/Radarr know but Plex does not have yet (no file, not released …)
 
 /** Status of a title as tag descriptors; the colour says what it means (ok = green, warn = yellow, bad = red). */
 function statusTags(it) {
   const t = [];
   if (!it.in_plex) t.push({ text: NOT_IN_PLEX, cls: "warn" });
-  if (it.coming_soon) t.push({ text: "Coming Soon", cls: "warn" });
+  if (it.coming_soon) t.push({ text: T("Coming Soon"), cls: "warn" });
   if (it.monitored != null) {
-    t.push(it.monitored ? { text: "überwacht", cls: "ok" } : { text: "nicht überwacht", cls: "" });
+    t.push(it.monitored ? { text: T("überwacht"), cls: "ok" } : { text: T("nicht überwacht"), cls: "" });
   }
-  t.push(it.missing ? { text: `${pl(it.missing, "Kachel", "Kacheln")} ${fehlt(it.missing)}`, cls: "bad" } : { text: "vollständig", cls: "ok" });
+  t.push(it.missing ? { text: TP(it.missing, "{0} Kachel fehlt", "{0} Kacheln fehlen"), cls: "bad" } : { text: T("vollständig"), cls: "ok" });
   return t;
 }
 const itemWorld = it => cfg().worlds.find(w => w.id === it.world);
@@ -803,14 +829,14 @@ function metaGroups(it) {
   const world = itemWorld(it);
   const group = (label, tags) => h("div", { class: "mg" }, h("span", { class: "mgl" }, label), h("div", { class: "mgt" }, tags));
   return h("div", { class: "metagroups" },
-    world && cfg().worlds.length > 1 ? group("Welt", h("span", { class: "tag", style: `color:${worldColor(world)};border-color:${worldColor(world)}` }, world.name)) : null,
-    group("Quellen", it.sources.map(s => h("span", { class: "tag" }, s))),
-    group("Status", statusTags(it).map(t => h("span", { class: "tag " + t.cls }, t.text))));
+    world && cfg().worlds.length > 1 ? group(T("Welt"), h("span", { class: "tag", style: `color:${worldColor(world)};border-color:${worldColor(world)}` }, world.name)) : null,
+    group(T("Quellen"), it.sources.map(s => h("span", { class: "tag" }, s))),
+    group(T("Status"), statusTags(it).map(t => h("span", { class: "tag " + t.cls }, t.text))));
 }
 /** Plain-text version of the groups for tooltips. */
 function metaText(it) {
   const world = itemWorld(it);
-  return [world && cfg().worlds.length > 1 ? `Welt: ${world.name}` : null, `Quellen: ${it.sources.join(" · ")}`, `Status: ${statusTags(it).map(t => t.text).join(" · ")}`].filter(Boolean).join("\n");
+  return [world && cfg().worlds.length > 1 ? T("Welt: {0}", world.name) : null, T("Quellen: {0}", it.sources.join(" · ")), T("Status: {0}", statusTags(it).map(t => t.text).join(" · "))].filter(Boolean).join("\n");
 }
 
 function card(item, local) {
@@ -818,15 +844,15 @@ function card(item, local) {
   const el = h("div", { class: "card" + (movie ? " movie" : ""), onclick: movie ? null : () => openItem(item.id) });
   const box = posterBox(item, "poster");
   const bad = item.missing;
-  if (bad) box.append(h("span", { class: "badge bad" }, `${bad} ${fehlt(bad)}`));
+  if (bad) box.append(h("span", { class: "badge bad" }, TP(bad, "{0} fehlt", "{0} fehlen")));
   box.title = metaText(item);
-  if (!item.in_plex) box.append(h("span", { class: "badge warn b", title: "Sonarr/Radarr kennen den Titel, in Plex ist er noch nicht" }, NOT_IN_PLEX));
-  else if (item.coming_soon) box.append(h("span", { class: "badge warn b", title: "In Plex als Coming-Soon-Platzhalter sichtbar" }, "Coming Soon"));
-  if (S.filter === "weak") { const wk = weakSlot(item); if (wk) box.append(h("span", { class: "badge warn r", title: `${slotLabel(wk.key, item.type)}: ${wk.w} × ${wk.h} px` }, `${wk.w}×${wk.h}`)); }
+  if (!item.in_plex) box.append(h("span", { class: "badge warn b", title: T("Sonarr/Radarr kennen den Titel, in Plex ist er noch nicht") }, NOT_IN_PLEX));
+  else if (item.coming_soon) box.append(h("span", { class: "badge warn b", title: T("In Plex als Coming-Soon-Platzhalter sichtbar") }, T("Coming Soon")));
+  if (S.filter === "weak") { const wk = weakSlot(item); if (wk) box.append(h("span", { class: "badge warn r", title: T("{0}: {1} × {2} px", slotLabel(wk.key, item.type), wk.w, wk.h) }, `${wk.w}×${wk.h}`)); }
   // a movie has one poster: no detail view, title/year and poster open the preview; the action buttons are built on first use
-  const info = h("div", { class: "info", onclick: movie ? () => openPreview(item, "poster", changed) : null, title: movie ? "Vorschau öffnen" : null },
+  const info = h("div", { class: "info", onclick: movie ? () => openPreview(item, "poster", changed) : null, title: movie ? T("Vorschau öffnen") : null },
     h("div", { class: "t", title: item.title }, item.title),
-    h("div", { class: "s" }, [item.year, item.type === "show" ? pl(item.season_count, "Staffel", "Staffeln") : "Film"].filter(Boolean).join(" · ")));
+    h("div", { class: "s" }, [item.year, item.type === "show" ? pl(item.season_count, "Staffel", "Staffeln") : T("Film")].filter(Boolean).join(" · ")));
   function changed(it) {
     const i = S.items.findIndex(x => x.id === it.id);
     if (i >= 0) S.items[i] = it;
@@ -881,18 +907,18 @@ async function openItem(id) {
       h("header", {},
         h("button", { class: "btn ghost", onclick: close }, "✕"),
         h("div", { class: "grow" }, h("h2", {}, it.title, it.year ? ` (${it.year})` : ""),
-          h("div", { class: "hint", style: "margin:2px 0" }, "Kometa-Ordner: ", h("code", {}, it.folder || "—")),
-          (it.mirror_folders || []).length ? h("div", { class: "hint", style: "margin:2px 0" }, "Zusätzlich gespeichert in: ", it.mirror_folders.map(f => h("code", {}, f)),
-            h("span", { class: "tag ok", style: "margin-left:8px", title: "Coming-Soon-Platzhalter: Poster werden auch im echten Film-Ordner abgelegt" }, "Coming Soon gespiegelt")) : null,
+          h("div", { class: "hint", style: "margin:2px 0" }, T("Kometa-Ordner: "), h("code", {}, it.folder || "—")),
+          (it.mirror_folders || []).length ? h("div", { class: "hint", style: "margin:2px 0" }, T("Zusätzlich gespeichert in: "), it.mirror_folders.map(f => h("code", {}, f)),
+            h("span", { class: "tag ok", style: "margin-left:8px", title: T("Coming-Soon-Platzhalter: Poster werden auch im echten Film-Ordner abgelegt") }, T("Coming Soon gespiegelt"))) : null,
           metaGroups(it)),
       ),
       h("div", { class: "body" },
-        !it.folder ? h("div", { class: "status bad" }, "Für diesen Titel ist kein Ordnername bekannt – Upload nicht möglich.") : null,
-        h("p", { class: "hint" }, "Bild auf eine Kachel ziehen oder anklicken, um es zu ersetzen. Ein vorhandenes Poster lässt sich auf eine andere Kachel ziehen, um es zu kopieren. Mehrere Dateien, Ordner oder eine ZIP auf dieses Fenster ziehen: p5assets ordnet sie automatisch zu und benennt sie Kometa-konform."),
+        !it.folder ? h("div", { class: "status bad" }, T("Für diesen Titel ist kein Ordnername bekannt – Upload nicht möglich.")) : null,
+        h("p", { class: "hint" }, T("Bild auf eine Kachel ziehen oder anklicken, um es zu ersetzen. Ein vorhandenes Poster lässt sich auf eine andere Kachel ziehen, um es zu kopieren. Mehrere Dateien, Ordner oder eine ZIP auf dieses Fenster ziehen: p5assets ordnet sie automatisch zu und benennt sie Kometa-konform.")),
         it.type === "show" ? downloadBar(it, have) : null,
         h("div", { class: "slots" }, keys.map(k => slotView(it, k, true))),
         extra.length ? h("details", { class: "more-seasons" },
-          h("summary", {}, `Weitere Staffeln (Season00 – Season${String(it.max_season).padStart(2, "0")}) – auch für Staffeln, die Plex noch nicht kennt`),
+          h("summary", {}, T("Weitere Staffeln (Season00 – Season{0}) – auch für Staffeln, die Plex noch nicht kennt", String(it.max_season).padStart(2, "0"))),
           h("div", { class: "slots" }, extra.map(k => slotView(it, k, false)))) : null),
     );
   }
@@ -900,29 +926,29 @@ async function openItem(id) {
   /** Download of single tiles (via the tile buttons) or several/all as a ZIP in original quality. */
   function downloadBar(it, have) {
     const zip = keys => downloadUrl(`/api/download-zip/${it.id}?slots=${encodeURIComponent(keys.join(","))}`);
-    const upload = h("button", { class: "btn sm primary", title: "Ordner oder ZIP mit allen Bildern dieser Serie – p5assets ordnet sie den Kacheln zu", onclick: () => pickSet(files => importFiles(files, it.id, draw, it, true)) }, icon("upload", 14), "Set hochladen");
-    const tpdb = h("button", { class: "btn sm", title: "ThePosterDB durchsuchen: im Fenster öffnest du die Suche und legst danach das heruntergeladene Set ab", onclick: () => openPosterDbSet(it, draw) }, icon("search", 14), "ThePosterDB");
+    const upload = h("button", { class: "btn sm primary", title: T("Ordner oder ZIP mit allen Bildern dieser Serie – p5assets ordnet sie den Kacheln zu"), onclick: () => pickSet(files => importFiles(files, it.id, draw, it, true)) }, icon("upload", 14), T("Set hochladen"));
+    const tpdb = h("button", { class: "btn sm", title: T("ThePosterDB durchsuchen: im Fenster öffnest du die Suche und legst danach das heruntergeladene Set ab"), onclick: () => openPosterDbSet(it, draw) }, icon("search", 14), T("ThePosterDB"));
     return h("div", { class: "dlbar row wrap" }, selMode ? null : upload, selMode ? null : tpdb,
       !have.length ? null : selMode ? [
-        h("span", { class: "hint", style: "margin:0" }, `${sel.size} von ${have.length} ausgewählt – Kacheln antippen`),
-        h("button", { class: "btn sm", onclick: () => { if (sel.size === have.length) sel.clear(); else have.forEach(k => sel.add(k)); draw(it); } }, sel.size === have.length ? "Alle abwählen" : "Alle wählen"),
-        h("button", { class: "btn sm primary", disabled: !sel.size, onclick: () => zip([...sel]) }, icon("download", 14), `Auswahl als ZIP (${sel.size})`),
-        h("button", { class: "btn sm", onclick: () => { selMode = false; sel.clear(); draw(it); } }, "Fertig")]
-      : isTouch() ? [] : [h("button", { class: "btn sm", title: "Poster in Originalqualität herunterladen", onclick: () => {
-          const m = modal("Herunterladen", h("div", {},
-            h("p", { class: "hint", style: "margin-top:0" }, "Die Poster werden unverändert aus dem Assets-Ordner geladen (Originalqualität)."),
+        h("span", { class: "hint", style: "margin:0" }, T("{0} von {1} ausgewählt – Kacheln antippen", sel.size, have.length)),
+        h("button", { class: "btn sm", onclick: () => { if (sel.size === have.length) sel.clear(); else have.forEach(k => sel.add(k)); draw(it); } }, sel.size === have.length ? T("Alle abwählen") : T("Alle wählen")),
+        h("button", { class: "btn sm primary", disabled: !sel.size, onclick: () => zip([...sel]) }, icon("download", 14), T("Auswahl als ZIP ({0})", sel.size)),
+        h("button", { class: "btn sm", onclick: () => { selMode = false; sel.clear(); draw(it); } }, T("Fertig"))]
+      : isTouch() ? [] : [h("button", { class: "btn sm", title: T("Poster in Originalqualität herunterladen"), onclick: () => {
+          const m = modal(T("Herunterladen"), h("div", {},
+            h("p", { class: "hint", style: "margin-top:0" }, T("Die Poster werden unverändert aus dem Assets-Ordner geladen (Originalqualität).")),
             h("div", { class: "row wrap" },
-              h("button", { class: "btn primary", onclick: () => { m.close(); zip(have); } }, icon("download", 16), `Alle als ZIP (${have.length})`),
-              h("button", { class: "btn", onclick: () => { m.close(); selMode = true; draw(it); } }, "Einzelne Poster auswählen …")),
-            h("p", { class: "hint" }, "Ein einzelnes Poster lädst du über „Herunterladen“ auf seiner Kachel.")));
-        } }, icon("download", 14), "Herunterladen")]);
+              h("button", { class: "btn primary", onclick: () => { m.close(); zip(have); } }, icon("download", 16), T("Alle als ZIP ({0})", have.length)),
+              h("button", { class: "btn", onclick: () => { m.close(); selMode = true; draw(it); } }, T("Einzelne Poster auswählen …"))),
+            h("p", { class: "hint" }, T("Ein einzelnes Poster lädst du über „Herunterladen“ auf seiner Kachel."))));
+        } }, icon("download", 14), T("Herunterladen"))]);
   }
 
   function slotView(it, key, known) {
     const sl = it.slots[key], exists = !!(sl && sl.exists);
     const box = posterBox(it, key, known);
-    if (known && !exists) box.append(h("span", { class: "badge bad" }, "fehlt"));      // a poster that is there needs no tag
-    if (sl && sl.only_arr) box.append(h("span", { class: "badge warn b", title: "Diese Staffel kennt bisher nur Sonarr – in Plex gibt es sie noch nicht" }, NOT_IN_PLEX));
+    if (known && !exists) box.append(h("span", { class: "badge bad" }, T("fehlt")));      // a poster that is there needs no tag
+    if (sl && sl.only_arr) box.append(h("span", { class: "badge warn b", title: T("Diese Staffel kennt bisher nur Sonarr – in Plex gibt es sie noch nicht") }, NOT_IN_PLEX));
     const pick = () => pickFiles(files => uploadSlot(it, key, files, draw), false);
     box.append(slotActions(it, key, box, draw));
     const el = h("div", { class: "slot" }, box, h("div", { class: "lab" }, slotLabel(key, it.type)));
@@ -949,11 +975,11 @@ async function openItem(id) {
       e.preventDefault(); e.stopPropagation(); depth = 0; el.classList.remove("copyover");
       let src; try { src = JSON.parse(e.dataTransfer.getData("application/x-p5-slot")); } catch { return; }
       if (src.item !== it.id || src.slot === key) return;
-      if (exists && !confirm(`${slotLabel(key, it.type)} ist schon belegt. Mit ${slotLabel(src.slot, it.type)} überschreiben?`)) return;
+      if (exists && !confirm(T("{0} ist schon belegt. Mit {1} überschreiben?", slotLabel(key, it.type), slotLabel(src.slot, it.type)))) return;
       try {
         const r = await api(`/items/${it.id}/${key}/copy`, { json: { source: src.slot } });
-        undoToast(`${slotLabel(src.slot, it.type)} → ${slotLabel(key, it.type)} kopiert ✓`, r, draw);
-        if (r.warning) toast("Plex: " + r.warning, "bad");
+        undoToast(T("{0} → {1} kopiert ✓", slotLabel(src.slot, it.type), slotLabel(key, it.type)), r, draw);
+        if (r.warning) toast(T("Plex: ") + r.warning, "bad");
         S.rain.add(it.id + "|" + key); draw(r.item);
       } catch (err) { toast(err.message, "bad"); }
     });
@@ -983,15 +1009,15 @@ const downloadSlot = (it, key, draw) => isTouch() ? openPreview(it, key, draw) :
 function slotActions(it, key, box, draw) {
   const exists = !!(it.slots[key] && it.slots[key].exists);
   const pick = () => pickFiles(files => uploadSlot(it, key, files, draw), false);
-  const del = async () => { if (confirm(`${slotLabel(key, it.type)} wirklich löschen?`)) { const r = await api(`/items/${it.id}/${key}`, { method: "DELETE" }); draw(r.item); undoToast("Gelöscht", r, draw); } };
+  const del = async () => { if (confirm(T("{0} wirklich löschen?", slotLabel(key, it.type)))) { const r = await api(`/items/${it.id}/${key}`, { method: "DELETE" }); draw(r.item); undoToast(T("Gelöscht"), r, draw); } };
   const ob = (label, fn, cls = "") => h("button", { class: "ov-btn " + cls, onclick: e => { e.stopPropagation(); box.classList.remove("show"); fn(); } }, label);
   return h("div", { class: "hover" },
     h("div", { class: "ovbtns" }, exists
-      ? [ob("Ersetzen", pick), ob("Vorschau", () => openPreview(it, key, draw)), ob("Online suchen", () => searchOnline(it, key, draw)),
-         ob("Herunterladen", () => downloadSlot(it, key, draw)),
-         it.type === "show" ? ob("Auf alle …", () => openApplyAll(it, key, draw)) : null, ob("Löschen", del, "danger")]
-      : [ob("Hochladen", pick), ob("Online suchen", () => searchOnline(it, key, draw))]),
-    h("div", { class: "ovhint" }, "oder Bild hierher ziehen"));
+      ? [ob(T("Ersetzen"), pick), ob(T("Vorschau"), () => openPreview(it, key, draw)), ob(T("Online suchen"), () => searchOnline(it, key, draw)),
+         ob(T("Herunterladen"), () => downloadSlot(it, key, draw)),
+         it.type === "show" ? ob(T("Auf alle …"), () => openApplyAll(it, key, draw)) : null, ob(T("Löschen"), del, "danger")]
+      : [ob(T("Hochladen"), pick), ob(T("Online suchen"), () => searchOnline(it, key, draw))]),
+    h("div", { class: "ovhint" }, T("oder Bild hierher ziehen")));
 }
 
 /** Enlarged view of a poster (always the original file) with its details and the actions. Works for empty slots too
@@ -999,21 +1025,21 @@ function slotActions(it, key, box, draw) {
 function openPreview(it, key, draw) {
   const sl = it.slots[key] || {}, exists = !!sl.exists;
   const src = exists ? `/api/asset/${it.id}/${key}?v=${sl.mtime}` : sl.plex_thumb ? `/api/season-thumb/${it.id}/${key}` : "";
-  const fmtSize = b => b >= 1048576 ? (b / 1048576).toFixed(2) + " MB" : Math.round(b / 1024) + " KB";
+  const fmtSize = b => b >= 1048576 ? (b / 1048576).toFixed(2) + T(" MB") : Math.round(b / 1024) + T(" KB");
   const res = h("dd", {}, "…");
   const rows = [
-    ["Titel", it.title + (it.year ? ` (${it.year})` : "")],
-    ["Slot", slotLabel(key, it.type)],
-    ["Kometa-Ordner", it.folder || "—"],
-    ...((it.mirror_folders || []).length ? [["Zusätzlich gespeichert in", it.mirror_folders.join(", ")]] : []),
+    [T("Titel"), it.title + (it.year ? ` (${it.year})` : "")],
+    [T("Slot"), slotLabel(key, it.type)],
+    [T("Kometa-Ordner"), it.folder || "—"],
+    ...((it.mirror_folders || []).length ? [[T("Zusätzlich gespeichert in"), it.mirror_folders.join(", ")]] : []),
     ...(exists ? [
-      ["Datei", sl.file],
-      ...((sl.mirrors || []).length ? [["Kopie in", sl.mirrors.join(", ")]] : []),
-      ["Größe", fmtSize(sl.size)],
-      ["Geändert", new Date(sl.mtime * 1000).toLocaleString("de-DE")],
-      ["Format", (sl.file.split(".").pop() || "").toUpperCase()]] : [["Datei", "noch kein Kometa-Asset vorhanden"]]),
+      [T("Datei"), sl.file],
+      ...((sl.mirrors || []).length ? [[T("Kopie in"), sl.mirrors.join(", ")]] : []),
+      [T("Größe"), fmtSize(sl.size)],
+      [T("Geändert"), new Date(sl.mtime * 1000).toLocaleString(LOCALE)],
+      [T("Format"), (sl.file.split(".").pop() || "").toUpperCase()]] : [[T("Datei"), T("noch kein Kometa-Asset vorhanden")]]),
   ];
-  if ((it.dupes || []).length) rows.push(["Hinweis", `Ordnername auch an anderer Stelle gefunden (wird nicht genutzt): ${it.dupes.join(", ")}`]);
+  if ((it.dupes || []).length) rows.push([T("Hinweis"), T("Ordnername auch an anderer Stelle gefunden (wird nicht genutzt): {0}", it.dupes.join(", "))]);
   const touch = matchMedia("(hover: none)").matches;
   // arrow keys / ‹ › flip through the posters of the movies on the start page (not while another window is open underneath)
   const flip = key === "poster" && S.view === "dash" && it.type === "movie" && !document.querySelector(".modalwrap, .scrim") ? S.items.filter(x => x.type === "movie") : [];
@@ -1023,32 +1049,32 @@ function openPreview(it, key, draw) {
     close();
     openPreview(next, "poster", x => { const i = S.items.findIndex(y => y.id === x.id); if (i >= 0) S.items[i] = x; renderGrid(); api("/status").then(r => { S.st.summary = r; updateHero(); }); });
   };
-  const img = src ? h("img", { src, alt: "", onload: e => { res.textContent = `${e.target.naturalWidth} × ${e.target.naturalHeight} px${exists ? "" : " (Plex-Vorschau)"}`; } })
-    : h("div", { class: "noimg" }, h("b", {}, "＋"), "kein Bild");
+  const img = src ? h("img", { src, alt: "", onload: e => { res.textContent = T("{0} × {1} px{2}", e.target.naturalWidth, e.target.naturalHeight, exists ? "" : T(" (Plex-Vorschau)")); } })
+    : h("div", { class: "noimg" }, h("b", {}, "＋"), T("kein Bild"));
   const pick = () => pickFiles(files => { close(); uploadSlot(it, key, files, draw); }, false);
   const wrap = h("div", { class: "modalwrap lightbox", onclick: e => { if (e.target === wrap) close(); } },
     h("div", { class: "lbox" },
-     h("header", { class: "lbhead" }, h("h2", { class: "grow" }, "Vorschau"),
-      nb ? [h("button", { class: "btn ghost sm", "aria-label": "Voriges Poster", title: "Voriges Poster (←)", onclick: () => go(-1) }, "‹"),
-        h("button", { class: "btn ghost sm", "aria-label": "Nächstes Poster", title: "Nächstes Poster (→)", onclick: () => go(1) }, "›")] : null,
-      h("button", { class: "btn ghost sm", "aria-label": "Schließen", onclick: () => close() }, "✕")),     // the one close button: same place on desktop and phone
+     h("header", { class: "lbhead" }, h("h2", { class: "grow" }, T("Vorschau")),
+      nb ? [h("button", { class: "btn ghost sm", "aria-label": T("Voriges Poster"), title: T("Voriges Poster (←)"), onclick: () => go(-1) }, "‹"),
+        h("button", { class: "btn ghost sm", "aria-label": T("Nächstes Poster"), title: T("Nächstes Poster (→)"), onclick: () => go(1) }, "›")] : null,
+      h("button", { class: "btn ghost sm", "aria-label": T("Schließen"), onclick: () => close() }, "✕")),     // the one close button: same place on desktop and phone
      h("div", { class: "lbbody" }, h("div", { class: "limg" }, img,
-        touch && exists ? h("div", { class: "hint", style: "text-align:center" }, "Bild lange drücken → „Zu Fotos hinzufügen“ (Originalqualität)") : null),
+        touch && exists ? h("div", { class: "hint", style: "text-align:center" }, T("Bild lange drücken → „Zu Fotos hinzufügen“ (Originalqualität)")) : null),
       h("div", { class: "lside" },
         metaGroups(it),
         it.type === "movie" ? collectionBoxes(it, close) : null,
-        (it.mirror_folders || []).length ? h("div", { style: "margin-top:8px" }, h("span", { class: "tag ok", title: "Coming-Soon-Platzhalter: Poster werden auch im echten Film-Ordner abgelegt" }, "Coming Soon gespiegelt")) : null,
-        h("dl", {}, rows.map(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]), src ? [h("dt", {}, "Auflösung"), res] : null),
+        (it.mirror_folders || []).length ? h("div", { style: "margin-top:8px" }, h("span", { class: "tag ok", title: T("Coming-Soon-Platzhalter: Poster werden auch im echten Film-Ordner abgelegt") }, T("Coming Soon gespiegelt"))) : null,
+        h("dl", {}, rows.map(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]), src ? [h("dt", {}, T("Auflösung")), res] : null),
         h("div", { class: "row wrap", style: "margin-top:20px" },
-          it.folder ? h("button", { class: "btn sm primary", onclick: pick }, exists ? "Ersetzen" : "Hochladen") : null,
-          exists && !touch ? h("button", { class: "btn sm", onclick: () => downloadSlot(it, key) }, icon("download", 14), "Herunterladen") : null,
-          draw && it.folder ? h("button", { class: "btn sm", onclick: () => { close(); searchOnline(it, key, draw); } }, "Online suchen") : null,
-          draw && exists && it.type === "show" ? h("button", { class: "btn sm", onclick: () => { close(); openApplyAll(it, key, draw); } }, "Auf alle …") : null,
+          it.folder ? h("button", { class: "btn sm primary", onclick: pick }, exists ? T("Ersetzen") : T("Hochladen")) : null,
+          exists && !touch ? h("button", { class: "btn sm", onclick: () => downloadSlot(it, key) }, icon("download", 14), T("Herunterladen")) : null,
+          draw && it.folder ? h("button", { class: "btn sm", onclick: () => { close(); searchOnline(it, key, draw); } }, T("Online suchen")) : null,
+          draw && exists && it.type === "show" ? h("button", { class: "btn sm", onclick: () => { close(); openApplyAll(it, key, draw); } }, T("Auf alle …")) : null,
           draw && exists ? h("button", { class: "btn sm danger", onclick: async () => {
-            if (!confirm(`${slotLabel(key, it.type)} wirklich löschen?`)) return;
-            close(); const r = await api(`/items/${it.id}/${key}`, { method: "DELETE" }); draw(r.item); undoToast("Gelöscht", r, draw);
-          } }, "Löschen") : null),
-        !it.folder ? h("div", { class: "status bad" }, "Für diesen Titel ist kein Ordnername bekannt – Upload nicht möglich.") : null))));
+            if (!confirm(T("{0} wirklich löschen?", slotLabel(key, it.type)))) return;
+            close(); const r = await api(`/items/${it.id}/${key}`, { method: "DELETE" }); draw(r.item); undoToast(T("Gelöscht"), r, draw);
+          } }, T("Löschen")) : null),
+        !it.folder ? h("div", { class: "status bad" }, T("Für diesen Titel ist kein Ordnername bekannt – Upload nicht möglich.")) : null))));
   const onKey = e => {
     if (e.key === "Escape") close();
     else if (nb && !e.target.closest("input,textarea,select") && (e.key === "ArrowLeft" || e.key === "ArrowRight")) { e.preventDefault(); go(e.key === "ArrowLeft" ? -1 : 1); }
@@ -1064,9 +1090,9 @@ function collectionBoxes(it, close) {
   if (!(it.collections || []).length) return box;
   api(`/collections?world=${it.world}`).then(r => {
     const mine = r.collections.filter(g => !g.hidden && g.members.some(m => m.id === it.id));
-    fill(box, mine.map(g => h("button", { class: "colbox", title: "Alle Poster dieser Collection ansehen und bearbeiten", onclick: () => { close(); openCollection(g.id); } },
-      h("b", {}, "Collection: " + g.title),
-      h("span", { class: "pill " + (g.with_poster === g.total ? "ok" : "warn") }, g.with_poster === g.total ? `vollständig (${g.total})` : `${g.with_poster} von ${g.total} Postern`),
+    fill(box, mine.map(g => h("button", { class: "colbox", title: T("Alle Poster dieser Collection ansehen und bearbeiten"), onclick: () => { close(); openCollection(g.id); } },
+      h("b", {}, T("Collection: ") + g.title),
+      h("span", { class: "pill " + (g.with_poster === g.total ? "ok" : "warn") }, g.with_poster === g.total ? T("vollständig ({0})", g.total) : T("{0} von {1} Postern", g.with_poster, g.total)),
       h("span", { class: "chev", "aria-hidden": "true" }, "›"))));
   }).catch(() => {});
   return box;
@@ -1091,21 +1117,21 @@ async function openCollection(cid) {
   const pill = h("span", {});
   const refreshPill = () => {
     const have = data.members.filter(m => m.slots.poster && m.slots.poster.exists).length, total = data.members.length;
-    pill.className = "pill " + (have === total ? "ok" : "warn"); pill.textContent = have === total ? `vollständig (${total})` : `${have} von ${total} Postern`;
+    pill.className = "pill " + (have === total ? "ok" : "warn"); pill.textContent = have === total ? T("vollständig ({0})", total) : T("{0} von {1} Postern", have, total);
   };
   const onChange = it => { const k = data.members.findIndex(x => x.id === it.id); if (k >= 0) data.members[k] = it; refreshPill(); };
   function draw() {
     const total = data.members.length;
     refreshPill();
     fill(drawer,
-      h("header", {}, h("button", { class: "btn ghost", "aria-label": "Schließen", onclick: close }, "✕"),
-        h("div", { class: "grow" }, h("h2", {}, data.title), h("div", { class: "hint", style: "margin:2px 0" }, "Plex-Collection · ", pill))),
+      h("header", {}, h("button", { class: "btn ghost", "aria-label": T("Schließen"), onclick: close }, "✕"),
+        h("div", { class: "grow" }, h("h2", {}, data.title), h("div", { class: "hint", style: "margin:2px 0" }, T("Plex-Collection · "), pill))),
       h("div", { class: "body" },
-        h("p", { class: "hint", style: "margin-top:0" }, "Poster auf eine Kachel ziehen oder anklicken, um es zu ersetzen. Mehrere Dateien, Ordner oder eine ZIP lassen sich über „Poster hochladen“ den Filmen zuordnen."),
+        h("p", { class: "hint", style: "margin-top:0" }, T("Poster auf eine Kachel ziehen oder anklicken, um es zu ersetzen. Mehrere Dateien, Ordner oder eine ZIP lassen sich über „Poster hochladen“ den Filmen zuordnen.")),
         h("div", { class: "row wrap", style: "margin-bottom:16px" },
-          h("button", { class: "btn sm primary", onclick: () => pickFiles(f => importFiles(f, null, reload), true) }, icon("upload", 14), "Poster hochladen"),
-          h("button", { class: "btn sm", title: "Diese Collection nicht mehr anzeigen (z. B. eine Sammel-Collection, die keine Filmreihe ist). Wieder einblenden: Einstellungen → Bibliotheken",
-            onclick: async () => { try { await api("/collections/hidden", { json: { id: cid, hidden: true, title: data.title, count: total } }); S.st.config.hidden_collections = [...(S.st.config.hidden_collections || []), { id: cid, title: data.title, count: total }]; toast("Collection ausgeblendet", "ok"); close(); } catch (e) { toast(e.message, "bad"); } } }, "Ausblenden")),
+          h("button", { class: "btn sm primary", onclick: () => pickFiles(f => importFiles(f, null, reload), true) }, icon("upload", 14), T("Poster hochladen")),
+          h("button", { class: "btn sm", title: T("Diese Collection nicht mehr anzeigen (z. B. eine Sammel-Collection, die keine Filmreihe ist). Wieder einblenden: Einstellungen → Bibliotheken"),
+            onclick: async () => { try { await api("/collections/hidden", { json: { id: cid, hidden: true, title: data.title, count: total } }); S.st.config.hidden_collections = [...(S.st.config.hidden_collections || []), { id: cid, title: data.title, count: total }]; toast(T("Collection ausgeblendet"), "ok"); close(); } catch (e) { toast(e.message, "bad"); } } }, T("Ausblenden"))),
         h("div", { class: "grid colgrid" }, data.members.map(m => card(m, onChange)))));
   }
   draw();
@@ -1123,14 +1149,14 @@ function openApplyAll(it, key, draw) {
     return { targets, overwritten: opt.overwrite ? overwritten : [] };
   };
   const summary = h("div", { class: "status", style: "font-size:14px" });
-  const go = h("button", { class: "btn primary" }, "Anwenden");
+  const go = h("button", { class: "btn primary" }, T("Anwenden"));
   const refresh = () => {
-    allSub.textContent = `Poster und Season00 – Season${String(opt.limit).padStart(2, "0")}, auch für Staffeln, die es noch nicht gibt`;
+    allSub.textContent = T("Poster und Season00 – Season{0}, auch für Staffeln, die es noch nicht gibt", String(opt.limit).padStart(2, "0"));
     const { targets, overwritten } = compute();
     summary.className = "status" + (targets.length ? " ok" : "");
     summary.textContent = targets.length
-      ? `${pl(targets.length, "Kachel", "Kacheln")} ${targets.length === 1 ? "wird" : "werden"} mit „${label}“ gefüllt${overwritten.length ? `, davon ${overwritten.length} überschrieben` : ""}.`
-      : "Keine Kachel zu füllen – passe die Auswahl an.";
+      ? TP(targets.length, "Eine Kachel wird mit „{1}“ gefüllt{2}.", "{0} Kacheln werden mit „{1}“ gefüllt{2}.", label, overwritten.length ? T(", davon {0} überschrieben", overwritten.length) : "")
+      : T("Keine Kachel zu füllen – passe die Auswahl an.");
     go.disabled = !targets.length;
   };
   const radio = (name, value, text, sub, checked, onPick) => h("label", { class: "opt" },
@@ -1141,33 +1167,33 @@ function openApplyAll(it, key, draw) {
   // "all tiles up to Season [n]": the upper limit is a labelled number field (default 10, max 50)
   const allSub = h("small", {});
   const allRadio = h("input", { type: "radio", name: "range", checked: opt.range === "all", onchange: () => { opt.range = "all"; refresh(); } });
-  const limitInput = h("input", { type: "number", class: "numfld", min: 0, max: it.max_season, value: opt.limit, title: `Höchste Staffelnummer (0 – ${it.max_season})`,
-    "aria-label": "Alle Kacheln bis Season",
+  const limitInput = h("input", { type: "number", class: "numfld", min: 0, max: it.max_season, value: opt.limit, title: T("Höchste Staffelnummer (0 – {0})", it.max_season),
+    "aria-label": T("Alle Kacheln bis Season"),
     oninput: e => { const v = parseInt(e.target.value, 10); opt.limit = Number.isNaN(v) ? 10 : Math.max(0, Math.min(it.max_season, v)); opt.range = "all"; allRadio.checked = true; refresh(); },
     onchange: e => { e.target.value = opt.limit; } });
-  const allRow = h("label", { class: "opt" }, allRadio, h("div", {}, "Alle Kacheln bis Season", limitInput, allSub));
-  const m = modal(`„${label}“ für ${it.title} auf andere Kacheln anwenden`, h("div", {},
+  const allRow = h("label", { class: "opt" }, allRadio, h("div", {}, T("Alle Kacheln bis Season"), limitInput, allSub));
+  const m = modal(T("„{0}“ für {1} auf andere Kacheln anwenden", label, it.title), h("div", {},
     h("div", { class: "row", style: "margin-bottom:6px" },
       h("img", { src: `/api/thumb/${it.id}/${key}?v=${it.slots[key].mtime}`, alt: "", style: "width:64px;border-radius:6px;border:1px solid var(--line)" }),
-      h("div", { class: "hint" }, "Das Bild wird kopiert und jede Kopie Kometa-konform benannt (poster, Season00, Season01 …). Das Original bleibt unverändert.")),
-    h("label", { class: "f" }, "Welche Kacheln?"),
-    radio("range", "known", "Nur vorhandene Kacheln dieser Serie", `${pl(known, "weitere Kachel", "weitere Kacheln")} (Poster + bekannte Staffeln laut Plex/Sonarr)`, opt.range === "known", v => { opt.range = v; }),
+      h("div", { class: "hint" }, T("Das Bild wird kopiert und jede Kopie Kometa-konform benannt (poster, Season00, Season01 …). Das Original bleibt unverändert."))),
+    h("label", { class: "f" }, T("Welche Kacheln?")),
+    radio("range", "known", T("Nur vorhandene Kacheln dieser Serie"), T("{0} (Poster + bekannte Staffeln laut Plex/Sonarr)", pl(known, "weitere Kachel", "weitere Kacheln")), opt.range === "known", v => { opt.range = v; }),
     allRow,
-    key !== "poster" ? check("Serienposter einbeziehen", null, opt.poster, v => { opt.poster = v; }) : null,
-    check("Specials (Season00) einbeziehen", null, opt.specials, v => { opt.specials = v; }),
-    h("label", { class: "f" }, "Bereits belegte Kacheln"),
-    radio("ow", "no", "Nur leere Kacheln füllen", "Vorhandene Bilder bleiben unangetastet", true, () => { opt.overwrite = false; }),
-    radio("ow", "yes", "Auch belegte Kacheln überschreiben", null, false, () => { opt.overwrite = true; }),
+    key !== "poster" ? check(T("Serienposter einbeziehen"), null, opt.poster, v => { opt.poster = v; }) : null,
+    check(T("Specials (Season00) einbeziehen"), null, opt.specials, v => { opt.specials = v; }),
+    h("label", { class: "f" }, T("Bereits belegte Kacheln")),
+    radio("ow", "no", T("Nur leere Kacheln füllen"), T("Vorhandene Bilder bleiben unangetastet"), true, () => { opt.overwrite = false; }),
+    radio("ow", "yes", T("Auch belegte Kacheln überschreiben"), null, false, () => { opt.overwrite = true; }),
     h("div", { style: "margin-top:14px" }, summary)),
-    [go, h("button", { class: "btn", onclick: () => m.close() }, "Abbrechen")]);
+    [go, h("button", { class: "btn", onclick: () => m.close() }, T("Abbrechen"))]);
   go.onclick = async () => {
     const { targets, overwritten } = compute();
-    if (overwritten.length && !confirm(`${pl(overwritten.length, "bereits belegte Kachel", "bereits belegte Kacheln")} ${overwritten.length === 1 ? "wird" : "werden"} überschrieben. Fortfahren?`)) return;
+    if (overwritten.length && !confirm(TP(overwritten.length, "Eine bereits belegte Kachel wird überschrieben. Fortfahren?", "{0} bereits belegte Kacheln werden überschrieben. Fortfahren?"))) return;
     try {
       const r = await busy(go, () => api(`/items/${it.id}/copy-all`, { json: { source: key, targets, overwrite: opt.overwrite } }));
       m.close();
-      undoToast(`${pl(r.written.length, "Kachel", "Kacheln")} gesetzt ✓`, r, draw);
-      if (r.warning) toast("Plex: " + r.warning, "bad");
+      undoToast(T("{0} gesetzt ✓", pl(r.written.length, "Kachel", "Kacheln")), r, draw);
+      if (r.warning) toast(T("Plex: ") + r.warning, "bad");
       r.written.forEach(t => S.rain.add(it.id + "|" + t));
       draw(r.item);
     } catch (e) { toast(e.message, "bad"); }
@@ -1181,7 +1207,7 @@ async function uploadSlot(it, slot, files, draw) {
   const fd = new FormData(); fd.append("file", imgs[0].file, imgs[0].file.name);
   try {
     const r = await api(`/items/${it.id}/${slot}/upload`, { method: "POST", body: fd });
-    undoToast("Ersetzt ✓", r, draw); if (r.warning) toast("Plex: " + r.warning, "bad");
+    undoToast(T("Ersetzt ✓"), r, draw); if (r.warning) toast(T("Plex: ") + r.warning, "bad");
     S.rain.add(it.id + "|" + slot);
     draw(r.item);
   } catch (e) { toast(e.message, "bad"); }
@@ -1197,46 +1223,46 @@ function modal(title, body, footer) {
 }
 
 async function searchOnline(it, slot, draw) {
-  const body = h("div", {}, h("div", { class: "empty" }, h("span", { class: "spin" }), " Suche bei TMDb, TVDB und fanart.tv …"));
+  const body = h("div", {}, h("div", { class: "empty" }, h("span", { class: "spin" }), T(" Suche bei TMDb, TVDB und fanart.tv …")));
   const m = modal(`${it.title} – ${slotLabel(slot, it.type)}`, body);
   const byCode = Object.fromEntries(S.langs.map(l => [l.code, l]));
-  const langTitle = code => { const l = byCode[code]; const name = !l ? code : code === "xx" ? "Textless (No Text)" : l.native && l.native !== l.name ? `${l.name} (${l.native})` : l.name; return `${code} • ${name}`; };
+  const langTitle = code => { const l = byCode[code]; const name = !l ? code : code === "xx" ? T("Textless (No Text)") : l.native && l.native !== l.name ? `${l.name} (${l.native})` : l.name; return `${code} • ${name}`; };
   try {
     const r = await api(`/items/${it.id}/${slot}/search`);
-    let tab = "Alle";
+    let tab = "*";
     const tabs = h("div", { class: "tabs" }), content = h("div");
     const pick = img => {
-      const p = h("div", { class: "pick", title: "Übernehmen", onclick: async () => {
+      const p = h("div", { class: "pick", title: T("Übernehmen"), onclick: async () => {
         p.classList.add("busy");
-        try { const res = await api(`/items/${it.id}/${slot}/url`, { json: { url: img.url } }); undoToast("Übernommen ✓", res, draw); m.close(); S.rain.add(it.id + "|" + slot); draw(res.item); }
+        try { const res = await api(`/items/${it.id}/${slot}/url`, { json: { url: img.url } }); undoToast(T("Übernommen ✓"), res, draw); m.close(); S.rain.add(it.id + "|" + slot); draw(res.item); }
         catch (e) { p.classList.remove("busy"); toast(e.message, "bad"); }
       } }, h("img", { loading: "lazy", src: "/api/proxy?url=" + encodeURIComponent(img.preview || img.url) }),
         h("span", {}, img.source, img.width ? h("b", {}, `${img.width}×${img.height}`) : ""));
       return p;
     };
     function render() {
-      fill(tabs, [{ name: "Alle", state: "ok", count: r.images.length }, ...r.providers, { name: "ThePosterDB", state: "ok", tpdb: true }].map(pv => h("button", {
+      fill(tabs, [{ name: "*", label: T("Alle"), state: "ok", count: r.images.length }, ...r.providers, { name: "ThePosterDB", state: "ok", tpdb: true }].map(pv => h("button", {
         class: "tab" + (tab === pv.name ? " on" : "") + (pv.state !== "ok" ? " off" : ""), disabled: pv.state === "nokey",
-        title: pv.state === "nokey" ? "Kein API-Key hinterlegt (Einstellungen → Quellen)" : pv.state === "error" ? pv.error : "",
+        title: pv.state === "nokey" ? T("Kein API-Key hinterlegt (Einstellungen → Quellen)") : pv.state === "error" ? pv.error : "",
         onclick: () => { tab = pv.name; render(); } },
-        pv.name, pv.tpdb ? null : h("small", {}, pv.state === "nokey" ? "kein Key" : pv.state === "error" ? "Fehler" : pv.count))));
+        pv.label || pv.name, pv.tpdb ? null : h("small", {}, pv.state === "nokey" ? T("kein Key") : pv.state === "error" ? T("Fehler") : pv.count))));
       if (tab === "ThePosterDB") { fill(content, posterDbPanel(it, slot, draw, () => m.close())); return; }
       const prov = r.providers.find(p => p.name === tab);
-      const list = tab === "Alle" ? r.images : r.images.filter(i => i.source === tab);
+      const list = tab === "*" ? r.images : r.images.filter(i => i.source === tab);
       const groups = r.languages.map(l => ({ code: l.code, imgs: list.filter(i => i.lang === l.code) }));
       const others = {};
       list.filter(i => !r.languages.some(l => l.code === i.lang)).forEach(i => (others[i.lang] ||= []).push(i));
       Object.keys(others).sort((a, b) => others[b].length - others[a].length).forEach(code => groups.push({ code, imgs: others[code], other: true }));
       fill(content,
-        prov && prov.state === "error" ? h("div", { class: "status bad" }, `⚠ ${prov.name}: ${prov.error}`) : null,
-        tab === "Alle" ? r.providers.filter(p => p.state === "error").map(p => h("div", { class: "status bad" }, `⚠ ${p.name}: ${p.error}`)) : null,
+        prov && prov.state === "error" ? h("div", { class: "status bad" }, `[ !! ] ${prov.name}: ${prov.error}`) : null,
+        tab === "*" ? r.providers.filter(p => p.state === "error").map(p => h("div", { class: "status bad" }, `[ !! ] ${p.name}: ${p.error}`)) : null,
         groups.filter(g => g.imgs.length).map((g, n) => h("div", { class: "langgroup" },
-          h("h4", {}, g.other ? "Weitere Sprache · " : `${n + 1}. `, langTitle(g.code), h("small", {}, ` ${g.imgs.length}`)),
+          h("h4", {}, g.other ? T("Weitere Sprache · ") : `${n + 1}. `, langTitle(g.code), h("small", {}, ` ${g.imgs.length}`)),
           h("div", { class: "picks" }, g.imgs.map(pick)))),
-        list.length ? null : h("div", { class: "empty" }, "Keine Poster gefunden."));
+        list.length ? null : h("div", { class: "empty" }, T("Keine Poster gefunden.")));
     }
     fill(body, tabs, content); render();
-  } catch (e) { fill(body, h("div", { class: "status bad" }, e.message), h("h4", { style: "margin:18px 0 0;color:var(--accent)" }, "ThePosterDB"), posterDbPanel(it, slot, draw, () => m.close())); }
+  } catch (e) { fill(body, h("div", { class: "status bad" }, e.message), h("h4", { style: "margin:18px 0 0;color:var(--accent)" }, T("ThePosterDB")), posterDbPanel(it, slot, draw, () => m.close())); }
 }
 
 /* -------------------------------------------------------- ThePosterDB --- */
@@ -1248,10 +1274,10 @@ function posterDbPanel(it, slot, draw, done) {
   const bare = s => s.replace(/\s*[\{\[][^}\]]*[\}\]]/g, "").replace(/[:"&<>|\\\/*?;]+/g, " ").replace(/\s+/g, " ").trim();   // without {tvdb-…} / [...] and characters a firewall may dislike
   const enc = s => encodeURIComponent(s).replace(/[()!'*]/g, c => "%" + c.charCodeAt(0).toString(16).toUpperCase());
   const section = it.type === "movie" ? "movies" : "shows";
-  const term = h("input", { type: "text", value: lsGet("p5tpdbids") === "1" ? base : bare(base), "aria-label": "Suchbegriff" });
+  const term = h("input", { type: "text", value: lsGet("p5tpdbids") === "1" ? base : bare(base), "aria-label": T("Suchbegriff") });
   // no Referer: ThePosterDB's firewall blocked clicks coming from a local address (the same link typed by hand worked)
-  const link = h("a", { class: "btn primary", target: "_blank", rel: "noopener noreferrer", referrerpolicy: "no-referrer" }, "Auf ThePosterDB suchen ↗");
-  const url = h("input", { type: "text", readOnly: true, class: "tpurl", "aria-label": "Fertige Such-Adresse", onfocus: e => e.target.select() });
+  const link = h("a", { class: "btn primary", target: "_blank", rel: "noopener noreferrer", referrerpolicy: "no-referrer" }, T("Auf ThePosterDB suchen ↗"));
+  const url = h("input", { type: "text", readOnly: true, class: "tpurl", "aria-label": T("Fertige Such-Adresse"), onfocus: e => e.target.select() });
   // Series: once the search is open in its tab the window has done its job (the download goes in via "Set hochladen" / the tile / dragging).
   // Movies: the window stays and has its own upload button, a handy workflow for a single poster.
   const movie = it.type === "movie";
@@ -1259,8 +1285,8 @@ function posterDbPanel(it, slot, draw, done) {
   const upd = () => { link.href = url.value = `https://theposterdb.com/search?term=${enc(term.value.trim())}&section=${section}`; };
   const copy = h("button", { class: "btn sm", onclick: async () => {
     try { await navigator.clipboard.writeText(url.value); } catch { url.select(); document.execCommand("copy"); }
-    toast("Link kopiert", "ok");
-  } }, "Link kopieren");
+    toast(T("Link kopiert"), "ok");
+  } }, T("Link kopieren"));
   term.oninput = upd; upd();
   const ids = h("input", { type: "checkbox", checked: lsGet("p5tpdbids") === "1", onchange: e => { lsSet("p5tpdbids", e.target.checked ? "1" : "0"); term.value = e.target.checked ? base : bare(base); upd(); } });
   const handle = files => {
@@ -1271,28 +1297,28 @@ function posterDbPanel(it, slot, draw, done) {
     else importFiles(files, it.id, draw, it, true);                                           // several files: review dialog, title fixed
   };
   const zone = h("div", { class: "tpzone" }, h("b", {}, "＋"),
-    h("div", {}, "Heruntergeladenes Poster hier ablegen"),
-    h("small", {}, "Ein einzelnes Bild ersetzt das Poster dieses Films. Ein ZIP oder mehrere Bilder öffnen den Prüfdialog."),
+    h("div", {}, T("Heruntergeladenes Poster hier ablegen")),
+    h("small", {}, T("Ein einzelnes Bild ersetzt das Poster dieses Films. Ein ZIP oder mehrere Bilder öffnen den Prüfdialog.")),
     h("div", { class: "row wrap", style: "justify-content:center;margin-top:10px" },
-      h("button", { class: "btn sm primary", onclick: () => pickFiles(handle, true) }, "Hochladen")));
+      h("button", { class: "btn sm primary", onclick: () => pickFiles(handle, true) }, T("Hochladen"))));
   if (movie) makeDropTarget(zone, handle);
   return h("div", { class: "tpdb" },
     h("ol", { class: "tpsteps" },
-      h("li", {}, "Auf ThePosterDB suchen, Sprache und Set wählen und dort (angemeldet) herunterladen."),
-      h("li", {}, movie ? "Die heruntergeladene Datei danach hier hochladen oder ablegen: p5assets benennt sie Kometa-konform und legt sie ab."
-        : slot ? "Das Bild danach über „Ersetzen“ bzw. „Hochladen“ dieser Kachel wählen oder auf die Kachel ziehen: p5assets benennt es Kometa-konform und legt es ab."
-        : "Das Set danach über „Set hochladen“ wählen oder einfach in die Serien-Ansicht ziehen: p5assets benennt es Kometa-konform und legt es ab.")),
-    h("label", { class: "f" }, "Suchbegriff (englischer Ordnername aus Sonarr/Radarr)"),
+      h("li", {}, T("Auf ThePosterDB suchen, Sprache und Set wählen und dort (angemeldet) herunterladen.")),
+      h("li", {}, movie ? T("Die heruntergeladene Datei danach hier hochladen oder ablegen: p5assets benennt sie Kometa-konform und legt sie ab.")
+        : slot ? T("Das Bild danach über „Ersetzen“ bzw. „Hochladen“ dieser Kachel wählen oder auf die Kachel ziehen: p5assets benennt es Kometa-konform und legt es ab.")
+        : T("Das Set danach über „Set hochladen“ wählen oder einfach in die Serien-Ansicht ziehen: p5assets benennt es Kometa-konform und legt es ab."))),
+    h("label", { class: "f" }, T("Suchbegriff (englischer Ordnername aus Sonarr/Radarr)")),
     h("div", { class: "row wrap" }, h("div", { class: "grow", style: "min-width:220px" }, term), link),
     h("div", { class: "row", style: "margin-top:8px" }, h("div", { class: "grow" }, url), copy),
-    h("div", { class: "hint", style: "margin:2px 0 0" }, "Falls der Button blockiert wird: Link kopieren und in einen neuen Tab einfügen."),
-    h("label", { class: "opt", style: "margin-top:8px" }, ids, h("div", {}, "Kennung wie {tvdb-123} mitsuchen", h("small", {}, "Ohne Kennung (Standard) wird nur „Titel (Jahr)“ gesucht."))),
-    h("p", { class: "hint" }, "ThePosterDB bietet Downloads nur für angemeldete Nutzer an – deshalb lädt p5assets dort nichts selbst und braucht keine Zugangsdaten."),
+    h("div", { class: "hint", style: "margin:2px 0 0" }, T("Falls der Button blockiert wird: Link kopieren und in einen neuen Tab einfügen.")),
+    h("label", { class: "opt", style: "margin-top:8px" }, ids, h("div", {}, T("Kennung wie {tvdb-123} mitsuchen"), h("small", {}, T("Ohne Kennung (Standard) wird nur „Titel (Jahr)“ gesucht.")))),
+    h("p", { class: "hint" }, T("ThePosterDB bietet Downloads nur für angemeldete Nutzer an – deshalb lädt p5assets dort nichts selbst und braucht keine Zugangsdaten.")),
     movie ? zone : null);
 }
 
 function openPosterDbSet(it, draw) {
-  const m = modal(`ThePosterDB durchsuchen – Set für ${it.title}`, posterDbPanel(it, null, draw, () => m.close()));
+  const m = modal(T("ThePosterDB durchsuchen – Set für {0}", it.title), posterDbPanel(it, null, draw, () => m.close()));
 }
 
 /* ================================================== files / drag & drop === */
@@ -1353,11 +1379,11 @@ function pickFiles(cb, multiple = true, directory = false) {
 
 /** "Set hochladen": ask whether a folder or a ZIP/images is meant (a folder cannot be picked in the same dialog). */
 function pickSet(cb) {
-  const m = modal("Set hochladen", h("div", {},
-    h("p", { class: "hint", style: "margin-top:0" }, "Alle Bilder gehören zu dieser Serie. p5assets erkennt Poster und Staffeln an den Dateinamen und benennt sie Kometa-konform."),
+  const m = modal(T("Set hochladen"), h("div", {},
+    h("p", { class: "hint", style: "margin-top:0" }, T("Alle Bilder gehören zu dieser Serie. p5assets erkennt Poster und Staffeln an den Dateinamen und benennt sie Kometa-konform.")),
     h("div", { class: "row wrap" },
-      h("button", { class: "btn primary", onclick: () => { m.close(); pickFiles(cb, true, true); } }, icon("folder", 16), "Ordner wählen"),
-      h("button", { class: "btn", onclick: () => { m.close(); pickFiles(cb, true); } }, icon("upload", 16), "ZIP / Bilder wählen"))));
+      h("button", { class: "btn primary", onclick: () => { m.close(); pickFiles(cb, true, true); } }, icon("folder", 16), T("Ordner wählen")),
+      h("button", { class: "btn", onclick: () => { m.close(); pickFiles(cb, true); } }, icon("upload", 16), T("ZIP / Bilder wählen")))));
 }
 
 /* ------------------------------------------------------------ import --- */
@@ -1367,28 +1393,28 @@ async function importFiles(files, itemId, onDone, item, review) {
   if (itemId) fd.append("item_id", itemId); else fd.append("world", S.world);
   files.forEach(f => fd.append("files", f.file, f.path));
   const bar = h("i", { style: "width:0%" });
-  const m = modal("Lade hoch …", h("div", {}, h("p", {}, `${pl(files.length, "Datei", "Dateien")} ${files.length === 1 ? "wird" : "werden"} übertragen`), h("div", { class: "progress" }, bar)));
+  const m = modal(T("Lade hoch …"), h("div", {}, h("p", {}, T("{0} {1} übertragen", pl(files.length, "Datei", "Dateien"), files.length === 1 ? "wird" : "werden")), h("div", { class: "progress" }, bar)));
   let res;
   try {
     res = await new Promise((resolve, reject) => {
       const x = new XMLHttpRequest();
       x.open("POST", "/api/import"); x.setRequestHeader("X-Requested-With", "p5assets");
       x.upload.onprogress = e => { if (e.lengthComputable) bar.style.width = (e.loaded / e.total * 100) + "%"; };
-      x.onload = () => { try { const d = JSON.parse(x.responseText); if (x.status === 401 && d.auth) { showLogin(); return reject(new Error("Anmeldung erforderlich")); } x.status < 300 ? resolve(d) : reject(new Error(d.detail || x.status)); } catch { reject(new Error("Fehler " + x.status)); } };
-      x.onerror = () => reject(new Error("Netzwerkfehler"));
+      x.onload = () => { try { const d = JSON.parse(x.responseText); if (x.status === 401 && d.auth) { showLogin(); return reject(new Error(T("Anmeldung erforderlich"))); } x.status < 300 ? resolve(d) : reject(new Error(d.detail || x.status)); } catch { reject(new Error(T("Fehler ") + x.status)); } };
+      x.onerror = () => reject(new Error(T("Netzwerkfehler")));
       x.send(fd);
     });
   } catch (e) { m.close(); toast(e.message, "bad"); return; }
   m.close();
   res.errors.forEach(e => toast(e, "bad"));
-  if (!res.entries.length) { toast("Keine Bilder gefunden", "bad"); return; }
+  if (!res.entries.length) { toast(T("Keine Bilder gefunden"), "bad"); return; }
   const allSet = res.entries.every(e => e.kind === "ignore" || e.item_id);
   const used = res.entries.filter(e => e.item_id && e.slot && e.kind !== "ignore").map(e => e.slot);
   const twice = used.length !== new Set(used).size;      // two files for the same tile: let the user decide in the review
   if (review && item) return reviewImport(res, onDone, item);   // "Set hochladen": always the review dialog, series fixed
   if (itemId && allSet && !twice) {
     const clash = item ? [...new Set(used)].filter(k => item.slots[k] && item.slots[k].exists) : [];
-    if (clash.length && !confirm(`${pl(clash.length, "Kachel", "Kacheln")} ${clash.length === 1 ? "ist" : "sind"} schon belegt (${clash.slice(0, 6).map(k => slotLabel(k, "show")).join(", ")}${clash.length > 6 ? " …" : ""}) und ${clash.length === 1 ? "wird" : "werden"} überschrieben. Fortfahren?`)) {
+    if (clash.length && !confirm(TP(clash.length, "Eine Kachel ist schon belegt ({1}{2}) und wird überschrieben. Fortfahren?", "{0} Kacheln sind schon belegt ({1}{2}) und werden überschrieben. Fortfahren?", clash.slice(0, 6).map(k => slotLabel(k, "show")).join(", "), clash.length > 6 ? " …" : ""))) {
       api("/import/" + res.session, { method: "DELETE" }).catch(() => {});
       return;
     }
@@ -1402,9 +1428,9 @@ async function applyImport(sid, entries, onDone) {
   if (!assignments.length) { api("/import/" + sid, { method: "DELETE" }); return; }
   try {
     const r = await api(`/import/${sid}/apply`, { json: { assignments } });
-    if (r.done.length) toast(`${pl(r.done.length, "Asset", "Assets")} gespeichert ✓`, "ok");
+    if (r.done.length) toast(T("{0} gespeichert ✓", pl(r.done.length, "Asset", "Assets")), "ok");
     r.failed.forEach(f => toast(f.error, "bad"));
-    r.done.filter(d => d.warning).forEach(d => toast("Plex: " + d.warning, "bad"));
+    r.done.filter(d => d.warning).forEach(d => toast(T("Plex: ") + d.warning, "bad"));
     assignments.forEach(a => S.rain.add(a.item_id + "|" + a.slot));
     S.st.summary = r.summary; updateHero();
     if (onDone) onDone(await api("/items/" + assignments[0].item_id));
@@ -1413,6 +1439,7 @@ async function applyImport(sid, entries, onDone) {
 }
 
 /** "Staffeln 1–3, 5" / "Staffel 3" / "Specials, Staffel 2": readable list of season numbers (0 = Specials). */
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 function seasonList(nums) {
   const sorted = [...new Set(nums)].sort((a, b) => a - b), ns = sorted.filter(n => n > 0), parts = [];
   for (let i = 0; i < ns.length;) {
@@ -1420,8 +1447,8 @@ function seasonList(nums) {
     parts.push(j - i >= 2 ? `${ns[i]}–${ns[j]}` : ns.slice(i, j + 1).join(", ")); i = j + 1;
   }
   const out = [];
-  if (sorted.includes(0)) out.push("Specials");
-  if (ns.length) out.push(`${ns.length === 1 ? "Staffel" : "Staffeln"} ${parts.join(", ")}`);
+  if (sorted.includes(0)) out.push(T("Specials"));
+  if (ns.length) out.push(TP(ns.length, "Staffel {1}", "Staffeln {1}", parts.join(", ")));
   return out.join(" und ");
 }
 
@@ -1436,26 +1463,26 @@ function checkSet(t, rows) {
   const existsNote = miss => {      // missing in the set, but the tile already has an image in the assets folder
     const ex = miss.filter(existing);
     if (!ex.length) return "";
-    return ex.length === miss.length ? ` – im Assets-Ordner ${miss.length === 1 ? "ist sie" : "sind sie"} schon vorhanden` : ` – ${seasonList(ex)} ${ex.length === 1 && ex[0] > 0 ? "ist" : "sind"} schon im Assets-Ordner vorhanden`;
+    return ex.length === miss.length ? TP(miss.length, " – im Assets-Ordner ist sie schon vorhanden", " – im Assets-Ordner sind sie schon vorhanden") : TP(ex.length === 1 && ex[0] > 0 ? 1 : 2, " – {1} ist schon im Assets-Ordner vorhanden", " – {1} sind schon im Assets-Ordner vorhanden", seasonList(ex));
   };
   const posterMissing = !inSet.has("poster"), posterExists = !!(t.slots.poster && t.slots.poster.exists);
   const early = [...arrNums.filter(has), ...rows.map(r => r.slot).filter(k => /^season-\d+$/.test(k) && !known.some(s => "season-" + s.n === k)).map(k => +k.split("-")[1])].filter(n => n > 0);
   const lines = [];
   lines.push({ cls: "", text: t.in_plex
-    ? `Plex kennt ${pl(plexNums.length, "Staffel", "Staffeln")}${arrNums.length ? `, Sonarr kennt zusätzlich ${seasonList(arrNums)}` : ""}.`
-    : `Noch nicht in Plex – Sonarr kennt ${pl(arrNums.length, "Staffel", "Staffeln")}.` });
+    ? T("Plex kennt {0}{1}.", pl(plexNums.length, "Staffel", "Staffeln"), arrNums.length ? T(", Sonarr kennt zusätzlich {0}", seasonList(arrNums)) : "")
+    : T("Noch nicht in Plex – Sonarr kennt {0}.", pl(arrNums.length, "Staffel", "Staffeln")) });
   lines.push({ cls: missing.length ? "bad" : "ok", text: relevant.length
-    ? `Das Set deckt ${covered.length} von ${pl(relevant.length, "Staffel", "Staffeln")} ab${missing.length ? ` – es ${missing.length === 1 ? "fehlt" : "fehlen"}: ${seasonList(missing)}${existsNote(missing)}` : ""}.`
-    : "Keine Staffeln bekannt – nur das Serienposter lässt sich prüfen." });
-  lines.push({ cls: posterMissing ? "bad" : "ok", text: posterMissing ? `Serienposter ${posterExists ? "fehlt im Set (im Assets-Ordner ist eins vorhanden)" : "fehlt im Set"}.` : "Serienposter ist enthalten." });
-  if (known.some(s => s.n === 0)) lines.push({ cls: "", text: has(0) ? "Specials sind enthalten." : "Specials sind nicht im Set (optional)." });
-  if (early.length) lines.push({ cls: "", text: `${seasonList(early)} ${early.length === 1 ? "gibt" : "geben"} es in Plex noch nicht – wird vorab abgelegt.` });
+    ? T("Das Set deckt {0} von {1} ab", covered.length, pl(relevant.length, "Staffel", "Staffeln")) + (missing.length ? TP(missing.length, " – es fehlt: {1}{2}", " – es fehlen: {1}{2}", seasonList(missing), existsNote(missing)) : "") + "."
+    : T("Keine Staffeln bekannt – nur das Serienposter lässt sich prüfen.") });
+  lines.push({ cls: posterMissing ? "bad" : "ok", text: posterMissing ? (posterExists ? T("Serienposter fehlt im Set (im Assets-Ordner ist eins vorhanden).") : T("Serienposter fehlt im Set.")) : T("Serienposter ist enthalten.") });
+  if (known.some(s => s.n === 0)) lines.push({ cls: "", text: has(0) ? T("Specials sind enthalten.") : T("Specials sind nicht im Set (optional).") });
+  if (early.length) lines.push({ cls: "", text: TP(early.length, "{1} gibt es in Plex noch nicht – wird vorab abgelegt.", "{1} geben es in Plex noch nicht – wird vorab abgelegt.", cap(seasonList(early))) });
   const bySlot = {};
   rows.forEach(r => { (bySlot[r.slot] = bySlot[r.slot] || []).push(r.name.split("/").pop()); });
   const dups = Object.entries(bySlot).filter(([, names]) => names.length > 1);
-  if (dups.length) lines.push({ cls: "bad", text: `Doppelt belegt – ${dups.map(([k, names]) => `${slotLabel(k, "show")}: ${names.join(" und ")}`).join("; ")}. Bei einem der Bilder das Häkchen entfernen (eine Kachel kann nur ein Bild haben).` });
+  if (dups.length) lines.push({ cls: "bad", text: T("Doppelt belegt – {0}. Bei einem der Bilder das Häkchen entfernen (eine Kachel kann nur ein Bild haben).", dups.map(([k, names]) => `${slotLabel(k, "show")}: ${names.join(" / ")}`).join("; ")) });
   const replaced = rows.filter(r => t.slots[r.slot] && t.slots[r.slot].exists).length;
-  if (replaced) lines.push({ cls: "warn", text: `${replaced === 1 ? "Ein vorhandenes Bild wird" : `${replaced} vorhandene Bilder werden`} ersetzt.` });
+  if (replaced) lines.push({ cls: "warn", text: TP(replaced, "Ein vorhandenes Bild wird ersetzt.", "{0} vorhandene Bilder werden ersetzt.") });
   return { ok: !missing.length && !posterMissing && !dups.length, dups: dups.length, lines };
 }
 
@@ -1481,8 +1508,8 @@ function reviewImport(res, onDone, fixed) {
   const apply = h("button", { class: "btn primary" });
   let dupBlock = false;     // two files for the same tile: the review must be fixed first (a tile holds one image)
   const refreshBtn = () => {
-    const n = count(); apply.textContent = `${pl(n, "Asset", "Assets")} übernehmen`; apply.disabled = !n || dupBlock;
-    apply.title = dupBlock ? "Erst die doppelt belegten Kacheln auflösen: bei einem der Bilder das Häkchen entfernen" : "";
+    const n = count(); apply.textContent = T("{0} übernehmen", pl(n, "Asset", "Assets")); apply.disabled = !n || dupBlock;
+    apply.title = dupBlock ? T("Erst die doppelt belegten Kacheln auflösen: bei einem der Bilder das Häkchen entfernen") : "";
   };
   const ensureTarget = async id => { if (!targets[id]) { try { targets[id] = await api("/items/" + id); } catch { /* the check is optional */ } } };
 
@@ -1494,7 +1521,7 @@ function reviewImport(res, onDone, fixed) {
     const t = r.item_id ? targets[r.item_id] : null;
     const sel = h("select", { onchange: e => { r.slot = e.target.value; draw(); } });
     const fillSlots = opts => fill(sel, opts.map(o => h("option", { value: o.slot, selected: o.slot === r.slot }, o.label)));
-    const input = h("input", { type: "text", placeholder: "Titel suchen …", value: r.item_id ? `${r.item_title}${r.item_year ? " (" + r.item_year + ")" : ""}` : "" });
+    const input = h("input", { type: "text", placeholder: T("Titel suchen …"), value: r.item_id ? `${r.item_title}${r.item_year ? " (" + r.item_year + ")" : ""}` : "" });
     const list2 = h("div", { class: "list", hidden: true });
     if (fixed && r.item_id) fillSlots(fixedSlots());
     else if (r.item_id) {
@@ -1509,20 +1536,20 @@ function reviewImport(res, onDone, fixed) {
         const want = r.kind === "poster" ? "poster" : r.season != null ? "season-" + r.season : "poster";
         r.slot = o.slots.some(s => s.slot === want) ? want : "poster";
         list2.hidden = true; await ensureTarget(o.id); draw();
-      } }, `${o.title}${o.year ? " (" + o.year + ")" : ""} `, h("span", { class: "pill" }, o.type === "movie" ? "Film" : "Serie"))));
+      } }, `${o.title}${o.year ? " (" + o.year + ")" : ""} `, h("span", { class: "pill" }, o.type === "movie" ? T("Film") : T("Serie")))));
     }, 200);
     input.onblur = () => setTimeout(() => (list2.hidden = true), 150);
-    const chk = h("input", { type: "checkbox", checked: r.use, title: "Übernehmen", onchange: e => { r.use = e.target.checked; draw(); } });
+    const chk = h("input", { type: "checkbox", checked: r.use, title: T("Übernehmen"), onchange: e => { r.use = e.target.checked; draw(); } });
     const pills = [];
-    if (r.use && t && t.slots[r.slot] && t.slots[r.slot].exists) pills.push(h("span", { class: "pill warn", title: "Für diese Kachel gibt es schon ein Bild" }, "ersetzt vorhandenes Bild"));
-    if (r.collection && !r.item_id) pills.push(h("span", { class: "pill warn", title: "Der Dateiname deutet auf ein Collection-/Sammlungs-Poster hin – bitte selbst einen Titel wählen oder das Bild nicht übernehmen" }, "vermutlich Collection-Poster"));
-    if (r.use && r.item_id && dups[r.item_id + "|" + r.slot] > 1) pills.push(h("span", { class: "pill bad", title: "Mehrere Dateien für dieselbe Kachel – nur die letzte bleibt" }, "doppelt belegt"));
-    if (r.autoSkipped && !r.use) pills.push(h("span", { class: "pill warn", title: "Für diese Kachel gibt es eine Datei, die genau „Titel (Jahr)“ heißt – sie wurde bevorzugt" }, "abgewählt: genauer Treffer vorhanden"));
+    if (r.use && t && t.slots[r.slot] && t.slots[r.slot].exists) pills.push(h("span", { class: "pill warn", title: T("Für diese Kachel gibt es schon ein Bild") }, T("ersetzt vorhandenes Bild")));
+    if (r.collection && !r.item_id) pills.push(h("span", { class: "pill warn", title: T("Der Dateiname deutet auf ein Collection-/Sammlungs-Poster hin – bitte selbst einen Titel wählen oder das Bild nicht übernehmen") }, T("vermutlich Collection-Poster")));
+    if (r.use && r.item_id && dups[r.item_id + "|" + r.slot] > 1) pills.push(h("span", { class: "pill bad", title: T("Mehrere Dateien für dieselbe Kachel – nur die letzte bleibt") }, T("doppelt belegt")));
+    if (r.autoSkipped && !r.use) pills.push(h("span", { class: "pill warn", title: T("Für diese Kachel gibt es eine Datei, die genau „Titel (Jahr)“ heißt – sie wurde bevorzugt") }, T("abgewählt: genauer Treffer vorhanden")));
     return h("div", { class: "imp" + (r.use ? "" : " skip") },
       h("img", { src: `/api/import/${res.session}/${r.id}`, loading: "lazy" }),
-      h("div", { class: "fn" }, r.name, r.kind === "ignore" ? h("div", {}, h("span", { class: "pill bad" }, "Hintergrund/Banner – ignoriert")) : null),
+      h("div", { class: "fn" }, r.name, r.kind === "ignore" ? h("div", {}, h("span", { class: "pill bad" }, T("Hintergrund/Banner – ignoriert"))) : null),
       fixed && r.item_id
-        ? h("div", { class: "c3 fixedtitle" }, h("b", {}, fixed.title + (fixed.year ? ` (${fixed.year})` : "")), h("span", { class: "pill ok" }, "diese Serie"), pills)
+        ? h("div", { class: "c3 fixedtitle" }, h("b", {}, fixed.title + (fixed.year ? ` (${fixed.year})` : "")), h("span", { class: "pill ok" }, T("diese Serie")), pills)
         : h("div", { class: "ac c3" }, input, list2, pills.length ? h("div", { class: "pills" }, pills) : null),
       h("div", { class: "c4" }, sel), chk);
   }
@@ -1548,38 +1575,38 @@ function reviewImport(res, onDone, fixed) {
     dupBlock = Object.values(dups).some(n => n > 1);
     fill(summary,
       checks.length > 1 ? h("div", { class: "setsum" }, h("b", {}, pl(checks.length, "Serie", "Serien") + ":"),
-        h("span", { class: "pill ok" }, `${okN} vollständig`), incN ? h("span", { class: "pill warn" }, `${incN} unvollständig`) : null,
-        dupN ? h("span", { class: "pill bad" }, `${dupN} mit doppelt belegten Kacheln`) : null) : null,
-      dupBlock ? h("div", { class: "status bad", style: "margin-bottom:10px" }, "⚠ Eine Kachel kann nur ein Bild haben: Bei doppelt belegten Bildern (rot markiert) bitte ein Häkchen entfernen oder eine andere Kachel wählen.") : null);
+        h("span", { class: "pill ok" }, T("{0} vollständig", okN)), incN ? h("span", { class: "pill warn" }, T("{0} unvollständig", incN)) : null,
+        dupN ? h("span", { class: "pill bad" }, T("{0} mit doppelt belegten Kacheln", dupN)) : null) : null,
+      dupBlock ? h("div", { class: "status bad", style: "margin-bottom:10px" }, T("[ !! ] Eine Kachel kann nur ein Bild haben: Bei doppelt belegten Bildern (rot markiert) bitte ein Häkchen entfernen oder eine andere Kachel wählen.")) : null);
     const group = (title, pillEl, open, body, lines) => h("details", { class: "impgroup", open },
       h("summary", {}, h("b", {}, title), h("span", { class: "grow" }), pillEl),
       lines ? h("ul", { class: "setcheck" }, lines.map(l => h("li", { class: l.cls }, l.text))) : null, body);
     fill(list,
       checks.map(c => group(`${c.t.title}${c.t.year ? ` (${c.t.year})` : ""} · ${pl(c.rs.length, "Bild", "Bilder")}`,
-        h("span", { class: "pill " + (c.chk.dups ? "bad" : c.chk.ok ? "ok" : "warn") }, c.chk.dups ? "doppelt belegt" : c.chk.ok ? "Set vollständig" : "unvollständig"),
+        h("span", { class: "pill " + (c.chk.dups ? "bad" : c.chk.ok ? "ok" : "warn") }, c.chk.dups ? T("doppelt belegt") : c.chk.ok ? T("Set vollständig") : T("unvollständig")),
         checks.length === 1 || !c.chk.ok, c.rs.map(r => buildRow(r, dups)), c.chk.lines)),
       [...cols].sort((x, y) => colMap[x[0]].total - colMap[y[0]].total).map(([cid, rs]) => {
         const g = colMap[cid], used = new Set(rs.filter(r => r.use).map(r => r.item_id));
         const lacking = g.members.filter(mb => !mb.has_poster && !used.has(mb.id));
         const dupC = rs.some(r => r.use && dups[r.item_id + "|" + r.slot] > 1);
         return group(`${g.title} · ${pl(rs.length, "Bild", "Bilder")}`,
-          [h("span", { class: "pill " + (dupC ? "bad" : lacking.length ? "warn" : "ok") }, dupC ? "doppelt belegt" : lacking.length ? `${lacking.length} von ${g.total} ohne Poster` : "Collection vollständig"),
-            h("button", { class: "btn ghost sm", title: "Diese Collection ausblenden (gilt auch im Reiter „Collections“) – z. B. eine Sammel-Collection, die keine Filmreihe ist",
-              onclick: e => { e.preventDefault(); e.stopPropagation(); g.hidden = true; api("/collections/hidden", { json: { id: cid, hidden: true, title: g.title, count: g.total } }).then(() => { S.st.config.hidden_collections = [...(S.st.config.hidden_collections || []), { id: cid, title: g.title, count: g.total }]; }).catch(() => {}); draw(); } }, "Ausblenden")],
+          [h("span", { class: "pill " + (dupC ? "bad" : lacking.length ? "warn" : "ok") }, dupC ? T("doppelt belegt") : lacking.length ? T("{0} von {1} ohne Poster", lacking.length, g.total) : T("Collection vollständig")),
+            h("button", { class: "btn ghost sm", title: T("Diese Collection ausblenden (gilt auch im Reiter „Collections“) – z. B. eine Sammel-Collection, die keine Filmreihe ist"),
+              onclick: e => { e.preventDefault(); e.stopPropagation(); g.hidden = true; api("/collections/hidden", { json: { id: cid, hidden: true, title: g.title, count: g.total } }).then(() => { S.st.config.hidden_collections = [...(S.st.config.hidden_collections || []), { id: cid, title: g.title, count: g.total }]; }).catch(() => {}); draw(); } }, T("Ausblenden"))],
           true, rs.map(r => buildRow(r, dups)), [{ cls: lacking.length ? "warn" : "ok",
-            text: lacking.length ? `Plex-Collection „${g.title}“: es fehlt noch ein Poster für ${lacking.map(x => x.title + (x.year ? " (" + x.year + ")" : "")).join(", ")}` : `Plex-Collection „${g.title}“: alle ${g.total} Filme haben ein Poster` }]);
+            text: lacking.length ? T("Plex-Collection „{0}“: es fehlt noch ein Poster für {1}", g.title, lacking.map(x => x.title + (x.year ? " (" + x.year + ")" : "")).join(", ")) : T("Plex-Collection „{0}“: alle {1} Filme haben ein Poster", g.title, g.total) }]);
       }),
-      movies.length ? group(`Filme · ${pl(movies.length, "Bild", "Bilder")}`, movieDup ? h("span", { class: "pill bad" }, "doppelt belegt") : null, true, movies.map(r => buildRow(r, dups))) : null,
-      loose.length ? group(`${checks.length || movies.length ? "Nicht zugeordnet" : "Bilder"} · ${pl(loose.length, "Bild", "Bilder")}`, loose.some(r => r.kind !== "ignore") ? h("span", { class: "pill warn" }, "bitte Titel wählen") : null, true, loose.map(r => buildRow(r, dups))) : null);
+      movies.length ? group(T("Filme · {0}", pl(movies.length, "Bild", "Bilder")), movieDup ? h("span", { class: "pill bad" }, T("doppelt belegt")) : null, true, movies.map(r => buildRow(r, dups))) : null,
+      loose.length ? group(`${checks.length || movies.length ? T("Nicht zugeordnet") : T("Bilder")} · ${pl(loose.length, "Bild", "Bilder")}`, loose.some(r => r.kind !== "ignore") ? h("span", { class: "pill warn" }, T("bitte Titel wählen")) : null, true, loose.map(r => buildRow(r, dups))) : null);
     refreshBtn();
   }
   draw();
-  const m = modal(`${pl(rows.length, "Bild", "Bilder")} erkannt`, h("div", {},
-    h("p", { class: "hint" }, fixed ? `Alle Bilder gehören zu „${fixed.title}“. Die Zuordnung zu Poster und Staffeln erkennt p5assets an den Dateinamen – prüfe oder ändere sie. Die Dateien werden Kometa-konform benannt (poster, Season01 …).`
-      : "Zuordnung automatisch anhand von Datei- und Ordnernamen (nur Titel dieser Welt). Prüfe oder ändere sie – die Dateien werden Kometa-konform benannt (poster, Season01 …)."), summary, list),
-    [apply, h("button", { class: "btn", onclick: () => { api("/import/" + res.session, { method: "DELETE" }); m.close(); } }, "Abbrechen"),
+  const m = modal(T("{0} erkannt", pl(rows.length, "Bild", "Bilder")), h("div", {},
+    h("p", { class: "hint" }, fixed ? T("Alle Bilder gehören zu „{0}“. Die Zuordnung zu Poster und Staffeln erkennt p5assets an den Dateinamen – prüfe oder ändere sie. Die Dateien werden Kometa-konform benannt (poster, Season01 …).", fixed.title)
+      : T("Zuordnung automatisch anhand von Datei- und Ordnernamen (nur Titel dieser Welt). Prüfe oder ändere sie – die Dateien werden Kometa-konform benannt (poster, Season01 …).")), summary, list),
+    [apply, h("button", { class: "btn", onclick: () => { api("/import/" + res.session, { method: "DELETE" }); m.close(); } }, T("Abbrechen")),
       h("span", { class: "spacer" }),
-      h("span", { class: "hint" }, `${rows.filter(r => r.item_id).length} von ${rows.length} zugeordnet`)]);
+      h("span", { class: "hint" }, T("{0} von {1} zugeordnet", rows.filter(r => r.item_id).length, rows.length))]);
   apply.onclick = async () => { m.close(); await applyImport(res.session, rows.filter(r => r.use && r.item_id), onDone); };
 }
 
@@ -1589,7 +1616,7 @@ function reviewImport(res, onDone, fixed) {
 let funTimer = null;
 function funLine(el) {
   clearInterval(funTimer);
-  const text = "> Ah ah ah, you didn’t write the magic word!", typed = h("span", {}), cur = h("u", {});
+  const text = T("> Ah ah ah, you didn’t write the magic word!"), typed = h("span", {}), cur = h("u", {});
   fill(el, typed, cur);
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) { typed.textContent = text; cur.remove(); return; }
   let i = 0;
@@ -1604,33 +1631,33 @@ function showLogin(note) {
   $("#foot").replaceChildren();
   try { const hue = +localStorage.getItem("p5hue"); const t = themeOf(Number.isFinite(hue) && hue >= 0 ? hue : 140), st = document.documentElement.style;
     st.setProperty("--h", hue >= 0 ? hue : 140); st.setProperty("--sat", t.sat + "%"); st.setProperty("--lit", t.lit + "%"); } catch { /* default colour */ }
-  const user = h("input", { type: "text", name: "username", autocomplete: "username", autocapitalize: "none", spellcheck: false, "aria-label": "Benutzername", required: true });
-  const pass = h("input", { type: "password", name: "password", autocomplete: "current-password", "aria-label": "Passwort", required: true, oninput: () => { clearInterval(funTimer); funEl.replaceChildren(); } });
+  const user = h("input", { type: "text", name: "username", autocomplete: "username", autocapitalize: "none", spellcheck: false, "aria-label": T("Benutzername"), required: true });
+  const pass = h("input", { type: "password", name: "password", autocomplete: "current-password", "aria-label": T("Passwort"), required: true, oninput: () => { clearInterval(funTimer); funEl.replaceChildren(); } });
   const remember = h("input", { type: "checkbox", checked: true, style: "accent-color:var(--accent)" });
   const err = h("div", { class: "status bad", role: "alert", hidden: true });
   const funEl = h("div", { class: "funline", "aria-live": "polite" });
-  const go = h("button", { class: "btn primary", type: "submit", style: "width:100%;justify-content:center" }, "Anmelden");
+  const go = h("button", { class: "btn primary", type: "submit", style: "width:100%;justify-content:center" }, T("Anmelden"));
   const form = h("form", { class: "logincard", onsubmit: async e => {
     e.preventDefault(); err.hidden = true; go.disabled = true;
     try {
       await api("/auth/login", { json: { username: user.value, password: pass.value, remember: remember.checked } });
       S.view = ""; clearInterval(funTimer); app.replaceChildren(); boot();
     } catch (ex) {
-      err.hidden = false; err.textContent = "⚠ " + ex.message; go.disabled = false;
-      if (!/Zu viele/.test(ex.message)) { pass.value = ""; pass.focus(); if (S.auth && S.auth.fun !== false) funLine(funEl); }     // focus stays in the field: type again right away
+      err.hidden = false; err.textContent = "[ !! ] " + ex.message; go.disabled = false;
+      if (!/Zu viele|Too many/.test(ex.message)) { pass.value = ""; pass.focus(); if (S.auth && S.auth.fun !== false) funLine(funEl); }     // focus stays in the field: type again right away
     }
   } },
     h("div", { class: "logo" }, h("i", { class: "logomark", "aria-hidden": "true" }, "p5"), h("span", {}, "assets", h("u", {}, "_"))),
-    h("h1", {}, "Anmeldung"), note ? h("p", { class: "hint" }, note) : h("p", { class: "hint" }, "Bitte melde dich an, um p5assets zu nutzen."),
-    h("label", { class: "f" }, "Benutzername"), user, h("label", { class: "f" }, "Passwort"), pass, funEl,
-    h("label", { class: "opt compact", style: "margin:6px 0 14px" }, remember, "Angemeldet bleiben (30 Tage)"),
+    h("h1", {}, T("Anmeldung")), note ? h("p", { class: "hint" }, note) : h("p", { class: "hint" }, T("Bitte melde dich an, um p5assets zu nutzen.")),
+    h("label", { class: "f" }, T("Benutzername")), user, h("label", { class: "f" }, T("Passwort")), pass, funEl,
+    h("label", { class: "opt compact", style: "margin:6px 0 14px" }, remember, T("Angemeldet bleiben (30 Tage)")),
     err, go,
-    h("details", { class: "how", style: "margin-top:18px" }, h("summary", {}, "Passwort vergessen?"), h("div", { class: "hint" },
-      "Das geht nur mit Zugriff auf den Server. Eine dieser Möglichkeiten:",
-      h("ol", {}, h("li", {}, "Im Container ausführen: ", h("code", {}, "docker exec -it p5assets python -m app.auth reset"), " (neues Passwort setzen oder Anmeldung ausschalten)."),
-        h("li", {}, "Die Umgebungsvariable ", h("code", {}, "P5_AUTH_RESET=1"), " setzen und den Container neu starten (die Anmeldung wird zurückgesetzt, Variable danach wieder entfernen)."),
-        h("li", {}, "Die Datei ", h("code", {}, "/config/auth.json"), " löschen.")))));
-  fill(app, h("div", { class: "login" }, form));
+    h("details", { class: "how", style: "margin-top:18px" }, h("summary", {}, T("Passwort vergessen?")), h("div", { class: "hint" },
+      T("Das geht nur mit Zugriff auf den Server. Eine dieser Möglichkeiten:"),
+      h("ol", {}, h("li", {}, T("Im Container ausführen: "), h("code", {}, "docker exec -it p5assets python -m app.auth reset"), T(" (neues Passwort setzen oder Anmeldung ausschalten).")),
+        h("li", {}, T("Die Umgebungsvariable "), h("code", {}, "P5_AUTH_RESET=1"), T(" setzen und den Container neu starten (die Anmeldung wird zurückgesetzt, Variable danach wieder entfernen).")),
+        h("li", {}, T("Die Datei "), h("code", {}, "/config/auth.json"), T(" löschen."))))));
+  fill(app, h("div", { class: "login" }, h("div", { class: "loginlang" }, langSwitch()), form));
   api("/auth/state").then(a => { S.auth = a; }).catch(() => {});
   user.focus();
 }
@@ -1641,52 +1668,52 @@ function wAuth(nav) {
   const field = (label, type, auto) => { const i = h("input", { type, autocomplete: auto, spellcheck: false, autocapitalize: "none" }); return { i, el: [h("label", { class: "f" }, label), i] }; };
   const reload = async () => { S.auth = await api("/auth/state"); drawWiz(); };
   if (!a.enabled) {
-    const u = field("Benutzername", "text", "username"), p1 = field("Passwort (mindestens 8 Zeichen)", "password", "new-password"), p2 = field("Passwort wiederholen", "password", "new-password");
-    return h("div", {}, h("h1", {}, "Anmeldung"),
-      h("p", { class: "lead" }, "Optional: Schütze p5assets mit Benutzername und Passwort. Im reinen Heimnetz brauchst du das nicht zwingend – sobald p5assets von außen erreichbar ist, solltest du es einschalten. Du kannst diesen Schritt überspringen und später in den Einstellungen nachholen."),
+    const u = field(T("Benutzername"), "text", "username"), p1 = field(T("Passwort (mindestens 8 Zeichen)"), "password", "new-password"), p2 = field(T("Passwort wiederholen"), "password", "new-password");
+    return h("div", {}, h("h1", {}, T("Anmeldung")),
+      h("p", { class: "lead" }, T("Optional: Schütze p5assets mit Benutzername und Passwort. Im reinen Heimnetz brauchst du das nicht zwingend – sobald p5assets von außen erreichbar ist, solltest du es einschalten. Du kannst diesen Schritt überspringen und später in den Einstellungen nachholen.")),
       h("div", { class: "apirow" }, u.el, p1.el, p2.el,
         h("div", { class: "row", style: "margin-top:14px" }, h("button", { class: "btn primary", onclick: async e => {
-          if (p1.i.value !== p2.i.value) return setStatus(st, false, "Die Passwörter stimmen nicht überein");
-          try { await busy(e.currentTarget, () => api("/auth/setup", { json: { username: u.i.value, password: p1.i.value } })); toast("Anmeldung eingeschaltet ✓", "ok"); await reload(); }
+          if (p1.i.value !== p2.i.value) return setStatus(st, false, T("Die Passwörter stimmen nicht überein"));
+          try { await busy(e.currentTarget, () => api("/auth/setup", { json: { username: u.i.value, password: p1.i.value } })); toast(T("Anmeldung eingeschaltet ✓"), "ok"); await reload(); }
           catch (err) { setStatus(st, false, err.message); }
-        } }, "Anmeldung einschalten")), st),
-      h("p", { class: "hint" }, "Passwort vergessen? Mit Zugriff auf den Server lässt es sich zurücksetzen: ", h("code", {}, "docker exec -it p5assets python -m app.auth reset"), " (Details auf der Anmeldeseite und in der README)."),
-      nav(null, S.wizSettings ? "Weiter" : "Überspringen"));
+        } }, T("Anmeldung einschalten"))), st),
+      h("p", { class: "hint" }, T("Passwort vergessen? Mit Zugriff auf den Server lässt es sich zurücksetzen: "), h("code", {}, "docker exec -it p5assets python -m app.auth reset"), T(" (Details auf der Anmeldeseite und in der README).")),
+      nav(null, S.wizSettings ? T("Weiter") : T("Überspringen")));
   }
-  const cur = field("Aktuelles Passwort", "password", "current-password"), nu = field("Neuer Benutzername (leer = unverändert)", "text", "username"),
-    np = field("Neues Passwort (leer = unverändert)", "password", "new-password"), np2 = field("Neues Passwort wiederholen", "password", "new-password");
+  const cur = field(T("Aktuelles Passwort"), "password", "current-password"), nu = field(T("Neuer Benutzername (leer = unverändert)"), "text", "username"),
+    np = field(T("Neues Passwort (leer = unverändert)"), "password", "new-password"), np2 = field(T("Neues Passwort wiederholen"), "password", "new-password");
   nu.i.value = a.user || "";
-  const off = field("Passwort zur Bestätigung", "password", "current-password");
-  const state = h("span", { class: "state" }, fun ? "An" : "Aus");
+  const off = field(T("Passwort zur Bestätigung"), "password", "current-password");
+  const state = h("span", { class: "state" }, fun ? T("An") : T("Aus"));
   const funSw = h("input", { type: "checkbox", checked: fun, onchange: async e => {
-    state.textContent = e.target.checked ? "An" : "Aus"; e.target.closest(".switch").classList.toggle("on", e.target.checked);
+    state.textContent = e.target.checked ? T("An") : T("Aus"); e.target.closest(".switch").classList.toggle("on", e.target.checked);
     try { await api("/auth/change", { json: { fun: e.target.checked } }); S.auth.fun = e.target.checked; } catch (err) { toast(err.message, "bad"); }
   } });
-  return h("div", {}, h("h1", {}, "Anmeldung"),
-    h("p", { class: "lead" }, "Die Anmeldung ist eingeschaltet. Angemeldet als ", h("b", {}, a.user), "."),
-    h("div", { class: "apirow" }, h("h3", {}, "Benutzername oder Passwort ändern"), cur.el, nu.el, np.el, np2.el,
+  return h("div", {}, h("h1", {}, T("Anmeldung")),
+    h("p", { class: "lead" }, T("Die Anmeldung ist eingeschaltet. Angemeldet als "), h("b", {}, a.user), "."),
+    h("div", { class: "apirow" }, h("h3", {}, T("Benutzername oder Passwort ändern")), cur.el, nu.el, np.el, np2.el,
       h("div", { class: "row", style: "margin-top:14px" }, h("button", { class: "btn primary", onclick: async e => {
-        if (np.i.value && np.i.value !== np2.i.value) return setStatus(st, false, "Die neuen Passwörter stimmen nicht überein");
+        if (np.i.value && np.i.value !== np2.i.value) return setStatus(st, false, T("Die neuen Passwörter stimmen nicht überein"));
         const json = { current_password: cur.i.value };
         if (nu.i.value.trim() !== a.user) json.username = nu.i.value;
         if (np.i.value) json.new_password = np.i.value;
-        if (json.username === undefined && !json.new_password) return setStatus(st, false, "Nichts geändert");
-        try { await busy(e.currentTarget, () => api("/auth/change", { json })); toast("Gespeichert ✓ – andere Geräte müssen sich neu anmelden", "ok"); [cur.i, np.i, np2.i].forEach(i => { i.value = ""; }); await reload(); }
+        if (json.username === undefined && !json.new_password) return setStatus(st, false, T("Nichts geändert"));
+        try { await busy(e.currentTarget, () => api("/auth/change", { json })); toast(T("Gespeichert ✓ – andere Geräte müssen sich neu anmelden"), "ok"); [cur.i, np.i, np2.i].forEach(i => { i.value = ""; }); await reload(); }
         catch (err) { setStatus(st, false, err.message); }
-      } }, "Speichern")), st),
-    h("div", { class: "apirow" }, h("div", { class: "row" }, h("div", { class: "grow" }, h("h3", {}, "Spaß-Meldung bei falschem Passwort"), h("div", { class: "hint" }, "Ein getippter Spruch in Rot unter dem Passwortfeld nach einem Fehlversuch. Er stört die Eingabe nicht.")),
+      } }, T("Speichern"))), st),
+    h("div", { class: "apirow" }, h("div", { class: "row" }, h("div", { class: "grow" }, h("h3", {}, T("Spaß-Meldung bei falschem Passwort")), h("div", { class: "hint" }, T("Ein getippter Spruch in Rot unter dem Passwortfeld nach einem Fehlversuch. Er stört die Eingabe nicht."))),
       h("label", { class: "switch" + (fun ? " on" : "") }, state, funSw, h("i")))),
-    h("div", { class: "row wrap", style: "margin:14px 0" }, h("button", { class: "btn", onclick: async () => { await api("/auth/logout", { method: "POST" }); location.reload(); } }, "Abmelden")),
-    h("details", { class: "how" }, h("summary", {}, "Anmeldung ausschalten"), h("div", { class: "apirow" }, off.el,
+    h("div", { class: "row wrap", style: "margin:14px 0" }, h("button", { class: "btn", onclick: async () => { await api("/auth/logout", { method: "POST" }); location.reload(); } }, T("Abmelden"))),
+    h("details", { class: "how" }, h("summary", {}, T("Anmeldung ausschalten")), h("div", { class: "apirow" }, off.el,
       h("div", { class: "row", style: "margin-top:14px" }, h("button", { class: "btn danger", onclick: async e => {
-        try { await busy(e.currentTarget, () => api("/auth/disable", { json: { password: off.i.value } })); toast("Anmeldung ausgeschaltet", "ok"); await reload(); }
+        try { await busy(e.currentTarget, () => api("/auth/disable", { json: { password: off.i.value } })); toast(T("Anmeldung ausgeschaltet"), "ok"); await reload(); }
         catch (err) { setStatus(st, false, err.message); }
-      } }, "Anmeldung ausschalten")))),
-    nav(null, "Weiter"));
+      } }, T("Anmeldung ausschalten"))))),
+    nav(null, T("Weiter")));
 }
 
-const STEP_LABELS = { welcome: "Start", plex: "Plex", libs: "Bibliotheken", arr: "Sonarr/Radarr", worlds: "Welten", assign: "Zuordnung", apis: "Quellen", notify: "Benachrichtigungen", auth: "Anmeldung", done: "Fertig" };
-const STEP_GROUPS = [["Verbindungen", ["plex", "libs", "arr"]], ["Welten", ["worlds", "assign"]], ["Weiteres", ["apis", "notify", "auth"]]];
+const STEP_LABELS = { welcome: T("Start"), plex: T("Plex"), libs: T("Bibliotheken"), arr: T("Sonarr/Radarr"), worlds: T("Welten"), assign: T("Zuordnung"), apis: T("Quellen"), notify: T("Benachrichtigungen"), auth: T("Anmeldung"), done: T("Fertig") };
+const STEP_GROUPS = [[T("Verbindungen"), ["plex", "libs", "arr"]], [T("Welten"), ["worlds", "assign"]], [T("Weiteres"), ["apis", "notify", "auth"]]];
 // "Zuordnung" only exists when there is more than one world
 const stepList = () => ["welcome", "plex", "libs", "arr", "worlds", ...(cfg().worlds.length > 1 ? ["assign"] : []), "apis", "notify", "auth", "done"];
 
@@ -1715,9 +1742,9 @@ function drawWiz() {
   setAccent();
   const list = stepList();
   const idx = list.indexOf(S.step);
-  const nav = (next, label = "Weiter", disabled = false) => h("div", { class: "row", style: "margin-top:26px" },
-    idx > 0 && !(S.wizSettings && S.step === "plex") ? h("button", { class: "btn", onclick: stepPrev }, "Zurück") : null,
-    S.wizSettings ? h("button", { class: "btn ghost", onclick: closeSettings }, "Schließen") : null,
+  const nav = (next, label = T("Weiter"), disabled = false) => h("div", { class: "row", style: "margin-top:26px" },
+    idx > 0 && !(S.wizSettings && S.step === "plex") ? h("button", { class: "btn", onclick: stepPrev }, T("Zurück")) : null,
+    S.wizSettings ? h("button", { class: "btn ghost", onclick: closeSettings }, T("Schließen")) : null,
     h("span", { class: "spacer" }),
     h("button", { class: "btn primary", disabled, onclick: next || stepNext }, label));
   const view = { welcome: wWelcome, plex: wPlex, libs: wLibs, arr: wArr, worlds: wWorlds, assign: wAssign, apis: wApis, notify: wNotify, auth: wAuth, done: wDone }[S.step];
@@ -1725,19 +1752,19 @@ function drawWiz() {
   const mobile = matchMedia("(max-width:820px), (max-height:520px)").matches;      // phones, also in landscape (the sidebar would not fit)
   if (mobile && S.wizSettings && S.navList) {
     const rows = names => names.filter(n => list.includes(n)).map(n => h("button", { class: "mrow", onclick: () => goStep(n) }, h("span", {}, STEP_LABELS[n]), h("i", { "aria-hidden": "true" }, "›")));
-    return fill(app, h("div", { class: "wiz" }, logoEl("assets"), h("div", { class: "mlist" }, h("h1", {}, "Einstellungen"),
+    return fill(app, h("div", { class: "wiz" }, h("div", { class: "wizbar" }, logoEl("assets"), langSwitch()), h("div", { class: "mlist" }, h("h1", {}, T("Einstellungen")),
       STEP_GROUPS.map(([g, names]) => [h("div", { class: "navgrp" }, g), h("div", { class: "mgroup" }, rows(names))]),
-      h("div", { style: "margin-top:22px" }, h("button", { class: "btn", onclick: closeSettings }, "Schließen")))));
+      h("div", { style: "margin-top:22px" }, h("button", { class: "btn", onclick: closeSettings }, T("Schließen"))))));
   }
   const top = !mobile ? null : S.wizSettings
-    ? h("button", { class: "mback", onclick: () => { S.navList = true; drawWiz(); } }, "‹ Einstellungen")
-    : h("div", { class: "mprog" }, h("div", { class: "hint", style: "margin:0 0 6px" }, `Schritt ${idx + 1} von ${list.length} · ${STEP_LABELS[S.step]}`),
+    ? h("button", { class: "mback", onclick: () => { S.navList = true; drawWiz(); } }, T("‹ Einstellungen"))
+    : h("div", { class: "mprog" }, h("div", { class: "hint", style: "margin:0 0 6px" }, T("Schritt {0} von {1} · {2}", idx + 1, list.length, STEP_LABELS[S.step])),
       h("div", { class: "bar" }, h("i", { style: `width:${Math.round(((idx + 1) / list.length) * 100)}%` })));
   // sidebar: grouped steps; in settings every step is reachable, during onboarding only the ones visited so far
   const shown = list.map((name, i) => ({ name, i })).filter(s => !(S.wizSettings && (s.name === "welcome" || s.name === "done")));
   const stepBtn = (s, n) => {
     const reachable = S.wizSettings || s.i <= (S.reached || 0);
-    return h("button", { class: (s.name === S.step ? "on " : "") + (s.i < idx ? "done" : ""), disabled: !reachable, title: reachable ? `Zu „${STEP_LABELS[s.name]}“ springen` : "Erst die vorherigen Schritte abschließen",
+    return h("button", { class: (s.name === S.step ? "on " : "") + (s.i < idx ? "done" : ""), disabled: !reachable, title: reachable ? T("Zu „{0}“ springen", STEP_LABELS[s.name]) : T("Erst die vorherigen Schritte abschließen"),
       "aria-current": s.name === S.step ? "step" : null, onclick: () => goStep(s.name) }, S.wizSettings ? null : h("b", {}, String(n + 1).padStart(2, "0")), STEP_LABELS[s.name]);
   };
   const side = [];
@@ -1749,9 +1776,9 @@ function drawWiz() {
     side.push(stepBtn(s, n));
   });
   fill(app, h("div", { class: "wiz" },
-    logoEl("assets"),
+    h("div", { class: "wizbar" }, logoEl("assets"), langSwitch()),
     h("div", { class: "wlayout" },
-      mobile ? top : h("nav", { class: "stepnav", "aria-label": S.wizSettings ? "Einstellungen" : "Einrichtung" }, side),
+      mobile ? top : h("nav", { class: "stepnav", "aria-label": S.wizSettings ? T("Einstellungen") : T("Einrichtung") }, side),
       h("div", { class: "wcard" }, view(nav, cfg())))));
 }
 
@@ -1770,32 +1797,32 @@ function scanSig() {
 async function closeSettings() {
   const before = S.settingsSig;
   await loadState(); dashboard();
-  if (before != null && before !== scanSig()) { toast("Einstellungen geändert – Bibliotheken werden neu eingelesen", "ok"); doScan(); }
+  if (before != null && before !== scanSig()) { toast(T("Einstellungen geändert – Bibliotheken werden neu eingelesen"), "ok"); doScan(); }
   S.settingsSig = null;
 }
 
 const wWelcome = nav => h("div", {},
-  h("div", { class: "big" }, "🖼️"),
-  h("h1", {}, "Willkommen bei p5assets"),
-  h("p", { class: "lead" }, "Behalte den Überblick über fehlende Poster und Staffelcover deiner Plex-Bibliothek – und ersetze sie in Sekunden per Drag & Drop. Alle Dateien werden automatisch Kometa-konform benannt."),
-  [["🔗", "Plex verbinden", "per Plex-Login oder Adresse + Token"], ["📚", "Bibliotheken wählen", "Filme und Serien"],
-   ["📡", "Optional: Sonarr & Radarr", "auch Titel und Staffeln, die noch nicht in Plex sind"],
-   ["🌐", "Welten & Assets-Ordner", "z. B. HD und 4K getrennt, jede Welt mit eigenem Ordner und eigener Farbe"],
-   ["🔑", "Optional: TMDb, TVDB, fanart.tv", "zum Herunterladen fehlender Poster"]]
-    .map(([i, t, s]) => h("div", { class: "opt", style: "cursor:default" }, i, h("div", {}, t, h("small", {}, s)))),
-  nav(null, "Los geht's"));
+  h("div", { class: "big term" }, T("p5assets_")),
+  h("h1", {}, T("Willkommen bei p5assets")),
+  h("p", { class: "lead" }, T("Behalte den Überblick über fehlende Poster und Staffelcover deiner Plex-Bibliothek – und ersetze sie in Sekunden per Drag & Drop. Alle Dateien werden automatisch Kometa-konform benannt.")),
+  [["01", T("Plex verbinden"), T("per Plex-Login oder Adresse + Token")], ["02", T("Bibliotheken wählen"), T("Filme und Serien")],
+   ["03", T("Optional: Sonarr & Radarr"), T("auch Titel und Staffeln, die noch nicht in Plex sind")],
+   ["04", T("Welten & Assets-Ordner"), T("z. B. HD und 4K getrennt, jede Welt mit eigenem Ordner und eigener Farbe")],
+   ["05", T("Optional: TMDb, TVDB, fanart.tv"), T("zum Herunterladen fehlender Poster")]]
+    .map(([i, title, sub]) => h("div", { class: "opt step", style: "cursor:default" }, h("b", { class: "stepno" }, i), h("div", {}, title, h("small", {}, sub)))),
+  nav(null, T("Los geht's")));
 
 function statusEl() { return h("div", { class: "status" }); }
-function setStatus(el, ok, msg) { el.className = "status " + (ok ? "ok" : "bad"); el.textContent = (ok ? "✓ " : "⚠ ") + msg; }
+function setStatus(el, ok, msg) { el.className = "status " + (ok ? "ok" : "bad"); el.textContent = (ok ? T("[ OK ] ") : "[ !! ] ") + msg; }
 
 /** Address input split into protocol (dropdown), host (typed by hand) and port (own field with an example). */
 function urlFields(initial, examplePort, onChange) {
   const parse = u => { let proto = "http", host = "", port = ""; if (u) { try { const x = new URL(u.includes("://") ? u : "http://" + u); proto = x.protocol.replace(":", ""); host = x.hostname; port = x.port; } catch { /* ignore */ } } return { proto, host, port }; };
   const p = parse(initial);
   const change = () => onChange && onChange();
-  const proto = h("select", { style: "width:128px;flex:none", title: "Protokoll", onchange: change }, ["http", "https"].map(v => h("option", { value: v, selected: p.proto === v }, v + "://")));
-  const host = h("input", { type: "text", value: p.host, placeholder: "IP-Adresse oder Hostname", onchange: change });
-  const port = h("input", { type: "text", inputMode: "numeric", value: p.port, placeholder: examplePort, title: `Leer = ${examplePort}`, style: "width:110px;flex:none", onchange: change });
+  const proto = h("select", { style: "width:128px;flex:none", title: T("Protokoll"), onchange: change }, ["http", "https"].map(v => h("option", { value: v, selected: p.proto === v }, v + "://")));
+  const host = h("input", { type: "text", value: p.host, placeholder: T("IP-Adresse oder Hostname"), onchange: change });
+  const port = h("input", { type: "text", inputMode: "numeric", value: p.port, placeholder: examplePort, title: T("Leer = {0}", examplePort), style: "width:110px;flex:none", onchange: change });
   return {
     el: h("div", { class: "row" }, proto, h("div", { class: "grow" }, host), h("span", {}, ":"), port),
     get: () => host.value.trim() ? `${proto.value}://${host.value.trim()}:${port.value.trim() || examplePort}` : "",
@@ -1808,11 +1835,11 @@ function wPlex(nav, c) {
   const addr = urlFields(c.plex.url, "32400");
   const token = h("input", { type: "password", placeholder: "X-Plex-Token", value: c.plex.token });
   const st = statusEl(); const serverList = h("div");
-  if (connected) { st.className = "status ok"; st.textContent = `✓ Verbunden mit ${c.plex.server_name || c.plex.url}`; }
+  if (connected) { st.className = "status ok"; st.textContent = T("[ OK ] Verbunden mit {0}", c.plex.server_name || c.plex.url); }
   const connect = async (btn, body) => {
     try {
       const r = await busy(btn, () => api("/plex/connect", { json: body }));
-      setStatus(st, true, `Verbunden mit ${r.server.name} (${pl(r.libraries.length, "Bibliothek", "Bibliotheken")})`);
+      setStatus(st, true, T("Verbunden mit {0} ({1})", r.server.name, pl(r.libraries.length, "Bibliothek", "Bibliotheken")));
       addr.set(r.url); token.value = "********"; await loadState(); nextBtn.disabled = false; fill(serverList);
     } catch (e) { setStatus(st, false, e.message); }
   };
@@ -1820,33 +1847,33 @@ function wPlex(nav, c) {
     const win = window.open("", "_blank");
     try {
       const pin = await api("/plex/pin", { method: "POST" });
-      if (win) win.location = pin.auth_url; else toast("Popup blockiert – bitte erlauben", "bad");
-      fill(st, h("span", { class: "spin" }), " Warte auf Plex-Login …"); st.className = "status";
+      if (win) win.location = pin.auth_url; else toast(T("Popup blockiert – bitte erlauben"), "bad");
+      fill(st, h("span", { class: "spin" }), T(" Warte auf Plex-Login …")); st.className = "status";
       const t0 = Date.now();
       while (Date.now() - t0 < 5 * 60e3) {
         await new Promise(r => setTimeout(r, 1500));
         const r = await api("/plex/pin/" + pin.id);
         if (r.ready) {
           if (win) win.close();
-          if (!r.servers.length) return setStatus(st, false, "Keine Server in diesem Account gefunden");
+          if (!r.servers.length) return setStatus(st, false, T("Keine Server in diesem Account gefunden"));
           st.textContent = ""; st.className = "status";
-          fill(serverList, h("label", { class: "f" }, "Server wählen"), r.servers.map(s => h("div", { class: "srv", onclick: ev => connect(ev.currentTarget, { token: s.token, connections: s.connections }) },
+          fill(serverList, h("label", { class: "f" }, T("Server wählen")), r.servers.map(s => h("div", { class: "srv", onclick: ev => connect(ev.currentTarget, { token: s.token, connections: s.connections }) },
             h("b", {}, s.name), h("div", { class: "hint" }, s.connections.map(x => x.uri).join("  ·  ")))));
           return;
         }
       }
-      setStatus(st, false, "Zeitüberschreitung beim Login");
+      setStatus(st, false, T("Zeitüberschreitung beim Login"));
     } catch (e) { setStatus(st, false, e.message); }
-  } }, "Mit Plex anmelden");
-  const nextBtn = h("button", { class: "btn primary", disabled: !connected, onclick: stepNext }, "Weiter");
+  } }, T("Mit Plex anmelden"));
+  const nextBtn = h("button", { class: "btn primary", disabled: !connected, onclick: stepNext }, T("Weiter"));
   const n = nav(null); n.lastChild.replaceWith(nextBtn);
-  return h("div", {}, h("h1", {}, "Plex verbinden"), h("p", { class: "lead" }, "Melde dich bei Plex an oder gib die Server-Adresse und den Token manuell ein."),
+  return h("div", {}, h("h1", {}, T("Plex verbinden")), h("p", { class: "lead" }, T("Melde dich bei Plex an oder gib die Server-Adresse und den Token manuell ein.")),
     h("div", { class: "row" }, login), serverList,
-    h("label", { class: "f" }, "… oder manuell"),
-    h("label", { class: "f", style: "margin-top:4px" }, "Adresse (Protokoll · IP / Hostname · Port)"), addr.el,
-    h("label", { class: "f" }, "Token"),
+    h("label", { class: "f" }, T("… oder manuell")),
+    h("label", { class: "f", style: "margin-top:4px" }, T("Adresse (Protokoll · IP / Hostname · Port)")), addr.el,
+    h("label", { class: "f" }, T("Token")),
     h("div", { class: "row" }, h("div", { class: "grow" }, token),
-      h("button", { class: "btn", onclick: e => connect(e.currentTarget, { url: addr.get(), token: token.value }) }, "Testen")),
+      h("button", { class: "btn", onclick: e => connect(e.currentTarget, { url: addr.get(), token: token.value }) }, T("Testen"))),
     st, n);
 }
 
@@ -1859,11 +1886,11 @@ function hiddenCollections() {
     if (!list.length) return fill(box);
     fill(box, h("details", { class: "impgroup", style: "margin-top:16px" },
       h("summary", {}, h("b", {}, pl(list.length, "ausgeblendete Collection", "ausgeblendete Collections"))),
-      h("div", { class: "hint", style: "padding:0 14px" }, "Diese Collections erscheinen nicht in der Vorschau und im Import."),
+      h("div", { class: "hint", style: "padding:0 14px" }, T("Diese Collections erscheinen nicht in der Vorschau und im Import.")),
       list.map(x => h("div", { class: "opt compact", style: "margin:0;border-radius:0;border-width:1px 0 0" },
-        h("div", { class: "grow" }, x.gone ? "Collection nicht mehr vorhanden" : x.title, h("small", {}, x.gone ? x.id : pl(x.count, "Film", "Filme"))),
-        h("button", { class: "btn sm", onclick: () => show([x.id]) }, x.gone ? "Entfernen" : "Einblenden"))),
-      list.length > 1 ? h("div", { style: "padding:10px 14px" }, h("button", { class: "btn sm", onclick: () => show(list.map(x => x.id)) }, "Alle einblenden")) : null));
+        h("div", { class: "grow" }, x.gone ? T("Collection nicht mehr vorhanden") : x.title, h("small", {}, x.gone ? x.id : pl(x.count, "Film", "Filme"))),
+        h("button", { class: "btn sm", onclick: () => show([x.id]) }, x.gone ? T("Entfernen") : T("Einblenden")))),
+      list.length > 1 ? h("div", { style: "padding:10px 14px" }, h("button", { class: "btn sm", onclick: () => show(list.map(x => x.id)) }, T("Alle einblenden"))) : null));
   };
   load();
   return box;
@@ -1871,17 +1898,17 @@ function hiddenCollections() {
 
 function wLibs(nav, c) {
   const libs = c.libraries.map(l => ({ ...l }));
-  const intervals = [[0, "Nur manuell"], [15, "alle 15 Minuten"], [60, "stündlich"], [360, "alle 6 Stunden"], [1440, "täglich"]];
-  return h("div", {}, h("h1", {}, "Bibliotheken"), h("p", { class: "lead" }, "Welche Plex-Bibliotheken sollen überwacht werden?"),
+  const intervals = [[0, T("Nur manuell")], [15, T("alle 15 Minuten")], [60, T("stündlich")], [360, T("alle 6 Stunden")], [1440, T("täglich")]];
+  return h("div", {}, h("h1", {}, T("Bibliotheken")), h("p", { class: "lead" }, T("Welche Plex-Bibliotheken sollen überwacht werden?")),
     libs.length ? libs.map(l => h("label", { class: "opt" }, h("input", { type: "checkbox", checked: l.enabled, onchange: e => { l.enabled = e.target.checked; savePatch({ libraries: libs }); } }),
-      h("div", {}, l.title, h("small", {}, l.type === "movie" ? "Filme" : "Serien")))) : h("div", { class: "status bad" }, "Keine Film-/Serienbibliotheken gefunden."),
+      h("div", {}, l.title, h("small", {}, l.type === "movie" ? T("Filme") : T("Serien"))))) : h("div", { class: "status bad" }, T("Keine Film-/Serienbibliotheken gefunden.")),
     h("label", { class: "opt" }, h("input", { type: "checkbox", checked: c.plex.upload_to_plex, onchange: e => savePatch({ plex: { upload_to_plex: e.target.checked } }) }),
-      h("div", {}, "Neue Poster zusätzlich direkt in Plex setzen", h("small", {}, "Kometa überschreibt sie beim nächsten Lauf ohnehin – nützlich für sofortige Anzeige"))),
-    h("label", { class: "f" }, "Automatischer Scan"),
+      h("div", {}, T("Neue Poster zusätzlich direkt in Plex setzen"), h("small", {}, T("Kometa überschreibt sie beim nächsten Lauf ohnehin – nützlich für sofortige Anzeige")))),
+    h("label", { class: "f" }, T("Automatischer Scan")),
     h("select", { onchange: e => savePatch({ scan_interval_minutes: +e.target.value }) },
       intervals.map(([v, l]) => h("option", { value: v, selected: c.scan_interval_minutes === v }, l))),
     hiddenCollections(),
-    h("p", { class: "hint" }, "p5assets gleicht Plex, Sonarr/Radarr und die Assets-Ordner im Hintergrund ab und aktualisiert die Liste der fehlenden Poster. Dabei wird nichts heruntergeladen oder verändert."),
+    h("p", { class: "hint" }, T("p5assets gleicht Plex, Sonarr/Radarr und die Assets-Ordner im Hintergrund ab und aktualisiert die Liste der fehlenden Poster. Dabei wird nichts heruntergeladen oder verändert.")),
     nav());
 }
 
@@ -1892,42 +1919,42 @@ function wArr(nav, c) {
   function draw() {
     fill(box, list.map((a, i) => {
       const example = a.kind === "sonarr" ? "8989" : "7878";
-      const name = h("input", { type: "text", value: a.name, placeholder: "Name, z. B. Sonarr 4K", onchange: e => { a.name = e.target.value; persist(); } });
+      const name = h("input", { type: "text", value: a.name, placeholder: T("Name, z. B. Sonarr 4K"), onchange: e => { a.name = e.target.value; persist(); } });
       const addr = urlFields(a.url, example, () => { a.url = addr.get(); persist(); });
-      const key = h("input", { type: "password", value: a.api_key, placeholder: "API-Key (Einstellungen → Allgemein)", onchange: e => { a.api_key = e.target.value; persist(); } });
+      const key = h("input", { type: "password", value: a.api_key, placeholder: T("API-Key (Einstellungen → Allgemein)"), onchange: e => { a.api_key = e.target.value; persist(); } });
       const st = statusEl();
       return h("div", { class: "apirow" },
-        h("div", { class: "row" }, h("h3", { class: "grow" }, a.kind === "sonarr" ? "📺 Sonarr" : "🎬 Radarr"),
-          h("button", { class: "btn sm danger", onclick: () => { list.splice(i, 1); persist(); draw(); } }, "Entfernen")),
-        h("label", { class: "f" }, "Name"), name, h("label", { class: "f" }, "Adresse (Protokoll · IP / Hostname · Port)"), addr.el, h("label", { class: "f" }, "API-Key"), key,
+        h("div", { class: "row" }, h("h3", { class: "grow" }, a.kind === "sonarr" ? T("Sonarr") : T("Radarr")),
+          h("button", { class: "btn sm danger", onclick: () => { list.splice(i, 1); persist(); draw(); } }, T("Entfernen"))),
+        h("label", { class: "f" }, T("Name")), name, h("label", { class: "f" }, T("Adresse (Protokoll · IP / Hostname · Port)")), addr.el, h("label", { class: "f" }, T("API-Key")), key,
         h("label", { class: "opt", style: "margin-top:12px" }, h("input", { type: "checkbox", checked: !!a.hide_unmonitored, onchange: e => { a.hide_unmonitored = e.target.checked; persist(); } }),
-          h("div", {}, "Nicht überwachte Titel ausblenden", h("small", {}, "Nur Titel anzeigen, die in " + (a.kind === "sonarr" ? "Sonarr" : "Radarr") + " überwacht werden"))),
+          h("div", {}, T("Nicht überwachte Titel ausblenden"), h("small", {}, T("Nur Titel anzeigen, die in {0} überwacht werden", a.kind === "sonarr" ? "Sonarr" : "Radarr")))),
         h("div", { class: "row", style: "margin-top:10px" }, h("button", { class: "btn", onclick: async e => {
           const btn = e.currentTarget;
           a.name = name.value; a.url = addr.get(); a.api_key = key.value; await persist();
           try { const r = await busy(btn, () => api("/arr/test", { json: { id: a.id, kind: a.kind, url: a.url, api_key: a.api_key } })); setStatus(st, true, `${r.app} ${r.version}`); }
           catch (err) { setStatus(st, false, err.message); }
-        } }, "Testen"), st));
+        } }, T("Testen")), st));
     }));
   }
-  const add = kind => { const n = list.filter(x => x.kind === kind).length; list.push({ id: uid("a"), kind, name: (kind === "sonarr" ? "Sonarr" : "Radarr") + (n ? " " + (n + 1) : ""), url: "", api_key: "" }); draw(); };
+  const add = kind => { const n = list.filter(x => x.kind === kind).length; list.push({ id: uid("a"), kind, name: (kind === "sonarr" ? T("Sonarr") : T("Radarr")) + (n ? " " + (n + 1) : ""), url: "", api_key: "" }); draw(); };
   draw();
-  return h("div", {}, h("h1", {}, "Sonarr & Radarr"),
-    h("p", { class: "lead" }, "Optional: Mit Sonarr und Radarr kennt p5assets auch Titel und Staffeln, die noch nicht in Plex sind – und kann dafür schon Poster ablegen. Du kannst beliebig viele Instanzen hinzufügen (z. B. HD und 4K). Ein leeres Portfeld nutzt den Beispielport."),
-    box, h("div", { class: "row wrap" }, h("button", { class: "btn", onclick: () => add("sonarr") }, "＋ Sonarr"), h("button", { class: "btn", onclick: () => add("radarr") }, "＋ Radarr")),
+  return h("div", {}, h("h1", {}, T("Sonarr & Radarr")),
+    h("p", { class: "lead" }, T("Optional: Mit Sonarr und Radarr kennt p5assets auch Titel und Staffeln, die noch nicht in Plex sind – und kann dafür schon Poster ablegen. Du kannst beliebig viele Instanzen hinzufügen (z. B. HD und 4K). Ein leeres Portfeld nutzt den Beispielport.")),
+    box, h("div", { class: "row wrap" }, h("button", { class: "btn", onclick: () => add("sonarr") }, T("＋ Sonarr")), h("button", { class: "btn", onclick: () => add("radarr") }, T("＋ Radarr"))),
     nav());
 }
 
 /** Priority list of poster languages for one world: drag to reorder, arrows, remove, add from a dropdown. */
 function langList(w, persist) {
   const byCode = Object.fromEntries(S.langs.map(l => [l.code, l]));
-  const fmt = code => { const l = byCode[code]; if (!l) return code; return code === "xx" ? "Textless (No Text)" : l.native && l.native !== l.name ? `${l.name} (${l.native})` : l.name; };
+  const fmt = code => { const l = byCode[code]; if (!l) return code; return code === "xx" ? T("Textless (No Text)") : l.native && l.native !== l.name ? `${l.name} (${l.native})` : l.name; };
   const box = h("div", { class: "langlist" });
   let dragFrom = null;
   const move = (from, to) => { if (to < 0 || to >= w.languages.length || from === to) return; const [x] = w.languages.splice(from, 1); w.languages.splice(to, 0, x); persist(); draw(); };
   function draw() {
     const add = h("select", { onchange: e => { if (e.target.value) { w.languages.push(e.target.value); persist(); draw(); } } },
-      h("option", { value: "" }, "＋ Add Language"), S.langs.filter(l => !w.languages.includes(l.code)).map(l => h("option", { value: l.code }, `${l.code} • ${fmt(l.code)}`)));
+      h("option", { value: "" }, T("＋ Add Language")), S.langs.filter(l => !w.languages.includes(l.code)).map(l => h("option", { value: l.code }, `${l.code} • ${fmt(l.code)}`)));
     fill(box, w.languages.map((code, i) => {
       const row = h("div", { class: "langrow", draggable: true,
         ondragstart: e => { dragFrom = i; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", code); row.classList.add("dragging"); },
@@ -1935,13 +1962,13 @@ function langList(w, persist) {
         ondragover: e => { if (dragFrom !== null) { e.preventDefault(); row.classList.add("over"); } },
         ondragleave: () => row.classList.remove("over"),
         ondrop: e => { e.preventDefault(); row.classList.remove("over"); if (dragFrom !== null) { const f = dragFrom; dragFrom = null; move(f, i); } } },
-        h("span", { class: "grip", title: "Ziehen zum Sortieren" }, "⠿"), h("span", { class: "num" }, i + 1),
+        h("span", { class: "grip", title: T("Ziehen zum Sortieren") }, "⠿"), h("span", { class: "num" }, i + 1),
         h("span", { class: "lname" }, h("b", {}, code), " • ", fmt(code)),
-        h("button", { class: "btn sm ghost", title: "Nach oben", disabled: i === 0, onclick: () => move(i, i - 1) }, "▲"),
-        h("button", { class: "btn sm ghost", title: "Nach unten", disabled: i === w.languages.length - 1, onclick: () => move(i, i + 1) }, "▼"),
-        h("button", { class: "btn sm ghost danger", title: "Entfernen", onclick: () => { w.languages.splice(i, 1); persist(); draw(); } }, "✕"));
+        h("button", { class: "btn sm ghost", title: T("Nach oben"), disabled: i === 0, onclick: () => move(i, i - 1) }, "▲"),
+        h("button", { class: "btn sm ghost", title: T("Nach unten"), disabled: i === w.languages.length - 1, onclick: () => move(i, i + 1) }, "▼"),
+        h("button", { class: "btn sm ghost danger", title: T("Entfernen"), onclick: () => { w.languages.splice(i, 1); persist(); draw(); } }, "✕"));
       return row;
-    }), w.languages.length ? null : h("div", { class: "hint" }, "Keine Sprache gewählt – die Online-Suche zeigt dann alles ungeordnet."), add);
+    }), w.languages.length ? null : h("div", { class: "hint" }, T("Keine Sprache gewählt – die Online-Suche zeigt dann alles ungeordnet.")), add);
   }
   draw();
   return box;
@@ -1957,16 +1984,16 @@ function wWorlds(nav, c) {
     const name = h("input", { type: "text", value: w.name, onchange: async e => { w.name = e.target.value; await persist(); drawWiz(); } });
     const path = h("input", { type: "text", value: w.assets_path, onchange: e => { w.assets_path = e.target.value; persist(); check(); } });
     // all worlds side by side: planet + name, the chosen one lights up and the world card takes over its colour
-    const hue = h("div", { class: "worldpick", role: "radiogroup", "aria-label": "Farbe der Welt" }, WORLD_THEMES.map(t =>
+    const hue = h("div", { class: "worldpick", role: "radiogroup", "aria-label": T("Farbe der Welt") }, WORLD_THEMES.map(t =>
       h("button", { type: "button", class: "wp" + (w.hue === t.hue ? " on" : ""), role: "radio", "aria-checked": w.hue === t.hue ? "true" : "false", title: t.name,
         style: `--c:hsl(${t.hue} ${t.sat}% ${t.lit}%)`, onclick: async () => { w.hue = t.hue; await persist(); drawWiz(); } },
-        planetSvg(t.hue, 40), t.name)));
+        planetSvg(t.hue, 40), T(t.name))));
     const st = statusEl(), fsBox = h("div");
     const check = async () => {
       const r = await api("/path/check", { json: { path: path.value } });
-      if (!r.exists) setStatus(st, false, "Ordner existiert nicht (im Container gemountet?)");
-      else if (!r.writable) setStatus(st, false, "Ordner ist nicht beschreibbar");
-      else setStatus(st, true, `Ordner bereit (${pl(r.entries, "Eintrag", "Einträge")})`);
+      if (!r.exists) setStatus(st, false, T("Ordner existiert nicht (im Container gemountet?)"));
+      else if (!r.writable) setStatus(st, false, T("Ordner ist nicht beschreibbar"));
+      else setStatus(st, true, T("Ordner bereit ({0})", pl(r.entries, "Eintrag", "Einträge")));
       return r.exists && r.writable;
     };
     checks.push(async () => { w.assets_path = path.value; w.name = name.value; return check(); });
@@ -1974,38 +2001,38 @@ function wWorlds(nav, c) {
       try {
         const r = await api("/fs?path=" + encodeURIComponent(p));
         path.value = r.path; w.assets_path = r.path; persist();
-        fill(fsBox, h("div", { class: "fs" }, h("div", { onclick: () => browse(r.parent) }, "⬑ .."), r.dirs.map(d => h("div", { onclick: () => browse(r.path.replace(/\/$/, "") + "/" + d) }, "📁 " + d))));
+        fill(fsBox, h("div", { class: "fs" }, h("div", { onclick: () => browse(r.parent) }, "⬑ .."), r.dirs.map(d => h("div", { onclick: () => browse(r.path.replace(/\/$/, "") + "/" + d) }, icon("folder", 14), " " + d))));
         check();
       } catch (e) { setStatus(st, false, e.message); }
     };
     if (w.assets_path) check();
     return h("div", { class: "apirow w hue", style: `--c:${worldColor(w)};${hueVars(w)}` },
-      h("div", { class: "row" }, h("span", { class: "swatch" }), h("h3", { class: "grow" }, "Welt ", i + 1),
-        worlds.length > 1 ? h("button", { class: "btn sm danger", onclick: async () => { worlds.splice(i, 1); await persist(); drawWiz(); } }, "Entfernen") : null),
-      h("label", { class: "f" }, "Name"), name,
-      h("label", { class: "f" }, "Farbe"), hue,
-      h("label", { class: "f" }, "Assets-Ordner (im Container)"),
-      h("div", { class: "row" }, h("div", { class: "grow" }, path), h("button", { class: "btn", onclick: () => browse(path.value || "/") }, "📂 Durchsuchen")),
+      h("div", { class: "row" }, h("span", { class: "swatch" }), h("h3", { class: "grow" }, T("Welt "), i + 1),
+        worlds.length > 1 ? h("button", { class: "btn sm danger", onclick: async () => { worlds.splice(i, 1); await persist(); drawWiz(); } }, T("Entfernen")) : null),
+      h("label", { class: "f" }, T("Name")), name,
+      h("label", { class: "f" }, T("Farbe")), hue,
+      h("label", { class: "f" }, T("Assets-Ordner (im Container)")),
+      h("div", { class: "row" }, h("div", { class: "grow" }, path), h("button", { class: "btn", onclick: () => browse(path.value || "/") }, icon("folder", 16), T(" Durchsuchen"))),
       fsBox, st,
       h("label", { class: "opt", style: "margin-top:14px" }, h("input", { type: "checkbox", checked: w.mirror_coming_soon !== false, onchange: e => { w.mirror_coming_soon = e.target.checked; persist(); } }),
-        h("div", {}, "Coming-Soon-Poster auch im echten Film-Ordner ablegen", h("small", {}, "Gilt nur für Ordner mit {edition-Coming Soon}. Andere Editionen wie {edition-black&white} bleiben getrennt."))),
-      h("label", { class: "f" }, "Bevorzugte Sprache der Poster (Reihenfolge = Priorität)"), langList(w, persist));
+        h("div", {}, T("Coming-Soon-Poster auch im echten Film-Ordner ablegen"), h("small", {}, T("Gilt nur für Ordner mit {edition-Coming Soon}. Andere Editionen wie {edition-black&white} bleiben getrennt.")))),
+      h("label", { class: "f" }, T("Bevorzugte Sprache der Poster (Reihenfolge = Priorität)")), langList(w, persist));
   };
 
   const next = async () => {
-    if (worlds.some(w => !w.name.trim())) return toast("Jede Welt braucht einen Namen", "bad");
+    if (worlds.some(w => !w.name.trim())) return toast(T("Jede Welt braucht einen Namen"), "bad");
     const res = await Promise.all(checks.map(f => f()));
-    if (res.some(ok => !ok)) return toast("Mindestens ein Assets-Ordner ist nicht erreichbar oder nicht beschreibbar", "bad");
+    if (res.some(ok => !ok)) return toast(T("Mindestens ein Assets-Ordner ist nicht erreichbar oder nicht beschreibbar"), "bad");
     await persist(); await loadState(); stepNext();
   };
-  return h("div", {}, h("h1", {}, "Welten & Assets-Ordner"),
-    h("p", { class: "lead" }, "Eine Welt ist eine getrennte Sammlung mit eigenem Assets-Ordner und eigener Farbe – z. B. „HD“ und „4K“. Für ein einfaches Setup reicht eine Welt. Jeder Ordner muss im Container eingebunden sein (Unraid: „Add another Path“). Bei mehreren Welten ordnest du Bibliotheken und Sonarr/Radarr im nächsten Schritt zu."),
+  return h("div", {}, h("h1", {}, T("Welten & Assets-Ordner")),
+    h("p", { class: "lead" }, T("Eine Welt ist eine getrennte Sammlung mit eigenem Assets-Ordner und eigener Farbe – z. B. „HD“ und „4K“. Für ein einfaches Setup reicht eine Welt. Jeder Ordner muss im Container eingebunden sein (Unraid: „Add another Path“). Bei mehreren Welten ordnest du Bibliotheken und Sonarr/Radarr im nächsten Schritt zu.")),
     worlds.map(worldCard),
-    h("button", { class: "btn", onclick: async () => { worlds.push({ id: uid("w"), name: `Welt ${worlds.length + 1}`, assets_path: "/assets" }); await persist(); await loadState(); drawWiz(); } }, "＋ Weitere Welt"),
-    h("label", { class: "f" }, "Struktur"),
-    mkOpt("asset_folders", "Ein Ordner pro Titel (asset_folders: true)", "Ordner/poster.jpg, Ordner/Season01.jpg – Kometa-Standard"),
-    mkOpt("convert_to_jpg", "PNG/WebP immer nach JPG konvertieren", "Standardmäßig bleiben JPG und PNG unverändert"),
-    mkOpt("ignore_specials", "Specials (Season00) nicht überwachen", "Dann gelten fehlende Specials-Poster nicht als fehlend"),
+    h("button", { class: "btn", onclick: async () => { worlds.push({ id: uid("w"), name: T("Welt {0}", worlds.length + 1), assets_path: "/assets" }); await persist(); await loadState(); drawWiz(); } }, T("＋ Weitere Welt")),
+    h("label", { class: "f" }, T("Struktur")),
+    mkOpt("asset_folders", T("Ein Ordner pro Titel (asset_folders: true)"), T("Ordner/poster.jpg, Ordner/Season01.jpg – Kometa-Standard")),
+    mkOpt("convert_to_jpg", T("PNG/WebP immer nach JPG konvertieren"), T("Standardmäßig bleiben JPG und PNG unverändert")),
+    mkOpt("ignore_specials", T("Specials (Season00) nicht überwachen"), T("Dann gelten fehlende Specials-Poster nicht als fehlend")),
     nav(next));
 }
 
@@ -2015,10 +2042,10 @@ function wAssign(nav, c) {
   const libs = c.libraries.map(l => ({ ...l }));
   const arr = c.arr.map(a => ({ ...a }));
   const chips = [
-    ...libs.filter(l => l.enabled).map(l => ({ id: "lib:" + l.key, kind: "plex", obj: l, label: l.title, sub: l.type === "movie" ? "Filme" : "Serien" })),
-    ...arr.map(a => ({ id: "arr:" + a.id, kind: a.kind, obj: a, label: a.name || (a.kind === "sonarr" ? "Sonarr" : "Radarr"), sub: a.url ? a.url.replace(/^https?:\/\//, "") : "" })),
+    ...libs.filter(l => l.enabled).map(l => ({ id: "lib:" + l.key, kind: "plex", obj: l, label: l.title, sub: l.type === "movie" ? T("Filme") : T("Serien") })),
+    ...arr.map(a => ({ id: "arr:" + a.id, kind: a.kind, obj: a, label: a.name || (a.kind === "sonarr" ? T("Sonarr") : T("Radarr")), sub: a.url ? a.url.replace(/^https?:\/\//, "") : "" })),
   ];
-  const sources = [["plex", "Plex", "📚 Bibliotheken"], ["sonarr", "Sonarr", "📺 Instanzen"], ["radarr", "Radarr", "🎬 Instanzen"]];
+  const sources = [["plex", T("Plex"), T("Bibliotheken")], ["sonarr", T("Sonarr"), T("Instanzen")], ["radarr", T("Radarr"), T("Instanzen")]];
   const placed = ch => !!ch.obj.world_set && worlds.some(w => w.id === ch.obj.world);
   let picked = null, dragged = null;
   const persist = () => {
@@ -2028,7 +2055,7 @@ function wAssign(nav, c) {
   const place = (ch, worldId) => { ch.obj.world_set = true; ch.obj.world = worldId; picked = dragged = null; persist(); draw(); };
   const back = ch => { ch.obj.world_set = false; ch.obj.world = worlds[0].id; picked = dragged = null; persist(); draw(); };
 
-  const chipEl = ch => h("div", { class: "chip2" + (picked === ch ? " picked" : ""), draggable: true, title: "Ziehen oder antippen",
+  const chipEl = ch => h("div", { class: "chip2" + (picked === ch ? " picked" : ""), draggable: true, title: T("Ziehen oder antippen"),
     ondragstart: e => { dragged = ch; e.dataTransfer.setData("text/plain", ch.id); e.dataTransfer.effectAllowed = "move"; },
     onclick: e => { e.stopPropagation(); picked = picked === ch ? null : ch; draw(); } },
     ch.label, ch.sub ? h("small", {}, ch.sub) : null);
@@ -2046,17 +2073,17 @@ function wAssign(nav, c) {
       const mine = chips.filter(ch => ch.kind === kind);
       if (!mine.length) return null;
       const open = mine.filter(ch => !placed(ch));
-      const b = h("div", { class: "bubble target", title: "Hierher zurückziehen" },
+      const b = h("div", { class: "bubble target", title: T("Hierher zurückziehen") },
         h("h4", {}, title, h("small", { style: "text-transform:none;letter-spacing:0" }, `  ${sub}`)),
-        open.length ? h("div", { class: "chips2" }, open.map(chipEl)) : h("div", { class: "hintline" }, "Alles zugeordnet"));
+        open.length ? h("div", { class: "chips2" }, open.map(chipEl)) : h("div", { class: "hintline" }, T("Alles zugeordnet")));
       dropOn(b, back, ch => ch.kind === kind && placed(ch));
       return b;
     }));
     fill(worldRow, worlds.map(w => {
       const mine = chips.filter(ch => placed(ch) && ch.obj.world === w.id);
-      const b = h("div", { class: "bubble world target hue", style: hueVars(w), title: "Hier ablegen" },
+      const b = h("div", { class: "bubble world target hue", style: hueVars(w), title: T("Hier ablegen") },
         h("h4", {}, w.name, h("small", { style: "text-transform:none;letter-spacing:0;color:var(--muted)" }, `  ${w.assets_path}`)),
-        mine.length ? h("div", { class: "chips2" }, mine.map(chipEl)) : h("div", { class: "hintline" }, "Chips hier hineinziehen"));
+        mine.length ? h("div", { class: "chips2" }, mine.map(chipEl)) : h("div", { class: "hintline" }, T("Chips hier hineinziehen")));
       dropOn(b, ch => place(ch, w.id), () => true);
       return b;
     }));
@@ -2064,36 +2091,36 @@ function wAssign(nav, c) {
   draw();
   const unplaced = () => chips.filter(ch => !placed(ch)).length;
   const next = () => {
-    if (unplaced() && !confirm(`${pl(unplaced(), "Eintrag ist", "Einträge sind")} noch nicht zugeordnet und ${unplaced() === 1 ? "landet" : "landen"} in „${worlds[0].name}“. Fortfahren?`)) return;
+    if (unplaced() && !confirm(TP(unplaced(), "Ein Eintrag ist noch nicht zugeordnet und landet in „{1}“. Fortfahren?", "{0} Einträge sind noch nicht zugeordnet und landen in „{1}“. Fortfahren?", worlds[0].name))) return;
     persist(); stepNext();
   };
-  return h("div", {}, h("h1", {}, "Zuordnung"),
-    h("p", { class: "lead" }, "Ziehe Bibliotheken und Instanzen aus den Quellen in die Welt, in der sie erscheinen sollen. Antippen geht auch: erst den Eintrag, dann die Welt. Nicht zugeordnete Einträge landen in der ersten Welt."),
-    h("label", { class: "f" }, "Quellen"), srcRow, h("label", { class: "f" }, "Welten"), worldRow, nav(next));
+  return h("div", {}, h("h1", {}, T("Zuordnung")),
+    h("p", { class: "lead" }, T("Ziehe Bibliotheken und Instanzen aus den Quellen in die Welt, in der sie erscheinen sollen. Antippen geht auch: erst den Eintrag, dann die Welt. Nicht zugeordnete Einträge landen in der ersten Welt.")),
+    h("label", { class: "f" }, T("Quellen")), srcRow, h("label", { class: "f" }, T("Welten")), worldRow, nav(next));
 }
 
 function wApis(nav, c) {
   const a = c.apis;
   const row = (id, name, url, extra) => {
-    const key = h("input", { type: "password", value: a[id], placeholder: "API Key" });
-    const pin = extra ? h("input", { type: "password", value: a.tvdb_pin, placeholder: "PIN (nur bei Subscriber-Keys)", style: "margin-top:8px" }) : null;
+    const key = h("input", { type: "password", value: a[id], placeholder: T("API Key") });
+    const pin = extra ? h("input", { type: "password", value: a.tvdb_pin, placeholder: T("PIN (nur bei Subscriber-Keys)"), style: "margin-top:8px" }) : null;
     const st = statusEl();
     const persist = () => savePatch({ apis: { [id]: key.value, ...(pin ? { tvdb_pin: pin.value } : {}) } });
     key.onchange = persist; if (pin) pin.onchange = persist;
-    return h("div", { class: "apirow" }, h("h3", {}, name), h("div", { class: "hint" }, h("a", { href: url, target: "_blank", rel: "noopener" }, "Key anfordern ↗")),
+    return h("div", { class: "apirow" }, h("h3", {}, name), h("div", { class: "hint" }, h("a", { href: url, target: "_blank", rel: "noopener" }, T("Key anfordern ↗"))),
       h("div", { class: "row" }, h("div", { class: "grow" }, key, pin), h("button", { class: "btn", onclick: async e => {
         const btn = e.currentTarget;
         await persist();
-        try { await busy(btn, () => api("/test/" + id, { json: { key: key.value, pin: pin ? pin.value : "" } })); setStatus(st, true, "Funktioniert"); }
+        try { await busy(btn, () => api("/test/" + id, { json: { key: key.value, pin: pin ? pin.value : "" } })); setStatus(st, true, T("Funktioniert")); }
         catch (err) { setStatus(st, false, err.message); }
-      } }, "Testen")), st);
+      } }, T("Testen"))), st);
   };
-  return h("div", {}, h("h1", {}, "Poster-Quellen"), h("p", { class: "lead" }, "Optional: Mit API-Keys kann p5assets fehlende Poster direkt online suchen. Du kannst diesen Schritt überspringen."),
-    row("tmdb", "TMDb", "https://www.themoviedb.org/settings/api"),
-    row("tvdb", "TheTVDB", "https://thetvdb.com/dashboard/account/apikey", true),
+  return h("div", {}, h("h1", {}, T("Poster-Quellen")), h("p", { class: "lead" }, T("Optional: Mit API-Keys kann p5assets fehlende Poster direkt online suchen. Du kannst diesen Schritt überspringen.")),
+    row("tmdb", T("TMDb"), "https://www.themoviedb.org/settings/api"),
+    row("tvdb", T("TheTVDB"), "https://thetvdb.com/dashboard/account/apikey", true),
     row("fanart", "fanart.tv", "https://fanart.tv/get-an-api-key/"),
-    h("p", { class: "hint" }, "Die bevorzugte Sprache der Poster stellst du pro Welt unter „Welten“ ein."),
-    nav(null, "Weiter"));
+    h("p", { class: "hint" }, T("Die bevorzugte Sprache der Poster stellst du pro Welt unter „Welten“ ein.")),
+    nav(null, T("Weiter")));
 }
 
 /** Notifications after a scan: Discord, Telegram, ntfy. Only three events are reported (see the text), no further options. */
@@ -2105,49 +2132,49 @@ function wNotify(nav, c) {
   };
   const card = (ch, name, how, fields) => {
     const st = statusEl();
-    const state = h("span", { class: "state" }, n[ch].enabled ? "An" : "Aus");
+    const state = h("span", { class: "state" }, n[ch].enabled ? T("An") : T("Aus"));
     const on = h("input", { type: "checkbox", checked: !!n[ch].enabled, onchange: e => {
-      const sw = e.target.closest(".switch"); state.textContent = e.target.checked ? "An" : "Aus"; sw.classList.toggle("on", e.target.checked);
+      const sw = e.target.closest(".switch"); state.textContent = e.target.checked ? T("An") : T("Aus"); sw.classList.toggle("on", e.target.checked);
       savePatch({ notify: { [ch]: { enabled: e.target.checked } } });
     } });
     const test = h("button", { class: "btn", onclick: async e => {
       const btn = e.currentTarget;
       for (const i of btn.closest(".apirow").querySelectorAll("input")) i.dispatchEvent(new Event("change"));      // save what was typed last
-      try { await new Promise(r => setTimeout(r, 250)); await busy(btn, () => api("/notify/test", { json: { channel: ch } })); setStatus(st, true, "Testnachricht gesendet – schau in deinen Kanal"); }
+      try { await new Promise(r => setTimeout(r, 250)); await busy(btn, () => api("/notify/test", { json: { channel: ch } })); setStatus(st, true, T("Testnachricht gesendet – schau in deinen Kanal")); }
       catch (err) { setStatus(st, false, err.message); }
-    } }, "Testnachricht senden");
-    return h("div", { class: "apirow" }, h("div", { class: "row" }, h("h3", { class: "grow" }, name), h("label", { class: "switch" + (n[ch].enabled ? " on" : ""), title: "Kanal ein- oder ausschalten" }, state, on, h("i"))),
-      h("details", { class: "how" }, h("summary", {}, "So richtest du es ein"), h("div", { class: "hint" }, how)),
+    } }, T("Testnachricht senden"));
+    return h("div", { class: "apirow" }, h("div", { class: "row" }, h("h3", { class: "grow" }, name), h("label", { class: "switch" + (n[ch].enabled ? " on" : ""), title: T("Kanal ein- oder ausschalten") }, state, on, h("i"))),
+      h("details", { class: "how" }, h("summary", {}, T("So richtest du es ein")), h("div", { class: "hint" }, how)),
       fields, h("div", { class: "row", style: "margin-top:12px" }, test), st);
   };
-  return h("div", {}, h("h1", {}, "Benachrichtigungen"),
-    h("p", { class: "lead" }, "Optional: p5assets meldet sich nach einem Scan, wenn es etwas Neues gibt. Du kannst diesen Schritt überspringen und später in den Einstellungen nachholen."),
-    h("div", { class: "status ok", style: "display:block;font-size:13px;line-height:1.7" }, "Es gibt genau drei Anlässe: ",
-      h("b", {}, "① neue Titel ohne Poster"), " (Coming-Soon-Titel sind markiert, alles in einer Nachricht), ", h("b", {}, "② Fehler beim Scan"), " (einmal pro Fehler) und ",
-      h("b", {}, "③ neue Einträge in „In Plex, Poster fehlt“"), ". Beim ersten Scan merkt sich p5assets nur den Ausgangsstand und schickt nichts."),
-    card("discord", "Discord", "Server-Einstellungen → Integrationen → Webhooks → „Neuer Webhook“ → „Webhook-URL kopieren“ und hier einfügen.",
-      field("discord", "webhook", "Webhook-URL", { secret: true, ph: "https://discord.com/api/webhooks/…" })),
-    card("telegram", "Telegram", "Schreibe dem @BotFather „/newbot“ und folge den Fragen: du bekommst den Bot-Token. Schreibe deinem neuen Bot eine Nachricht und rufe https://api.telegram.org/bot<TOKEN>/getUpdates auf: die Zahl bei „chat“ → „id“ ist deine Chat-ID.",
-      [field("telegram", "token", "Bot-Token", { secret: true, ph: "123456:ABC…" }), field("telegram", "chat_id", "Chat-ID", { ph: "z. B. 123456789" })]),
-    card("ntfy", "ntfy", "Installiere die ntfy-App, abonniere ein eigenes, schwer zu erratendes Topic und trage es hier ein. Eigener Server: Adresse ändern; geschütztes Topic: Zugangs-Token eintragen.",
-      [field("ntfy", "url", "Server", { ph: "https://ntfy.sh" }), field("ntfy", "topic", "Topic", { ph: "z. B. p5assets-mein-geheimes-topic" }), field("ntfy", "token", "Zugangs-Token (optional)", { secret: true })]),
-    h("div", { class: "apirow" }, h("h3", {}, "Link in der Nachricht (optional)"),
-      h("div", { class: "hint" }, "Adresse, unter der du p5assets im Heimnetz erreichst – wird als Link an die Nachricht gehängt."),
+  return h("div", {}, h("h1", {}, T("Benachrichtigungen")),
+    h("p", { class: "lead" }, T("Optional: p5assets meldet sich nach einem Scan, wenn es etwas Neues gibt. Du kannst diesen Schritt überspringen und später in den Einstellungen nachholen.")),
+    h("div", { class: "status ok", style: "display:block;font-size:13px;line-height:1.7" }, T("Es gibt genau drei Anlässe: "),
+      h("b", {}, T("① neue Titel ohne Poster")), T(" (Coming-Soon-Titel sind markiert, alles in einer Nachricht), "), h("b", {}, T("② Fehler beim Scan")), T(" (einmal pro Fehler) und "),
+      h("b", {}, T("③ neue Einträge in „In Plex, Poster fehlt“")), T(". Beim ersten Scan merkt sich p5assets nur den Ausgangsstand und schickt nichts.")),
+    card("discord", T("Discord"), T("Server-Einstellungen → Integrationen → Webhooks → „Neuer Webhook“ → „Webhook-URL kopieren“ und hier einfügen."),
+      field("discord", "webhook", T("Webhook-URL"), { secret: true, ph: "https://discord.com/api/webhooks/…" })),
+    card("telegram", T("Telegram"), T("Schreibe dem @BotFather „/newbot“ und folge den Fragen: du bekommst den Bot-Token. Schreibe deinem neuen Bot eine Nachricht und rufe https://api.telegram.org/bot<TOKEN>/getUpdates auf: die Zahl bei „chat“ → „id“ ist deine Chat-ID."),
+      [field("telegram", "token", T("Bot-Token"), { secret: true, ph: "123456:ABC…" }), field("telegram", "chat_id", T("Chat-ID"), { ph: "z. B. 123456789" })]),
+    card("ntfy", "ntfy", T("Installiere die ntfy-App, abonniere ein eigenes, schwer zu erratendes Topic und trage es hier ein. Eigener Server: Adresse ändern; geschütztes Topic: Zugangs-Token eintragen."),
+      [field("ntfy", "url", T("Server"), { ph: "https://ntfy.sh" }), field("ntfy", "topic", T("Topic"), { ph: "z. B. p5assets-mein-geheimes-topic" }), field("ntfy", "token", T("Zugangs-Token (optional)"), { secret: true })]),
+    h("div", { class: "apirow" }, h("h3", {}, T("Link in der Nachricht (optional)")),
+      h("div", { class: "hint" }, T("Adresse, unter der du p5assets im Heimnetz erreichst – wird als Link an die Nachricht gehängt.")),
       h("input", { type: "text", value: n.base_url || "", placeholder: "http://192.168.1.10:8484", onchange: e => savePatch({ notify: { base_url: e.target.value.trim() } }) })),
-    nav(null, "Weiter"));
+    nav(null, T("Weiter")));
 }
 
 function wDone() {
-  return h("div", { style: "text-align:center" }, h("div", { class: "big" }, "🚀"), h("h1", {}, "Alles bereit!"),
-    h("p", { class: "lead" }, "p5assets scannt jetzt deine Bibliotheken und zeigt dir, was fehlt."),
-    h("button", { class: "btn primary", onclick: async () => { await api("/onboarding/finish", { method: "POST" }); await loadState(); S.filter = DEFAULT_FILTER; dashboard(); } }, "Scan starten"),
-    h("div", { style: "margin-top:16px" }, h("button", { class: "btn ghost", onclick: stepPrev }, "Zurück")));
+  return h("div", { style: "text-align:center" }, h("div", { class: "big term" }, "$ ready_"), h("h1", {}, T("Alles bereit!")),
+    h("p", { class: "lead" }, T("p5assets scannt jetzt deine Bibliotheken und zeigt dir, was fehlt.")),
+    h("button", { class: "btn primary", onclick: async () => { await api("/onboarding/finish", { method: "POST" }); await loadState(); S.filter = DEFAULT_FILTER; dashboard(); } }, T("Scan starten")),
+    h("div", { style: "margin-top:16px" }, h("button", { class: "btn ghost", onclick: stepPrev }, T("Zurück"))));
 }
 
 /* ------------------------------------------- pull to refresh (home-screen app) --- */
 // An app added to the iPhone/iPad home screen has no browser pull-to-refresh: pulling down at the top reloads the page instead.
 (function pullToRefresh() {
-  const bar = h("div", { id: "ptr" }, "↓ Zum Aktualisieren ziehen");
+  const bar = h("div", { id: "ptr" }, T("↓ Zum Aktualisieren ziehen"));
   document.body.appendChild(bar);
   let y0 = null, dist = 0;
   const THRESHOLD = 90;
@@ -2159,10 +2186,10 @@ function wDone() {
     if (dist <= 0 || window.scrollY > 0) { bar.style.transform = ""; return; }
     const d = Math.min(dist / 2, THRESHOLD + 20);
     bar.style.transform = `translateY(${d}px)`;
-    bar.textContent = d >= THRESHOLD / 2 + 10 ? "↑ Loslassen zum Aktualisieren" : "↓ Zum Aktualisieren ziehen";
+    bar.textContent = d >= THRESHOLD / 2 + 10 ? T("↑ Loslassen zum Aktualisieren") : T("↓ Zum Aktualisieren ziehen");
   }, { passive: true });
   addEventListener("touchend", () => {
-    if (y0 != null && dist / 2 >= THRESHOLD / 2 + 10) { bar.textContent = "Lade neu …"; location.reload(); }
+    if (y0 != null && dist / 2 >= THRESHOLD / 2 + 10) { bar.textContent = T("Lade neu …"); location.reload(); }
     bar.style.transform = ""; y0 = null; dist = 0;
   }, { passive: true });
 })();
