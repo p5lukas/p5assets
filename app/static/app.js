@@ -233,6 +233,17 @@ function rainEl() {
   return box;
 }
 
+/** While a tile is being saved, matrix rain loops over its poster: instant feedback for a drop / upload (the dissolving rain follows when the new picture is in). */
+function busyTile(key, on) {
+  document.querySelectorAll(`.poster[data-key="${key.replace(/"/g, "")}"]`).forEach(p => {
+    p.querySelectorAll(".saving").forEach(e => e.remove());
+    if (!on) return;
+    const box = h("div", { class: "rain saving" }, h("canvas"));
+    p.append(box);
+    if (!reduced()) requestAnimationFrame(() => runRain(box.firstChild, 120000, getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#00ff66", false));
+  });
+}
+
 function worldTransition(world, mid) {
   if (reduced()) { mid(); return; }
   const hue = world && world.hue != null ? world.hue : 140;
@@ -795,7 +806,7 @@ function moreControl(g) {
 function posterBox(item, slot, known = true) {
   const sl = item.slots[slot];
   const exists = !!(sl && sl.exists);
-  const wrap = h("div", { class: "poster" + (!exists && known ? " miss" : "") });
+  const wrap = h("div", { class: "poster" + (!exists && known ? " miss" : ""), "data-key": item.id + "|" + slot });
   const placeholder = txt => wrap.append(h("div", { class: "ph" }, h("div", {}, h("b", {}, "＋"), txt)));
   if (exists) {
     wrap.append(h("img", { loading: "lazy", alt: "", draggable: false, src: `/api/thumb/${item.id}/${slot}?v=${sl.mtime}`, onload: e => e.target.classList.add("loaded"),
@@ -976,12 +987,13 @@ async function openItem(id) {
       let src; try { src = JSON.parse(e.dataTransfer.getData("application/x-p5-slot")); } catch { return; }
       if (src.item !== it.id || src.slot === key) return;
       if (exists && !confirm(T("{0} ist schon belegt. Mit {1} überschreiben?", slotLabel(key, it.type), slotLabel(src.slot, it.type)))) return;
+      busyTile(it.id + "|" + key, true);
       try {
         const r = await api(`/items/${it.id}/${key}/copy`, { json: { source: src.slot } });
         undoToast(T("{0} → {1} kopiert ✓", slotLabel(src.slot, it.type), slotLabel(key, it.type)), r, draw);
         if (r.warning) toast(T("Plex: ") + r.warning, "bad");
         S.rain.add(it.id + "|" + key); draw(r.item);
-      } catch (err) { toast(err.message, "bad"); }
+      } catch (err) { toast(err.message, "bad"); } finally { busyTile(it.id + "|" + key, false); }
     });
     return el;
   }
@@ -1205,12 +1217,14 @@ async function uploadSlot(it, slot, files, draw) {
   const imgs = files.filter(f => /\.(jpe?g|png|webp|gif|bmp|tiff?|avif)$/i.test(f.path));
   if (imgs.length !== 1 || files.length !== 1) return importFiles(files, it.id, draw);
   const fd = new FormData(); fd.append("file", imgs[0].file, imgs[0].file.name);
+  const key = it.id + "|" + slot;
+  busyTile(key, true);
   try {
     const r = await api(`/items/${it.id}/${slot}/upload`, { method: "POST", body: fd });
     undoToast(T("Ersetzt ✓"), r, draw); if (r.warning) toast(T("Plex: ") + r.warning, "bad");
-    S.rain.add(it.id + "|" + slot);
+    S.rain.add(key);
     draw(r.item);
-  } catch (e) { toast(e.message, "bad"); }
+  } catch (e) { toast(e.message, "bad"); } finally { busyTile(key, false); }
 }
 
 function modal(title, body, footer) {
@@ -1426,6 +1440,7 @@ async function importFiles(files, itemId, onDone, item, review) {
 async function applyImport(sid, entries, onDone) {
   const assignments = entries.filter(e => e.item_id && e.slot).map(e => ({ file: e.id, item_id: e.item_id, slot: e.slot }));
   if (!assignments.length) { api("/import/" + sid, { method: "DELETE" }); return; }
+  assignments.forEach(a => busyTile(a.item_id + "|" + a.slot, true));
   try {
     const r = await api(`/import/${sid}/apply`, { json: { assignments } });
     if (r.done.length) toast(T("{0} gespeichert ✓", pl(r.done.length, "Asset", "Assets")), "ok");
@@ -1435,7 +1450,7 @@ async function applyImport(sid, entries, onDone) {
     S.st.summary = r.summary; updateHero();
     if (onDone) onDone(await api("/items/" + assignments[0].item_id));
     await loadItems(); renderGrid();
-  } catch (e) { toast(e.message, "bad"); }
+  } catch (e) { toast(e.message, "bad"); } finally { assignments.forEach(a => busyTile(a.item_id + "|" + a.slot, false)); }
 }
 
 /** "Staffeln 1–3, 5" / "Staffel 3" / "Specials, Staffel 2": readable list of season numbers (0 = Specials). */

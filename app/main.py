@@ -217,7 +217,8 @@ async def _store(it: dict, slot: str, data: bytes) -> dict:
     undo: dict = {}
     path = (await asyncio.to_thread(uploads.write_assets, it, [slot], data, undo))[0]
     await asyncio.to_thread(scanner.refresh_item, it["id"])
-    warn = await _plex_push(it, [slot], data)
+    # the preview image is made while the optional Plex upload runs, so the new poster shows at once when the browser asks for it
+    _, warn = await asyncio.gather(asyncio.to_thread(thumbs.get, Path(path)), _plex_push(it, [slot], data))
     log.info("Saved: %s / %s → %s%s", it["title"], slot, path,
              f" (+ mirror: {', '.join(it['mirror_folders'])})" if it.get("mirror_folders") else "")
     if warn:

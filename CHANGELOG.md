@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.1 – 2026-10-30
+
+**Changed**
+- Instant feedback when saving a poster: as soon as you drop or choose an image, Matrix rain loops over the tile until the new poster is in (also for copying a poster to another tile and for imports); the dissolving rain then reveals the new picture
+- Faster display after saving: the preview image is made while the optional Plex upload runs, so it is ready when the browser asks for it
+
 ## 0.6.0 – 2026-10-29
 
 **New**

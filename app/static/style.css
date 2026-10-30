@@ -589,3 +589,4 @@ input[type=search]::-webkit-search-cancel-button,input[type=search]::-webkit-sea
 .loginlang{position:fixed;top:calc(env(safe-area-inset-top,0px) + 14px);right:16px;z-index:5}
 @media(prefers-reduced-motion:reduce){.langsw u{animation:none}}
 @media(max-width:760px){.langsw .pr,.langsw u{display:none}.langsw{padding:5px 8px}}
+.rain.saving{animation:none;background:hsl(var(--h) var(--sat) 2% / .82)}
