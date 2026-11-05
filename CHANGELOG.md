@@ -1,134 +1,167 @@
-# Änderungen
+# Changelog
+
+## 0.6.2 – 2026-11-05
+
+**Changed**
+- Proofread all interface texts in English and German; wording, spelling and punctuation are more consistent and sound less machine-translated
+- README (English and German), changelog, Unraid template and compose file reviewed and corrected, including the setup steps for additional assets folders
+
+**Fixed**
+- The notification setup step listed three triggers; there are two (new titles in “In Plex, poster missing” and scan errors)
+- The upload progress text in the English interface mixed in German verbs
+- World color names in the settings are now translated in tooltips too
+
+## 0.6.1 – 2026-10-30
+
+**Changed**
+- Saving a poster gives instant feedback: as soon as you drop or choose an image, Matrix rain runs over the tile until the new poster is saved, then dissolves to reveal it (this also applies to copying a poster to another tile and to imports).
+- New posters appear faster, because the preview image is generated while the optional Plex upload is still running.
+
+## 0.6.0 – 2026-10-29
+
+**New**
+- The interface is available in English and German, with English as the default; the `$ EN/DE` switch in the header, on the login page and in the setup changes the language, and the browser remembers your choice.
+- All texts, error messages and release notes are translated, while notifications, log lines and background scan messages are always in English.
+- The README, changelog, Unraid template and release texts on GitHub are now in English; the German README is kept as `README.de.md`.
+
+**Changed**
+- Colorful emojis are replaced by terminal-style marks (`[ OK ]`, `[ !! ]`, `$ ready_`, numbered steps) and line icons.
+- All README screenshots and animations are re-recorded with the English interface and made-up demo titles.
 
 ## 0.5.0 – 2026-10-22
 
-Sammel-Version der Serie 0.4.1 – 0.4.10 (Details siehe unten).
+Summary release of the 0.4.1 to 0.4.10 series (details below).
 
-**Neu**
-- **Plex-Collections:** Die Poster-Vorschau eines Films nennt seine Collection; ein Klick öffnet die Detailansicht der Collection mit allen Postern (ersetzen, hochladen, Set-Upload, ausblenden). Der Import gruppiert Filme nach Plex-Collection und prüft, welche Filme danach noch ohne Poster sind; Collection-Poster („… Collection“) werden nicht automatisch einem Film zugeordnet
-- **Startansicht „In Plex, Poster fehlt“**, Reiter aufgeräumt („Alle fehlenden“; „Vollständig“, „Collections“ und „Noch nicht in Plex“ entfallen)
-- **Einstellungen und Onboarding** mit Seitenleiste (Desktop) bzw. als Liste mit Gruppen und „Schritt x von y“ (iPhone/iPad)
-- Tastaturkürzel (`/`, `Esc`, `←`/`→`), Logo führt zur Startseite, kürzerer Update-Hinweis mit nach Version gruppierter Liste unter „Neuigkeiten“
-- Neues App-Icon (orange Flammen-Komet) in allen Größen
+**New**
+- **Plex collections:** The poster preview shows a movie's collection, and one click opens a detail view with all of the collection's posters (replace, upload, upload a set, hide).
+- The import groups movies by Plex collection and lists the movies that will still have no poster; collection posters (“… Collection”) are never assigned to a movie automatically.
+- The new start view “In Plex, poster missing” replaces the tabs “Complete”, “Collections” and “Not in Plex yet”, and “Missing” is renamed to “All missing”.
+- Settings and onboarding have a sidebar on desktop and a grouped list with “Step x of y” on iPhone/iPad.
+- Keyboard shortcuts (`/`, `Esc`, `←`/`→`), a clickable logo that leads to the start view, and a shorter update notice with the full list grouped by version under “What's new”.
+- A new app icon (orange flame comet) in all sizes.
 
-**Geändert**
-- Die Suche durchsucht immer alle Titel der Welt; „Bilder hochladen“ heißt „Poster hochladen“
-- Kein Flackern mehr beim Schließen der Detailansicht (unveränderte Kacheln werden wiederverwendet)
-- Alle README-Bilder und Animationen neu (fiktive Demo-Titel)
+**Changed**
+- The search always covers all titles in the world, and “Upload images” is renamed to “Upload posters”.
+- Closing the detail view no longer makes the grid flicker, because unchanged tiles are reused.
+- All README screenshots and animations are redone with made-up demo titles.
 
 ## 0.4.10 – 2026-10-18
 
-**Behoben**
-- Die Suche auf der Startseite durchsucht wieder alle Titel der Welt, auch wenn ein anderer Reiter (z. B. die neue Startansicht „In Plex, Poster fehlt“) offen ist; während der Suche ist „Alle“ markiert, ein Klick auf einen Reiter beendet die Suche
+**Fixed**
+- The search on the start page covers all titles in the world again, even when another tab such as “In Plex, poster missing” is open; while searching, “All” is highlighted, and clicking a tab ends the search.
 
 ## 0.4.9 – 2026-10-16
 
-**Behoben**
-- **Browser-Tab-Icon** zeigte noch das alte Bild: Die Icon-Adressen tragen jetzt die Versionsnummer (`?v=…`), sodass Browser das neue Icon sofort laden; `/favicon.ico` liefert eine echte `.ico` (16/32/48 px), dazu eigene 32- und 48-px-Tab-Icons mit lesbarem Abzeichen; Web-App-Manifest und Icons ohne langes Zwischenspeichern
+**Fixed**
+- The browser tab still showed the old icon; icon URLs now include the version number (`?v=…`) so browsers load the new icon immediately.
+- `/favicon.ico` now serves a real `.ico` file (16/32/48 px), with dedicated 32 and 48 px tab icons and a legible badge.
+- The web app manifest and icons are no longer cached for a long time.
 
 ## 0.4.8 – 2026-10-15
 
-**Geändert**
-- **App-Icon** endgültig: Das Abzeichen unten rechts ist ein **oranger Flammen-Komet** (eigene Zeichnung, Anspielung auf Kometa) statt des grünen Feuerballs; Aufbau wie das Icon von p5converter (dort silberne Audio-CD + blaue Blu-ray). Alle Größen neu: Favicon `icon.png`, `icon-192.png`, `icon-512.png`, Apple-Touch-Icon (iPhone/iPad-Web-App) und `unraid/icon.png` (erscheint auch im README)
-- Icon-Skript `tools/icons/make_icons.py` (gemeinsam mit p5converter) und die SVG-Quellen beider Icons liegen in `tools/icons/`
+**Changed**
+- The final app icon has an **orange flame comet** badge at the bottom right (a nod to Kometa) instead of the green fireball, matching the design of the p5converter icon (which has a silver audio CD and a blue Blu-ray).
+- All icon sizes are regenerated: favicon `icon.png`, `icon-192.png`, `icon-512.png`, the Apple touch icon (iPhone/iPad web app) and `unraid/icon.png` (also shown in the README).
+- The icon script `tools/icons/make_icons.py` (shared with p5converter) and the SVG sources of both icons are in `tools/icons/`.
 
 ## 0.4.7 – 2026-10-15
 
-**Geändert**
-- **App-Icon** mit Abzeichen: kleiner Feuerball (Komet, wie beim Kometa-Logo) unten rechts, das „p5“ etwas kleiner; gleicher Aufbau wie das Icon von p5converter (dort zwei Pfeile). Alle Größen neu: Favicon `icon.png`, `icon-192.png`, `icon-512.png`, Apple-Touch-Icon (iPhone/iPad-Web-App) und `unraid/icon.png`
-- SVG-Quelle und Erzeugungs-Skript für die Icons in `tools/icons/` (`make_icons.py`, gemeinsam mit p5converter)
+**Changed**
+- The app icon has a badge with a small fireball (a comet, like the Kometa logo) at the bottom right and a slightly smaller “p5”, matching the design of the p5converter icon (which has two arrows).
+- All icon sizes are regenerated: favicon `icon.png`, `icon-192.png`, `icon-512.png`, the Apple touch icon (iPhone/iPad web app) and `unraid/icon.png`.
+- The SVG source and the generator script `make_icons.py` (shared with p5converter) are in `tools/icons/`.
 
 ## 0.4.6 – 2026-10-12
 
-**Neu**
-- Startansicht „In Plex, Poster fehlt“ (an erster Stelle in der Reiterleiste); ist nichts offen, gibt es „Alles vollständig!“ mit einem Knopf „Alle anzeigen“
-- Einstellungen auf dem Handy als Liste mit Gruppen, ein Tipp öffnet die Seite („‹ Einstellungen“ führt zurück); das Onboarding zeigt „Schritt x von y“ mit Fortschrittsbalken
+**New**
+- The start view “In Plex, poster missing” is the first tab; when nothing is missing, it shows “All complete!” with a “Show all” button.
+- On mobile, the settings are a grouped list where a tap opens a page (“‹ Settings” goes back), and onboarding shows “Step x of y” with a progress bar.
 
-**Geändert**
-- Reiter „Fehlende“ heißt „Alle fehlenden“; der Reiter „Noch nicht in Plex“ entfällt (Titel, die nur Sonarr/Radarr kennen, stehen weiter unter „Alle“ und „Alle fehlenden“ mit dem Etikett „Noch nicht in Plex“)
-- Ausgeblendete Collections zeigen in den Einstellungen ihren Namen (auch bei älteren Einträgen aus dem letzten Scan nachgetragen); nicht mehr vorhandene lassen sich entfernen
+**Changed**
+- The “Missing” tab is renamed to “All missing”, and the “Not in Plex yet” tab is removed; titles that only Sonarr/Radarr know stay under “All” and “All missing” with the “Not in Plex yet” badge.
+- Hidden collections are listed by name in the settings (older entries get their name from the last scan), and collections that no longer exist can be removed.
 
-**Behoben**
-- Collection-Detailansicht: Poster waren auf dem Handy fast bildfüllend, jetzt mehrere Spalten wie bei Serien
+**Fixed**
+- On mobile, posters in the collection detail view no longer fill almost the whole screen; they are shown in several columns, as for series.
 
 ## 0.4.5 – 2026-10-12
 
-**Neu**
-- Collection-Detailansicht: In der Vorschau führt die Collection des Films in eine Ansicht mit allen Postern der Collection (Kacheln wie bei einer Serie: ersetzen, hochladen, löschen, Vorschau; Set-Upload und „Ausblenden“)
-- Ausgeblendete Collections stehen in den Einstellungen als aufklappbare Liste mit Namen und lassen sich einzeln (oder alle) wieder einblenden
+**New**
+- Collection detail view: in the preview, the movie's collection opens a view with all of the collection's posters, with the same tiles as for a series (replace, upload, delete, preview, upload a set, “Hide”).
+- Hidden collections are listed in the settings in an expandable list with their names and can be shown again one by one or all at once.
 
-**Geändert**
-- Die aufklappbare Poster-Leiste in der Vorschau ist durch einen Eintrag ersetzt, der die Detailansicht öffnet
+**Changed**
+- The expandable poster bar in the preview is replaced by an entry that opens the detail view.
 
-**Behoben**
-- Beim Schließen der Detailansicht flackerte das ganze Raster (alle Poster kurz schwarz): unveränderte Kacheln werden jetzt wiederverwendet statt neu aufgebaut
+**Fixed**
+- Closing the detail view no longer makes the whole grid flicker (all posters briefly black), because unchanged tiles are reused instead of rebuilt.
 
 ## 0.4.4 – 2026-10-12
 
-**Neu**
-- Poster-Vorschau zeigt die Plex-Collection(en) des Films; aufgeklappt stehen alle Poster der Collection nebeneinander (fehlende markiert, anklickbar)
-- Einrichtung und Einstellungen mit Seitenleiste (Gruppen: Verbindungen, Welten, Weiteres); auf dem Handy eine scrollbare Zeile
+**New**
+- The poster preview shows the movie's Plex collections, and expanding it shows all posters of a collection side by side (missing ones marked and clickable).
+- Setup and settings have a sidebar with the groups Connections, Worlds and More, shown as a scrollable row on mobile.
 
-**Geändert**
-- Aufgeräumt: Reiter „Vollständig“ und „Collections“ entfernt (die Collection-Erkennung im Import und die Vorschau bleiben)
-- „Bilder hochladen“ heißt jetzt „Poster hochladen“
-- Ausgeblendete Collections lassen sich unter Einstellungen → Bibliotheken zurücksetzen
+**Changed**
+- The “Complete” and “Collections” tabs are removed; collection detection in the import and the preview stays.
+- “Upload images” is renamed to “Upload posters”.
+- Hidden collections can be reset under “Settings → Libraries”.
 
 ## 0.4.3 – 2026-10-11
 
-**Neu**
-- Collections lassen sich ausblenden (im Reiter „Collections“ und im Import); die Auswahl bleibt gespeichert, im Reiter sind ausgeblendete wieder einblendbar
+**New**
+- Collections can be hidden in the “Collections” tab and in the import; the choice is saved, and hidden collections can be shown again in the tab.
 
-**Geändert**
-- Der Import zeigt alle passenden Plex-Collections eines Films (jeweils mit eigener Prüfung), nicht nur die erste; so kann eine große Sammel-Collection die passende kleine nicht mehr verdrängen
+**Changed**
+- The import shows all matching Plex collections of a movie, each with its own check, so a large catch-all collection can no longer hide the small one that actually matches.
 
-**Behoben**
-- Code-Qualität: `ruff check` meldet keine Fehler mehr
+**Fixed**
+- `ruff check` no longer reports any errors.
 
 ## 0.4.2 – 2026-10-11
 
-**Neu**
-- Plex-Collections: neuer Reiter „Collections“ zeigt jede Collection (ab zwei Filmen) mit „x von y Postern“; Filme ohne Poster lassen sich direkt dort hochladen
-- Beim Import werden Filme nach Plex-Collection gruppiert, die Prüfung nennt Filme der Collection, die danach noch kein Poster haben
+**New**
+- A new “Collections” tab shows each Plex collection with at least two movies as “x of y posters”, and missing posters can be uploaded right there.
+- The import groups movies by Plex collection and lists the movies in the collection that will still have no poster.
 
 ## 0.4.1 – 2026-10-11
 
-**Neu**
-- Ein Klick auf das Logo bringt von überall zurück zur Startseite
-- Tastaturkürzel: „/“ springt ins Suchfeld, Esc leert es, ←/→ blättern in der Poster-Vorschau (mit ‹ › Knöpfen)
-- Import erkennt Collection-/Sammlungs-Poster am Dateinamen und ordnet sie nicht automatisch zu
+**New**
+- Clicking the logo returns to the start page from anywhere.
+- Keyboard shortcuts: `/` jumps to the search field, `Esc` clears it, and `←`/`→` page through the poster preview (also with ‹ › buttons).
+- The import recognizes collection posters by their file name and does not assign them automatically.
 
-**Geändert**
-- „Neu in diesem Update“ ist jetzt ein kurzer Hinweis (einmal pro Version); alle Neuigkeiten, nach Version gruppiert, stehen unter „Neuigkeiten“ in der Fußzeile
-- Bei doppelt belegten Kacheln bevorzugt der Import die Datei „Titel (Jahr)“ und wählt die andere ab
+**Changed**
+- “New in this update” is now a short notice shown once per version, and all news, grouped by version, is under “What's new” in the footer.
+- When two files claim the same tile, the import prefers the file named “Title (Year)” and deselects the other.
 
 ## 0.4.0 – 2026-10-10
 
-**Neu**
-- Benachrichtigungen per Discord, Telegram oder ntfy (neue Titel ohne Poster, Coming Soon, Scan-Fehler)
-- „Neu in diesem Update“-Fenster mit Einrichten-Aktionen (später über „Neuigkeiten“ in der Fußzeile)
-- Papierkorb mit Rückgängig (30 Tage, höchstens 2 GB) und Aufräumen verwaister Ordner, jeweils mit Suche
-- Reiter „Schwache Poster“ (zu klein oder nicht 2:3, Schwellwerte frei wählbar)
-- Abdeckungsverlauf im Statistik-Block
-- Zehn Welten mit eigenem Planeten, Wechsel als Wurmloch-Reise
-- Reiter „In Plex, Poster fehlt“ und „Coming Soon“; Quellenauswahl; A–Z-Leiste
-- Set-Kontrolle beim Import: Gruppen je Serie, Prüfung gegen die Staffeln aus Plex/Sonarr, Warnung bei doppelt belegten Kacheln
-- Herunterladen (Original, ZIP am Desktop); auf iPhone/iPad öffnet sich das Original in p5assets
-- Installierbar als App auf iPhone/iPad (Runterziehen zum Aktualisieren, „Neu laden“)
-- Upload-Gruppe „Bilder hochladen:“ (Datei/ZIP, Ordner), Suche neben den Reitern mit Ein-Klick-Leeren
-- Optionale Anmeldung (Benutzername/Passwort, scrypt-Hash, 30 Tage angemeldet bleiben, Sperre nach Fehlversuchen) mit Zurücksetzen per Befehl, Umgebungsvariable oder Datei
-- Lizenz: GPL-3.0
+**New**
+- Notifications via Discord, Telegram or ntfy for new titles without a poster, Coming Soon titles and scan errors.
+- A “New in this update” window with setup actions, available later under “What's new” in the footer.
+- A trash with undo (30 days, 2 GB max.) and a cleanup for orphaned folders, both with search.
+- A “Weak posters” tab for images that are too small or not 2:3, with adjustable thresholds.
+- A coverage history in the statistics block.
+- Ten worlds, each with its own planet, and a wormhole animation when switching.
+- The tabs “In Plex, poster missing” and “Coming Soon”, a source filter and an A–Z bar.
+- A set check in the import that groups files by series, compares them with the seasons in Plex/Sonarr and warns when two files claim the same tile.
+- Downloads in original quality (as a ZIP on desktop); on iPhone/iPad the original opens in p5assets.
+- p5assets can be installed as an app on iPhone/iPad, with pull-to-refresh and a “Reload” button.
+- An “Upload posters:” group in the header (file/ZIP, folder) and a search next to the tabs with a one-click clear button.
+- Optional login with username and password (scrypt hash, stay signed in for 30 days, lockout after failed attempts), which can be reset with a command, an environment variable or by deleting a file.
+- The project is licensed under the GPL-3.0.
 
-**Geändert**
-- Marken vereinfacht: kein Häkchen-Kästchen mehr, eine Marke „Noch nicht in Plex“, richtige Einzahl/Mehrzahl
-- „Titel anlegen“ (eigene Ordner) entfernt; vorhandene Einträge erscheinen ggf. unter „Verwaiste Ordner“
-- Vorschau-Fenster mit einer Kopfzeile und einem Schließen-Kreuz
+**Changed**
+- Badges are simpler: no more checkbox, a single “Not in Plex yet” badge and correct singular/plural forms.
+- “Create title” (custom folders) is removed; existing entries may show up under “Orphaned folders”.
+- The preview window has a single header row and one close button.
+- Title matching during import is about 17 times faster (180 files against 6450 titles: 29 s → 1.7 s).
+- Security headers are added (Content-Security-Policy, no embedding in other sites, nosniff, no referrer).
+- Static files are served with a version parameter, so the home screen app loads a new version immediately.
+- More than 40 automated tests (naming rules, matching, trash, upload/ZIP, security) run before every image build.
 
-**Behoben / verbessert**
-- Fehlermeldungen enthalten keine API-Keys oder Tokens mehr (auch nicht aus Request-URLs)
-- Titelabgleich beim Import ca. 17-mal schneller (180 Dateien gegen 6450 Titel: 29 s → 1,7 s)
-- Sicherheits-Header (Content-Security-Policy, kein Einbetten in fremde Seiten, nosniff, kein Referrer)
-- Ungültige Logdateinamen ergeben 400 statt 500; ZIP-Einträge mit echter Größenbegrenzung
-- Leere Liste nach fehlgeschlagenem Scan erklärt jetzt den Fehler und bietet „Erneut scannen“
-- Statische Dateien werden mit Versionsparameter ausgeliefert (die Home-Bildschirm-App lädt sofort die neue Version)
-- 40+ automatische Tests (Namensregeln, Zuordnung, Papierkorb, Upload/ZIP, Sicherheit) laufen vor jedem Image-Bau
+**Fixed**
+- Error messages no longer contain API keys or tokens, not even from request URLs.
+- Invalid log file names return 400 instead of 500, and ZIP entries have a real size limit.
+- An empty list after a failed scan now explains the error and offers “Scan again”.

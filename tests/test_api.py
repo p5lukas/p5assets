@@ -159,3 +159,35 @@ def test_hidden_collections_get_names_from_the_scan(monkeypatch):
     assert all(isinstance(h, dict) for h in config.get()["hidden_collections"])            # converted and kept
     assert next(h for h in config.get()["hidden_collections"] if h["id"] == "1:900")["title"] == "Trilogie"
     config.update({"hidden_collections": []})
+
+
+def test_language_header_switches_error_texts():
+    with TestClient(main.app) as c:
+        assert c.get("/api/items/nope", headers={"X-Lang": "de"}).json()["detail"] == "Titel nicht gefunden – bitte neu scannen"
+        assert c.get("/api/items/nope", headers={"X-Lang": "en"}).json()["detail"] == "Title not found – please rescan"
+        assert c.get("/api/items/nope").json()["detail"] == "Title not found – please rescan"          # English is the default
+        js = c.get("/i18n.js")
+        assert js.status_code == 200 and js.text.startswith("window.P5_EN = ") and "Title not found" in js.text
+
+
+def test_every_translated_text_has_an_english_version():
+    """All tr("…") keys of the backend and all T("…")/TP/pl texts of the UI exist in en.json (German text → English text)."""
+    import ast
+    import json
+    import re
+    from pathlib import Path
+
+    app_dir = Path(main.__file__).parent
+    en = json.loads((app_dir / "i18n" / "en.json").read_text("utf-8"))
+    missing = []
+    for f in app_dir.glob("*.py"):
+        for node in ast.walk(ast.parse(f.read_text("utf-8"))):
+            is_tr = isinstance(node, ast.Call) and getattr(node.func, "id", "") == "tr" and node.args and isinstance(node.args[0], ast.Constant)
+            if is_tr and node.args[0].value not in en:
+                missing.append(f"{f.name}: {node.args[0].value}")
+    js = (app_dir / "static" / "app.js").read_text("utf-8")
+    for m in re.finditer(r'\b(?:T|TP)\(\s*(?:[^,"()]+,\s*)?"((?:[^"\\]|\\.)*)"', js):
+        key = json.loads('"' + m.group(1) + '"')
+        if key not in en and re.search(r"[A-Za-zÄÖÜäöüß]{3}", key) and not re.fullmatch(r"[a-z:_/*,. -]+", key):
+            missing.append("app.js: " + key)
+    assert not missing, "\n".join(sorted(set(missing))[:20])

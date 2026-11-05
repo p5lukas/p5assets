@@ -9,6 +9,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from . import config
+from .i18n import tr
 
 LOG_DIR = config.CONFIG_DIR / "logs"
 LOG_NAME = "p5assets.log"
@@ -105,7 +106,7 @@ def files() -> list[dict]:
 
 def path_of(name: str) -> Path:
     if not _FILE_OK.match(name or ""):
-        raise ValueError("Ungültige Logdatei")
+        raise ValueError(tr("Ungültige Logdatei"))
     return LOG_DIR / name
 
 

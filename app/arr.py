@@ -5,6 +5,7 @@ import httpx
 
 from . import kometa
 from .errors import short
+from .i18n import tr
 
 
 class ArrError(Exception):
@@ -22,15 +23,15 @@ async def _get(c: httpx.AsyncClient, path: str):
     try:
         r = await c.get(path)
     except httpx.HTTPError as e:
-        raise ArrError(f"nicht erreichbar: {short(e)}") from e
+        raise ArrError(tr("nicht erreichbar: {0}", short(e))) from e
     if r.status_code == 401:
-        raise ArrError("API-Key ungültig (401)")
+        raise ArrError(tr("API-Key ungültig (401)"))
     if r.status_code >= 400:
         raise ArrError(f"HTTP {r.status_code}")
     try:
         return r.json()
     except ValueError as e:
-        raise ArrError("Antwort ist kein JSON – stimmt die URL (inkl. URL-Base)?") from e
+        raise ArrError(tr("Antwort ist kein JSON – stimmt die URL (inkl. URL-Base)?")) from e
 
 
 async def test(kind: str, url: str, api_key: str) -> dict:
@@ -40,9 +41,9 @@ async def test(kind: str, url: str, api_key: str) -> dict:
         data = await _get(c, "/api/v3/system/status")
     app = data.get("appName") or kind.capitalize()
     if kind == "sonarr" and "sonarr" not in app.lower():
-        raise ArrError(f"Das ist {app}, nicht Sonarr")
+        raise ArrError(tr("Das ist {0}, nicht Sonarr", app))
     if kind == "radarr" and "radarr" not in app.lower():
-        raise ArrError(f"Das ist {app}, nicht Radarr")
+        raise ArrError(tr("Das ist {0}, nicht Radarr", app))
     return {"app": app, "version": data.get("version", "")}
 
 

@@ -76,5 +76,5 @@ def fill(items: list[dict], persist: bool = True) -> int:
                     n += 1
     if n and persist:
         save()
-        log.info("Bildgrößen gelesen: %d", n)
+        log.info("Image sizes read: %d", n)
     return n

@@ -37,10 +37,10 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/p5assets
-          # dev  -> Branch "dev"  (Testen)
-          # latest -> Branch "main" (stabil)
-          # 1.2.3 -> Git-Tag v1.2.3
-          # sha-… -> immer, damit nie ohne Tag gebaut wird
+          # dev    -> branch "dev" (testing)
+          # latest -> branch "main" (stable)
+          # 1.2.3  -> Git tag v1.2.3
+          # sha-…  -> always, so every build has at least one tag
           tags: |
             type=raw,value=dev,enable=${{ github.ref == 'refs/heads/dev' }}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}

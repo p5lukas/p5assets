@@ -11,6 +11,7 @@ import uuid
 from pathlib import Path
 
 from . import config, logs
+from .i18n import tr
 
 KEEP_DAYS = 30
 MAX_BYTES = 2 * 1024**3
@@ -42,7 +43,7 @@ def begin(reason: str, **ctx) -> str:
 
 def _load(gid: str) -> dict:
     if not gid.replace("-", "").isalnum():
-        raise ValueError("Ungültiger Eintrag")
+        raise ValueError(tr("Ungültiger Eintrag"))
     p = _root() / gid / "meta.json"
     if not p.is_file():
         raise FileNotFoundError(gid)
@@ -109,7 +110,7 @@ def restore(gid: str) -> dict:
     for c in meta.get("created", []):          # written by the operation, not part of the old state: take it away again
         p = Path(c)
         if c not in origs and p.exists():
-            stash(back, p, move=True, label="vor Wiederherstellung")
+            stash(back, p, move=True, label="before restore")
     for f in meta["files"]:
         src = _root() / gid / "data" / str(f["n"])
         dst = Path(f["orig"])
@@ -117,13 +118,13 @@ def restore(gid: str) -> dict:
             continue
         if dst.exists():
             if dst.is_dir() != f["dir"]:
-                raise ValueError(f"{dst.name}: am Ziel liegt etwas anderes")
-            stash(back, dst, move=True, label="vor Wiederherstellung")
+                raise ValueError(tr("{0}: am Ziel liegt etwas anderes", dst.name))
+            stash(back, dst, move=True, label="before restore")
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(src), str(dst))
     shutil.rmtree(_root() / gid, ignore_errors=True)
     discard_if_empty(back)
-    log.info("Wiederhergestellt: %s (%s)", meta.get("title") or gid, meta.get("reason"))
+    log.info("Restored: %s (%s)", meta.get("title") or gid, meta.get("reason"))
     return meta
 
 
@@ -152,4 +153,4 @@ def purge() -> None:
             break
         shutil.rmtree(_root() / g["id"], ignore_errors=True)
         total -= g["size"]
-        log.info("Papierkorb: %s entfernt (Größenlimit)", g.get("title") or g["id"])
+        log.info("Trash: %s removed (size limit)", g.get("title") or g["id"])

@@ -7,15 +7,15 @@ def _new(title, soon=False, world="HD"):
 
 def test_compose_counts_and_coming_soon():
     title, text = notify.compose([_new("A", True), _new("B"), _new("C")], False, "http://x")
-    assert title == "p5assets: 3 neue Titel ohne Poster, 1 davon Coming Soon"
+    assert title == "p5assets: 3 new titles without poster, 1 of them Coming Soon"
     assert text.splitlines()[0].startswith("• A")
     assert text.endswith("http://x")
 
 
 def test_compose_singular_and_overflow():
-    assert notify.compose([_new("A")], False, "")[0] == "p5assets: 1 neuer Titel ohne Poster"
+    assert notify.compose([_new("A")], False, "")[0] == "p5assets: 1 new title without poster"
     _, text = notify.compose([_new(f"T{i:02d}") for i in range(25)], True, "")
-    assert "… und" in text and "[HD]" in text
+    assert "… and 15 more" in text and "[HD]" in text
 
 
 def test_secrets_are_masked_in_public():

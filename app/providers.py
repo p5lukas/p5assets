@@ -8,6 +8,7 @@ import httpx
 
 from . import languages as langs
 from .errors import short
+from .i18n import tr
 
 TIMEOUT = httpx.Timeout(20.0, connect=8.0)
 TMDB_IMG = "https://image.tmdb.org/t/p/"
@@ -124,7 +125,7 @@ async def fanart_test(key: str) -> bool:
     async with httpx.AsyncClient(timeout=TIMEOUT) as c:
         r = await c.get("https://webservice.fanart.tv/v3/movies/603", params={"api_key": key})
         if r.status_code in (401, 403):
-            raise ValueError("Ungültiger fanart.tv-API-Key")
+            raise ValueError(tr("Ungültiger fanart.tv-API-Key"))
         r.raise_for_status()
     return True
 
@@ -140,7 +141,7 @@ async def _tvdb_login(key: str, pin: str = "") -> str:
     async with httpx.AsyncClient(timeout=TIMEOUT) as c:
         r = await c.post("https://api4.thetvdb.com/v4/login", json=body)
         if r.status_code == 401:
-            raise ValueError("Ungültiger TVDB-API-Key oder PIN")
+            raise ValueError(tr("Ungültiger TVDB-API-Key oder PIN"))
         r.raise_for_status()
         token = r.json()["data"]["token"]
     _tvdb_token.update(key=key, token=token, ts=time.time())

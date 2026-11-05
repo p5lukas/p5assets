@@ -51,7 +51,7 @@ def test_setup_protects_the_api_and_login_works(client):
     assert anon.get("/").status_code == 200 and anon.get("/static/app.js").status_code == 200       # the page itself loads (shows the login)
     assert client.get("/api/state").status_code == 200       # the browser that set it up is logged in
     bad = anon.post("/api/auth/login", json={"username": "lukas", "password": "falsch"}, headers=H)
-    assert bad.status_code == 401 and bad.json()["detail"] == "Benutzername oder Passwort falsch"
+    assert bad.status_code == 401 and bad.json()["detail"] == "Wrong username or password"
     ok = anon.post("/api/auth/login", json={"username": "LUKAS", "password": "geheim-123"}, headers=H)
     assert ok.status_code == 200
     assert "httponly" in ok.headers["set-cookie"].lower() and "samesite=lax" in ok.headers["set-cookie"].lower()
@@ -143,7 +143,7 @@ def test_password_never_reaches_the_log(client):
     TestClient(main.app).post("/api/auth/login", json={"username": "lukas", "password": "log-me-not-124"}, headers=H)
     from app import logs
     text = "".join(p.read_text(errors="ignore") for p in logs.LOG_DIR.glob("*.log*"))
-    assert "log-me-not" not in text and "Anmeldung fehlgeschlagen" in text
+    assert "log-me-not" not in text and "Login failed" in text
 
 
 def test_cli_reset_sets_a_new_password_and_can_switch_off(monkeypatch, client):

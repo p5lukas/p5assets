@@ -11,6 +11,7 @@ from pathlib import Path, PurePosixPath
 from PIL import Image, ImageOps
 
 from . import config, kometa, trash
+from .i18n import tr
 
 MAX_ZIP_ENTRIES = 5000
 MAX_ZIP_BYTES = 2 * 1024**3
@@ -35,7 +36,7 @@ def normalize_image(data: bytes, convert_to_jpg: bool) -> tuple[bytes, str]:
         fmt = (img.format or "").upper()
         img.verify()
     except Exception as e:
-        raise ValueError("Keine gültige Bilddatei") from e
+        raise ValueError(tr("Keine gültige Bilddatei")) from e
     if fmt == "JPEG":
         return data, ".jpg"
     if fmt == "PNG" and not convert_to_jpg:
@@ -61,9 +62,9 @@ def write_assets(item: dict, slots: list[str], data: bytes, undo: dict | None = 
     acfg = cfg["assets"]
     root = Path(item["assets_path"])
     if not item.get("folder"):
-        raise ValueError("Für diesen Titel ist kein Ordnername bekannt")
+        raise ValueError(tr("Für diesen Titel ist kein Ordnername bekannt"))
     if not root.is_dir():
-        raise ValueError(f"Assets-Ordner {root} existiert nicht (im Container gemountet?)")
+        raise ValueError(tr("Assets-Ordner {0} existiert nicht (im Container gemountet?)", root))
     body, ext = normalize_image(data, acfg["convert_to_jpg"])
     depth = item.get("search_depth", 3)
     index = kometa.get_index(root, acfg["asset_folders"], depth)
@@ -130,7 +131,7 @@ def write_asset(item: dict, slot: str, data: bytes) -> Path:
 
 def _session_dir(sid: str) -> Path:
     if not sid.isalnum():
-        raise ValueError("Ungültige Session")
+        raise ValueError(tr("Ungültige Session"))
     return config.STAGING_DIR / sid
 
 
@@ -163,10 +164,10 @@ def stage_file(sid: str, filename: str, data: bytes) -> list[dict]:
         try:
             zf = zipfile.ZipFile(io.BytesIO(data))
         except zipfile.BadZipFile as e:
-            raise ValueError(f"{rel}: keine gültige ZIP-Datei") from e
+            raise ValueError(tr("{0}: keine gültige ZIP-Datei", rel)) from e
         infos = [i for i in zf.infolist() if not i.is_dir()]
         if len(infos) > MAX_ZIP_ENTRIES or sum(i.file_size for i in infos) > MAX_ZIP_BYTES:
-            raise ValueError(f"{rel}: ZIP ist zu groß")
+            raise ValueError(tr("{0}: ZIP ist zu groß", rel))
         for info in infos:
             inner = safe_rel(info.filename)
             if not inner or _skip(inner) or Path(inner).suffix.lower() not in kometa.UPLOAD_EXTS:
@@ -193,7 +194,7 @@ def _store(base: Path, rel: str, data: bytes) -> dict:
 
 def staged_bytes(sid: str, fid: str) -> bytes:
     if not fid.isalnum():
-        raise ValueError("Ungültige Datei")
+        raise ValueError(tr("Ungültige Datei"))
     p = _session_dir(sid) / f"{fid}.bin"
     if not p.is_file():
         raise FileNotFoundError(fid)
