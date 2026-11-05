@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.0 – 2026-11-05
+
+The first release with an English interface and English GitHub pages. It rolls up 0.6.0 to 0.6.2 (below).
+
+**New**
+- English and German interface with a terminal-style `$ EN/DE` switch; English is the default
+- Instant feedback while a poster is saved: Matrix rain loops over the tile until the new image is in
+- English README with a German twin (`README.de.md`), English changelog and Unraid template
+
+**Changed**
+- All texts proofread, no more emojis, README images recorded again with the English interface
+
 ## 0.6.2 – 2026-11-05
 
 **Changed**

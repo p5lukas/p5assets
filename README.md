@@ -166,7 +166,7 @@ Files are written as `PUID=99` / `PGID=100` (nobody/users). To update, use *Forc
 |---|---|---|
 | `:dev` | branch `dev` | newest features, for testing |
 | `:latest` | branch `main` | stable |
-| `:0.6.0` | Git tag `v0.6.0` | pinned version (e.g. `0.6.0`; `1.0.0` once the project is mature) |
+| `:0.7.0` | Git tag `v0.7.0` | pinned version (e.g. `0.7.0`; `1.0.0` once the project is mature) |
 | `:sha-…` | every build | troubleshooting |
 
 While p5assets is in development, the template and compose file use `:dev`. Once it is stable, they will switch to `:latest` (branch `main`). To switch yourself, set the *Repository* field in the container settings to `ghcr.io/p5lukas/p5assets:latest`.

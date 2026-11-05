@@ -708,5 +708,7 @@
 "Es gibt genau zwei Anlässe: ": "There are exactly two triggers: ",
 "① neue Titel in „In Plex, Poster fehlt“": "① new titles in “In Plex, poster missing”",
 " (Coming-Soon-Titel sind markiert, alles in einer Nachricht) und ": " (Coming Soon titles are marked, everything in one message) and ",
-" (einmal pro Fehler). Beim ersten Scan merkt sich p5assets nur den Ausgangsstand und schickt nichts.": " (once per error). On the first scan, p5assets only records the starting point and sends nothing."
+" (einmal pro Fehler). Beim ersten Scan merkt sich p5assets nur den Ausgangsstand und schickt nichts.": " (once per error). On the first scan, p5assets only records the starting point and sends nothing.",
+"p5assets 0.7.0": "p5assets 0.7.0",
+"Die erste Version mit englischer Oberfläche und englischen GitHub-Seiten. Die Sprache stellst du mit „$ EN/DE“ in der Kopfzeile um. Beim Speichern eines Posters läuft jetzt sofort der Matrix-Regen.": "The first version with an English interface and English GitHub pages. Change the language with “$ EN/DE” in the header. Saving a poster now starts the Matrix rain right away."
 }
