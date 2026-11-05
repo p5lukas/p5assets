@@ -1,6 +1,6 @@
 #!/bin/sh
-# Runs with PUID/PGID (Unraid default: 99/100 = nobody/users) so that files in the assets folder
-# belong to the right user.
+# Drops root and runs the app as PUID/PGID (Unraid default: 99/100 = nobody/users),
+# so files written to the assets folders belong to the right user.
 set -e
 PUID="${PUID:-99}"
 PGID="${PGID:-100}"

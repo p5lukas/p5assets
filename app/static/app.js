@@ -344,7 +344,7 @@ function openCleanup(initial = "trash") {
   async function drawOrphans() {
     fill(body, h("div", { class: "empty", style: "padding:30px" }, h("span", { class: "spin" }), T(" Suche verwaiste Ordner …")));
     const r = await api("/orphans?world=" + encodeURIComponent(S.world));
-    if (!r.folders) { fill(body, h("div", { class: "empty" }, T("Verwaiste Ordner lassen sich nur bei Ordner-Struktur (asset_folders) prüfen."))); return; }
+    if (!r.folders) { fill(body, h("div", { class: "empty" }, T("Verwaiste Ordner lassen sich nur mit Ordnerstruktur (asset_folders) prüfen."))); return; }
     if (r.blocked) { fill(body, h("div", { class: "status bad" }, "[ !! ] " + r.blocked)); return; }
     const sel = new Set();
     const list = h("div"), go = h("button", { class: "btn primary", disabled: true });
@@ -372,7 +372,7 @@ function openCleanup(initial = "trash") {
       sync();
     };
     go.onclick = async () => {
-      if (!confirm(TP(sel.size, "Ein Ordner in den Papierkorb verschieben? Er lässt sich dort 30 Tage lang wiederherstellen.", "{0} Ordner in den Papierkorb verschieben? Sie lassen sich dort 30 Tage lang wiederherstellen."))) return;
+      if (!confirm(TP(sel.size, "Einen Ordner in den Papierkorb verschieben? Er lässt sich dort 30 Tage lang wiederherstellen.", "{0} Ordner in den Papierkorb verschieben? Sie lassen sich dort 30 Tage lang wiederherstellen."))) return;
       const res = await busy(go, () => api("/orphans/trash", { json: { world: S.world, paths: [...sel] } }));
       toast(T("{0} im Papierkorb", pl(res.moved, "Ordner", "Ordner")), "ok", res.trash ? { label: T("Rückgängig"), fn: async () => { await api(`/trash/${res.trash}/restore`, { method: "POST" }); toast(T("Wiederhergestellt ✓"), "ok"); } } : null);
       drawOrphans();
@@ -723,7 +723,7 @@ function renderChips() {
     label, n != null ? h("small", {}, n) : null);
   fill(el,
     chip(T("In Plex, Poster fehlt"), "plexmissing", cnt.plexmissing, T("In Plex vorhanden, aber bei Kometa fehlt ein Poster oder eine Staffel – das, was in Plex ohne Bild erscheint")),
-    cnt.comingsoon > 0 || S.filter === "comingsoon" ? chip(T("Coming Soon"), "comingsoon", cnt.comingsoon, T("Coming-Soon-Poster ({edition-Coming Soon}): in Plex schon sichtbar, brauchen zeitnah ein Poster")) : null,
+    cnt.comingsoon > 0 || S.filter === "comingsoon" ? chip(T("Coming Soon"), "comingsoon", cnt.comingsoon, T("Coming-Soon-Titel ({edition-Coming Soon}): in Plex schon sichtbar, brauchen zeitnah ein Poster")) : null,
     chip(T("Alle"), "all", cnt.all),
     chip(T("Alle fehlenden"), "missing", cnt.missing, T("Alles, was ein Poster oder eine Staffel braucht – auch Titel, die nur Sonarr/Radarr kennen und in Plex noch nicht sind")),
     chip(T("Schwache Poster"), "weak", cnt.weak, T("Bilder, die zu schmal sind oder nicht das Seitenverhältnis 2:3 haben (Schwellwerte wählst du selbst)")),
@@ -771,7 +771,7 @@ function renderGrid() {
         h("div", { style: "margin-top:14px" }, h("button", { class: "btn", onclick: async () => { S.filter = "all"; renderChips(); await loadItems(); renderGrid(); } }, T("Alle anzeigen")))] :
       !worldStats().items && S.st.summary.error ? [h("h2", {}, T("Der Scan ist fehlgeschlagen")), T("Details stehen oben und im Log. Prüfe die Verbindung zu Plex, Sonarr und Radarr und starte dann einen neuen Scan."),
         h("div", { style: "margin-top:14px" }, h("button", { class: "btn primary", onclick: doScan }, T("Erneut scannen")))] :
-      !worldStats().items ? [h("h2", {}, T("Hier ist noch nichts")), T("Ordne dieser Welt unter Einstellungen → Bibliotheken oder Sonarr/Radarr zu.")] :
+      !worldStats().items ? [h("h2", {}, T("Hier ist noch nichts")), T("Ordne dieser Welt in den Einstellungen Bibliotheken oder Sonarr/Radarr zu.")] :
       [h("h2", {}, T("Nichts gefunden")), T("Passe Filter oder Suche an – oder starte einen neuen Scan.")]));
     return;
   }
@@ -857,7 +857,7 @@ function card(item, local) {
   const bad = item.missing;
   if (bad) box.append(h("span", { class: "badge bad" }, TP(bad, "{0} fehlt", "{0} fehlen")));
   box.title = metaText(item);
-  if (!item.in_plex) box.append(h("span", { class: "badge warn b", title: T("Sonarr/Radarr kennen den Titel, in Plex ist er noch nicht") }, NOT_IN_PLEX));
+  if (!item.in_plex) box.append(h("span", { class: "badge warn b", title: T("Sonarr/Radarr kennen den Titel, in Plex fehlt er noch") }, NOT_IN_PLEX));
   else if (item.coming_soon) box.append(h("span", { class: "badge warn b", title: T("In Plex als Coming-Soon-Platzhalter sichtbar") }, T("Coming Soon")));
   if (S.filter === "weak") { const wk = weakSlot(item); if (wk) box.append(h("span", { class: "badge warn r", title: T("{0}: {1} × {2} px", slotLabel(wk.key, item.type), wk.w, wk.h) }, `${wk.w}×${wk.h}`)); }
   // a movie has one poster: no detail view, title/year and poster open the preview; the action buttons are built on first use
@@ -1407,7 +1407,7 @@ async function importFiles(files, itemId, onDone, item, review) {
   if (itemId) fd.append("item_id", itemId); else fd.append("world", S.world);
   files.forEach(f => fd.append("files", f.file, f.path));
   const bar = h("i", { style: "width:0%" });
-  const m = modal(T("Lade hoch …"), h("div", {}, h("p", {}, T("{0} {1} übertragen", pl(files.length, "Datei", "Dateien"), files.length === 1 ? "wird" : "werden")), h("div", { class: "progress" }, bar)));
+  const m = modal(T("Lade hoch …"), h("div", {}, h("p", {}, TP(files.length, "Eine Datei wird übertragen", "{0} Dateien werden übertragen")), h("div", { class: "progress" }, bar)));
   let res;
   try {
     res = await new Promise((resolve, reject) => {
@@ -1491,7 +1491,7 @@ function checkSet(t, rows) {
     : T("Keine Staffeln bekannt – nur das Serienposter lässt sich prüfen.") });
   lines.push({ cls: posterMissing ? "bad" : "ok", text: posterMissing ? (posterExists ? T("Serienposter fehlt im Set (im Assets-Ordner ist eins vorhanden).") : T("Serienposter fehlt im Set.")) : T("Serienposter ist enthalten.") });
   if (known.some(s => s.n === 0)) lines.push({ cls: "", text: has(0) ? T("Specials sind enthalten.") : T("Specials sind nicht im Set (optional).") });
-  if (early.length) lines.push({ cls: "", text: TP(early.length, "{1} gibt es in Plex noch nicht – wird vorab abgelegt.", "{1} geben es in Plex noch nicht – wird vorab abgelegt.", cap(seasonList(early))) });
+  if (early.length) lines.push({ cls: "", text: TP(early.length, "{1} gibt es in Plex noch nicht – sie wird vorab abgelegt.", "{1} gibt es in Plex noch nicht – sie werden vorab abgelegt.", cap(seasonList(early))) });
   const bySlot = {};
   rows.forEach(r => { (bySlot[r.slot] = bySlot[r.slot] || []).push(r.name.split("/").pop()); });
   const dups = Object.entries(bySlot).filter(([, names]) => names.length > 1);
@@ -1592,7 +1592,7 @@ function reviewImport(res, onDone, fixed) {
       checks.length > 1 ? h("div", { class: "setsum" }, h("b", {}, pl(checks.length, "Serie", "Serien") + ":"),
         h("span", { class: "pill ok" }, T("{0} vollständig", okN)), incN ? h("span", { class: "pill warn" }, T("{0} unvollständig", incN)) : null,
         dupN ? h("span", { class: "pill bad" }, T("{0} mit doppelt belegten Kacheln", dupN)) : null) : null,
-      dupBlock ? h("div", { class: "status bad", style: "margin-bottom:10px" }, T("[ !! ] Eine Kachel kann nur ein Bild haben: Bei doppelt belegten Bildern (rot markiert) bitte ein Häkchen entfernen oder eine andere Kachel wählen.")) : null);
+      dupBlock ? h("div", { class: "status bad", style: "margin-bottom:10px" }, T("[ !! ] Eine Kachel kann nur ein Bild haben: Bei doppelt belegten Kacheln (rot markiert) bitte bei einem der Bilder das Häkchen entfernen oder eine andere Kachel wählen.")) : null);
     const group = (title, pillEl, open, body, lines) => h("details", { class: "impgroup", open },
       h("summary", {}, h("b", {}, title), h("span", { class: "grow" }), pillEl),
       lines ? h("ul", { class: "setcheck" }, lines.map(l => h("li", { class: l.cls }, l.text))) : null, body);
@@ -1825,7 +1825,7 @@ const wWelcome = nav => h("div", {},
    ["04", T("Welten & Assets-Ordner"), T("z. B. HD und 4K getrennt, jede Welt mit eigenem Ordner und eigener Farbe")],
    ["05", T("Optional: TMDb, TVDB, fanart.tv"), T("zum Herunterladen fehlender Poster")]]
     .map(([i, title, sub]) => h("div", { class: "opt step", style: "cursor:default" }, h("b", { class: "stepno" }, i), h("div", {}, title, h("small", {}, sub)))),
-  nav(null, T("Los geht's")));
+  nav(null, T("Los geht’s")));
 
 function statusEl() { return h("div", { class: "status" }); }
 function setStatus(el, ok, msg) { el.className = "status " + (ok ? "ok" : "bad"); el.textContent = (ok ? T("[ OK ] ") : "[ !! ] ") + msg; }
@@ -1969,7 +1969,7 @@ function langList(w, persist) {
   const move = (from, to) => { if (to < 0 || to >= w.languages.length || from === to) return; const [x] = w.languages.splice(from, 1); w.languages.splice(to, 0, x); persist(); draw(); };
   function draw() {
     const add = h("select", { onchange: e => { if (e.target.value) { w.languages.push(e.target.value); persist(); draw(); } } },
-      h("option", { value: "" }, T("＋ Add Language")), S.langs.filter(l => !w.languages.includes(l.code)).map(l => h("option", { value: l.code }, `${l.code} • ${fmt(l.code)}`)));
+      h("option", { value: "" }, T("＋ Sprache hinzufügen")), S.langs.filter(l => !w.languages.includes(l.code)).map(l => h("option", { value: l.code }, `${l.code} • ${fmt(l.code)}`)));
     fill(box, w.languages.map((code, i) => {
       const row = h("div", { class: "langrow", draggable: true,
         ondragstart: e => { dragFrom = i; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", code); row.classList.add("dragging"); },
@@ -2000,7 +2000,7 @@ function wWorlds(nav, c) {
     const path = h("input", { type: "text", value: w.assets_path, onchange: e => { w.assets_path = e.target.value; persist(); check(); } });
     // all worlds side by side: planet + name, the chosen one lights up and the world card takes over its colour
     const hue = h("div", { class: "worldpick", role: "radiogroup", "aria-label": T("Farbe der Welt") }, WORLD_THEMES.map(t =>
-      h("button", { type: "button", class: "wp" + (w.hue === t.hue ? " on" : ""), role: "radio", "aria-checked": w.hue === t.hue ? "true" : "false", title: t.name,
+      h("button", { type: "button", class: "wp" + (w.hue === t.hue ? " on" : ""), role: "radio", "aria-checked": w.hue === t.hue ? "true" : "false", title: T(t.name),
         style: `--c:hsl(${t.hue} ${t.sat}% ${t.lit}%)`, onclick: async () => { w.hue = t.hue; await persist(); drawWiz(); } },
         planetSvg(t.hue, 40), T(t.name))));
     const st = statusEl(), fsBox = h("div");
@@ -2047,7 +2047,7 @@ function wWorlds(nav, c) {
     h("label", { class: "f" }, T("Struktur")),
     mkOpt("asset_folders", T("Ein Ordner pro Titel (asset_folders: true)"), T("Ordner/poster.jpg, Ordner/Season01.jpg – Kometa-Standard")),
     mkOpt("convert_to_jpg", T("PNG/WebP immer nach JPG konvertieren"), T("Standardmäßig bleiben JPG und PNG unverändert")),
-    mkOpt("ignore_specials", T("Specials (Season00) nicht überwachen"), T("Dann gelten fehlende Specials-Poster nicht als fehlend")),
+    mkOpt("ignore_specials", T("Specials (Season00) nicht überwachen"), T("Fehlende Specials-Poster werden dann ignoriert")),
     nav(next));
 }
 
@@ -2117,7 +2117,7 @@ function wAssign(nav, c) {
 function wApis(nav, c) {
   const a = c.apis;
   const row = (id, name, url, extra) => {
-    const key = h("input", { type: "password", value: a[id], placeholder: T("API Key") });
+    const key = h("input", { type: "password", value: a[id], placeholder: T("API-Key") });
     const pin = extra ? h("input", { type: "password", value: a.tvdb_pin, placeholder: T("PIN (nur bei Subscriber-Keys)"), style: "margin-top:8px" }) : null;
     const st = statusEl();
     const persist = () => savePatch({ apis: { [id]: key.value, ...(pin ? { tvdb_pin: pin.value } : {}) } });
@@ -2164,9 +2164,9 @@ function wNotify(nav, c) {
   };
   return h("div", {}, h("h1", {}, T("Benachrichtigungen")),
     h("p", { class: "lead" }, T("Optional: p5assets meldet sich nach einem Scan, wenn es etwas Neues gibt. Du kannst diesen Schritt überspringen und später in den Einstellungen nachholen.")),
-    h("div", { class: "status ok", style: "display:block;font-size:13px;line-height:1.7" }, T("Es gibt genau drei Anlässe: "),
-      h("b", {}, T("① neue Titel ohne Poster")), T(" (Coming-Soon-Titel sind markiert, alles in einer Nachricht), "), h("b", {}, T("② Fehler beim Scan")), T(" (einmal pro Fehler) und "),
-      h("b", {}, T("③ neue Einträge in „In Plex, Poster fehlt“")), T(". Beim ersten Scan merkt sich p5assets nur den Ausgangsstand und schickt nichts.")),
+    h("div", { class: "status ok", style: "display:block;font-size:13px;line-height:1.7" }, T("Es gibt genau zwei Anlässe: "),
+      h("b", {}, T("① neue Titel in „In Plex, Poster fehlt“")), T(" (Coming-Soon-Titel sind markiert, alles in einer Nachricht) und "), h("b", {}, T("② Fehler beim Scan")),
+      T(" (einmal pro Fehler). Beim ersten Scan merkt sich p5assets nur den Ausgangsstand und schickt nichts.")),
     card("discord", T("Discord"), T("Server-Einstellungen → Integrationen → Webhooks → „Neuer Webhook“ → „Webhook-URL kopieren“ und hier einfügen."),
       field("discord", "webhook", T("Webhook-URL"), { secret: true, ph: "https://discord.com/api/webhooks/…" })),
     card("telegram", T("Telegram"), T("Schreibe dem @BotFather „/newbot“ und folge den Fragen: du bekommst den Bot-Token. Schreibe deinem neuen Bot eine Nachricht und rufe https://api.telegram.org/bot<TOKEN>/getUpdates auf: die Zahl bei „chat“ → „id“ ist deine Chat-ID."),

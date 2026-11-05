@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends gosu \
 WORKDIR /srv
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-# Build info for the footer (passed in by the GitHub workflow)
+# Build info shown in the footer (set by the GitHub workflow)
 ARG P5_BRANCH=""
 ARG P5_COMMIT=""
 ARG P5_TAG=""

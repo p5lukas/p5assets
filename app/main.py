@@ -391,7 +391,7 @@ async def test_provider(provider: str, body: ApiTest):
     key = body.key if body.key and body.key != "********" else apis.get(provider, "")
     pin = body.pin if body.pin and body.pin != "********" else apis.get("tvdb_pin", "")
     if not key:
-        raise HTTPException(400, tr("Kein API Key angegeben"))
+        raise HTTPException(400, tr("Kein API-Key angegeben"))
     try:
         if provider == "tmdb":
             await providers.tmdb_test(key)

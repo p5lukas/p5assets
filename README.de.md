@@ -9,7 +9,7 @@
 **Fehlende Poster und Staffelcover für Plex, Sonarr, Radarr und Kometa – finden, ersetzen, fertig.**
 
 Ein schlanker Docker-Container im Matrix-Look. Er vergleicht deine Bibliotheken mit dem
-[Kometa](https://kometa.wiki)-Assets-Ordner, zeigt dir, was fehlt, und legt neue Bilder automatisch Kometa-konform ab.
+[Kometa](https://kometa.wiki)-Assets-Ordner, zeigt dir, was fehlt, und legt neue Bilder automatisch unter Kometa-konformen Namen ab.
 
 ![Docker](https://img.shields.io/badge/Docker-ghcr.io%2Fp5lukas%2Fp5assets-00ff5a?logo=docker&logoColor=white&labelColor=0a1a0f)
 ![Unraid](https://img.shields.io/badge/Unraid-Template-00ff5a?labelColor=0a1a0f)
@@ -21,29 +21,23 @@ Ein schlanker Docker-Container im Matrix-Look. Er vergleicht deine Bibliotheken 
 
 </div>
 
-> *English in short:* p5assets is a self-hosted web UI that scans Plex (plus optional Sonarr/Radarr) for missing
-> posters and season posters, lets you replace them by drag & drop (single files, folders, ZIPs) and writes them with
-> Kometa-compatible names (`poster.jpg`, `Season01.jpg`, …). It supports multiple "worlds" (e.g. HD and 4K), per-world
-> language priorities, TMDb/TVDB/fanart.tv search, "Coming Soon" poster mirroring, an undo trash, quality checks and
-> Discord/Telegram/ntfy notifications. Docker image: `ghcr.io/p5lukas/p5assets:dev`, default port 8484.
-
 ## Funktionen
 
-Die Oberfläche gibt es auf Englisch und Deutsch (Sprachumschalter in der Kopfzeile, Englisch ist Standard).
+Die Oberfläche gibt es auf Englisch und Deutsch (Sprachumschalter in der Kopfzeile, Standard ist Englisch).
 
 ### Lücken finden
-Plex, Sonarr und Radarr werden zusammengeführt (über TMDb/TVDB/IMDb-IDs). Reiter zeigen sofort, was zu tun ist:
-**In Plex, Poster fehlt** (die Startansicht: was in Plex ohne Bild erscheint), **Coming Soon**, **Alle**, **Alle fehlenden** (auch Titel, die nur Sonarr/Radarr kennen und in Plex noch nicht sind, mit dem Etikett „Noch nicht in Plex“) und **Schwache Poster**.
-Dazu eine Quellenauswahl, schnelle Suche (rechts neben den Reitern, durchsucht immer alle Titel der Welt), A–Z-Leiste und eine Abdeckungsanzeige mit kleinem Verlauf pro Scan.
-Große Bibliotheken sind kein Problem: mit über 6000 Titeln antworten die Listen in rund 30 ms.
+p5assets führt Plex, Sonarr und Radarr zusammen (über TMDb-, TVDB- und IMDb-IDs). Die Reiter zeigen sofort, was zu tun ist:
+**In Plex, Poster fehlt** (die Startansicht: alles, was in Plex ohne Bild erscheint), **Coming Soon**, **Alle**, **Alle fehlenden** (auch Titel, die nur Sonarr oder Radarr kennen und die noch nicht in Plex sind; sie tragen das Etikett „Noch nicht in Plex“) und **Schwache Poster**.
+Dazu kommen eine Quellenauswahl, eine Schnellsuche (rechts neben den Reitern; sie durchsucht immer alle Titel der Welt), eine A–Z-Leiste und eine Abdeckungsanzeige mit kleinem Verlauf pro Scan.
+Große Bibliotheken sind kein Problem: Bei über 6000 Titeln antworten die Listen in rund 30 ms.
 
 ### Ersetzen per Drag & Drop
-Ein Bild auf eine Kachel, mehrere Dateien, ganze Ordner oder ZIPs irgendwo ins Fenster ziehen – – oder über „Poster hochladen:“ in der Kopfzeile auswählen (Datei-/ZIP-Symbol oder Ordner-Symbol; auf iPhone und iPad gibt es einen einzelnen Knopf, Ordner gehen dort als ZIP). p5assets erkennt Titel,
-Jahr und Staffel aus Datei- und Ordnernamen, zeigt die Zuordnung zur Kontrolle und benennt alles Kometa-konform
-(`<Medienordner>/poster.jpg`, `Season01.jpg` …). Neue Ordner landen dort, wo die anderen Titel schon liegen.
+Zieh ein Bild auf eine Kachel oder mehrere Dateien, ganze Ordner oder ZIPs irgendwo ins Fenster – oder wähl sie über „Poster hochladen:“ in der Kopfzeile aus (Datei-/ZIP-Symbol oder Ordner-Symbol; auf iPhone und iPad gibt es eine einzige Schaltfläche, Ordner lädst du dort als ZIP hoch). p5assets erkennt Titel,
+Jahr und Staffel an den Datei- und Ordnernamen, zeigt dir die Zuordnung zur Kontrolle und benennt alles Kometa-konform
+(`<Medienordner>/poster.jpg`, `Season01.jpg` …). Neue Ordner landen dort, wo deine anderen Titel schon liegen.
 
 **Set-Kontrolle beim Import:** Enthält ein Upload ein Serien-Set (auch mehrere Serien in einer ZIP, nach Serie gruppiert), prüft p5assets
-für jede Serie, wie viele Staffeln Plex (und Sonarr) kennen, ob das Set alle abdeckt, ob das Serienposter und die Specials dabei sind
+für jede Serie, wie viele Staffeln Plex (und Sonarr) kennen, ob das Set alle abdeckt, ob Serienposter und Specials dabei sind
 und welche vorhandenen Bilder ersetzt würden.
 
 <img src="docs/images/set-check.png" alt="Set-Kontrolle beim Import" width="640">
@@ -63,9 +57,9 @@ und welche vorhandenen Bilder ersetzt würden.
 </tr>
 </table>
 
-- Kacheln für Poster und **Season00 – Season50**, auch für Staffeln, die es noch nicht gibt
-- Poster per Drag & Drop auf eine andere Kachel **kopieren**, oder mit **„Auf alle …“** auf mehrere Kacheln übertragen
-- **Plex-Collections:** Filme zeigen ihre Collection in der Vorschau; ein Klick öffnet die Detailansicht der Collection mit allen Postern (ersetzen, hochladen, Set-Upload). Beim Import werden Filme nach Plex-Collection gruppiert und p5assets sagt, welche Filme der Collection danach noch ohne Poster sind. Dateien wie „… Collection“ ordnet der Import nicht automatisch einem Film zu; große Sammel-Collections, die keine Filmreihen sind, lassen sich ausblenden (Einstellungen → Bibliotheken zeigt und holt sie zurück)
+- Kacheln für das Poster und **Season00 – Season50**, auch für Staffeln, die es noch nicht gibt
+- Poster per Drag & Drop auf eine andere Kachel **kopieren** oder mit **„Auf alle …“** auf mehrere Kacheln übertragen
+- **Plex-Collections:** Filme zeigen in der Vorschau ihre Collection; ein Klick öffnet deren Detailansicht mit allen Postern (ersetzen, hochladen, Set-Upload). Beim Import gruppiert p5assets die Filme nach Plex-Collection und sagt dir, welche Filme der Collection danach noch kein Poster haben. Dateien wie „… Collection“ ordnet der Import nicht automatisch einem Film zu. Große Sammel-Collections, die keine Filmreihen sind, kannst du ausblenden (unter Einstellungen → Bibliotheken siehst du sie und holst sie zurück)
 
 <table>
 <tr>
@@ -74,18 +68,18 @@ und welche vorhandenen Bilder ersetzt würden.
 </tr>
 </table>
 
-- **Herunterladen** in Originalqualität: einzelne Poster oder eine Auswahl als ZIP (auf iPhone/iPad öffnet sich das Original in p5assets: Bild lange drücken → „Zu Fotos hinzufügen“)
+- **Herunterladen** in Originalqualität: einzelne Poster oder eine Auswahl als ZIP (auf iPhone und iPad öffnet sich das Original in p5assets: Bild lange drücken → „Zu Fotos hinzufügen“)
 
 ### Online-Suche
-Poster von TMDb, TVDB und fanart.tv, gruppiert nach deiner **Sprach-Priorität pro Welt** (z. B. Textless → Deutsch → English),
-Übernahme per Klick. Für ThePosterDB öffnet ein Link die Suche mit dem passenden Namen; das dort heruntergeladene Poster
-oder Set legst du einfach in p5assets ab (kein Login, kein Auslesen der Seite).
+Poster von TMDb, TVDB und fanart.tv, gruppiert nach deiner **Sprach-Priorität pro Welt** (z. B. Textless → Deutsch → Englisch),
+übernimmst du mit einem Klick. Für ThePosterDB öffnet ein Link die Suche mit dem passenden Namen; das Poster oder Set,
+das du dort herunterlädst, legst du einfach in p5assets ab (kein Login, kein Auslesen der Seite).
 
 <img src="docs/images/online-search.png" alt="Online-Suche" width="560">
 
 ### Welten (HD, 4K, …)
-Getrennte Bereiche mit eigenem Assets-Ordner, eigener Titelliste, eigenem Dashboard und **eigener Farbe**: zehn Welten
-zur Auswahl, jede mit eigenem Planeten in der Kopfzeile; der Wechsel ist eine kurze Wurmloch-Reise. Bibliotheken und
+Getrennte Bereiche mit eigenem Assets-Ordner, eigener Titelliste, eigenem Dashboard und **eigener Farbe**: Zehn Welten
+stehen zur Auswahl, jede mit eigenem Planeten in der Kopfzeile; der Wechsel ist eine kurze Reise durchs Wurmloch. Bibliotheken und
 Sonarr-/Radarr-Instanzen ordnest du den Welten per Drag & Drop zu.
 
 <table>
@@ -97,21 +91,21 @@ Sonarr-/Radarr-Instanzen ordnest du den Welten per Drag & Drop zu.
 
 ### Coming Soon
 Plex-Platzhalter mit `{edition-Coming Soon}` im Ordnernamen haben einen eigenen Reiter (auf Wunsch nur die ohne Poster).
-Ihre Poster werden zusätzlich im echten Radarr-/Sonarr-Ordner abgelegt (pro Welt abschaltbar), damit sie den Wechsel
-auf die echte Datei überleben. Andere Editionen bleiben getrennt.
+Ihre Poster landen zusätzlich im echten Radarr- bzw. Sonarr-Ordner (pro Welt abschaltbar), damit sie den Wechsel
+zur echten Datei überstehen. Andere Editionen bleiben getrennt.
 
 <img src="docs/images/coming-soon.png" alt="Coming Soon" width="560">
 
 ### Qualität prüfen: Schwache Poster
-Der Reiter findet zu kleine oder nicht 2:3 große Bilder. Die Schwellwerte (Mindestbreite, Seitenverhältnis) wählst du selbst;
-die Bildgrößen werden im Hintergrund gelesen.
+Der Reiter findet Bilder, die zu klein sind oder nicht das Seitenverhältnis 2:3 haben. Die Schwellwerte (Mindestbreite, Seitenverhältnis) wählst du selbst;
+die Bildgrößen liest p5assets im Hintergrund.
 
 <img src="docs/images/weak.png" alt="Schwache Poster" width="560">
 
 ### Papierkorb & Aufräumen
-Ersetzte oder gelöschte Poster liegen **30 Tage im Papierkorb** (höchstens 2 GB). Nach jeder Aktion bietet ein Hinweis
+Ersetzte oder gelöschte Poster bleiben **30 Tage im Papierkorb** (höchstens 2 GB). Nach jeder Aktion bietet ein Hinweis
 „Rückgängig“ an; das Papierkorb-Symbol in der Kopfzeile öffnet die ganze Liste. **Verwaiste Ordner** (Poster ohne Titel in Plex,
-Sonarr/Radarr) lassen sich finden und in den Papierkorb verschieben; Titel, die Sonarr/Radarr
+Sonarr oder Radarr) kannst du aufspüren und in den Papierkorb verschieben; Titel, die Sonarr oder Radarr
 noch kennen, bleiben geschützt.
 
 <table>
@@ -122,18 +116,18 @@ noch kennen, bleiben geschützt.
 </table>
 
 ### Benachrichtigungen
-Nach einem Scan meldet p5assets per **Discord, Telegram oder ntfy** – und nur bei drei Anlässen:
-neue Titel ohne Poster (Coming-Soon-Titel werden mitgezählt: „4 neue Titel ohne Poster, 2 davon Coming Soon“),
-Fehler beim Scan (einmal pro Fehler) und neue Einträge unter „In Plex, Poster fehlt“. Der erste Scan legt nur den
-Ausgangsstand fest. Einrichten im Onboarding (überspringbar) oder später in den Einstellungen, mit Testnachricht.
+Nach einem Scan meldet sich p5assets per **Discord, Telegram oder ntfy**, und zwar nur in zwei Fällen:
+neue Titel unter „In Plex, Poster fehlt“ (eine Nachricht, Coming-Soon-Titel sind markiert, zum Beispiel „4 new titles without poster, 2 of them Coming Soon“) und
+Fehler beim Scan (einmal pro Fehler). Die Nachrichten selbst sind immer englisch. Der erste Scan legt nur den
+Ausgangsstand fest. Du richtest die Benachrichtigungen bei der Einrichtung ein (Schritt überspringbar) oder später in den Einstellungen; eine Testnachricht zeigt, ob alles ankommt.
 
 <img src="docs/images/settings-notifications.png" alt="Benachrichtigungen" width="560">
 
 ### Logs, Neuigkeiten, Mobil
-- **Log-Seite** (Symbol `>_`): Live-Log mit Suche, Level-Filter und Download. Bei neuen Warnungen oder Fehlern leuchtet das Symbol auf und zeigt die Anzahl. Tokens und API-Keys werden nie protokolliert.
-- **Neu in diesem Update**: nach einem Update zeigt p5assets, was neu ist, und bietet neue Funktionen direkt zum Einrichten an (später jederzeit über „Neuigkeiten“ in der Fußzeile).
-- **Als App** auf iPhone/iPad (Teilen → Zum Home-Bildschirm), mit kompakter Kopfleiste und großen Tippflächen; die Einstellungen sind dort eine Liste mit Gruppen (am Desktop eine Seitenleiste).
-- **Tastaturkürzel:** `/` springt ins Suchfeld, `Esc` leert es, in der Poster-Vorschau blättern `←`/`→` durch die Filme. Ein Klick auf das Logo führt immer zur Startseite.
+- **Log-Seite** (Symbol `>_`): Live-Log mit Suche, Level-Filter und Download. Bei neuen Warnungen oder Fehlern leuchtet das Symbol auf und zeigt die Anzahl. Tokens und API-Keys landen nie im Log.
+- **Neu in diesem Update**: Nach einem Update zeigt dir p5assets, was neu ist, und bietet an, neue Funktionen gleich einzurichten (später jederzeit über „Neuigkeiten“ in der Fußzeile).
+- **Als App** auf iPhone und iPad (Teilen → Zum Home-Bildschirm), mit kompakter Kopfleiste und großen Tippflächen; die Einstellungen sind dort eine gruppierte Liste (am Desktop eine Seitenleiste).
+- **Tastaturkürzel:** `/` springt ins Suchfeld, `Esc` leert es, in der Poster-Vorschau blätterst du mit `←`/`→` durch die Filme. Ein Klick aufs Logo führt immer zur Startseite.
 
 <table>
 <tr>
@@ -155,22 +149,22 @@ services:
       - /pfad/zu/kometa/assets-4k:/assets-4k    # optional: Welt 2 (4K)
     restart: unless-stopped
 ```
-Dann http://localhost:8484 öffnen und das Onboarding durchlaufen (Plex, Welten, Sonarr/Radarr, API-Keys).
-Die Assets-Ordner müssen **beschreibbar** gemountet sein. Ordnernamen werden aus dem Medienpfad in Plex bzw.
-Sonarr/Radarr abgeleitet – so sucht Kometa die Assets.
+Öffne dann http://localhost:8484 und geh die Einrichtung durch (Plex, Welten, Sonarr/Radarr, API-Keys).
+Die Assets-Ordner müssen **beschreibbar** eingebunden sein. Die Ordnernamen leitet p5assets aus dem Medienpfad in Plex bzw.
+Sonarr/Radarr ab – genau so sucht Kometa nach Assets.
 
 Aus dem Quellcode: `docker compose up -d --build`.
 
 ## Unraid
-1. Template **und Icon** auf den Server bringen. Am einfachsten per Netzwerkfreigabe (funktioniert auch bei privatem Repo):
+1. Bring das Template **und das Icon** auf den Server. Am einfachsten geht das über die Netzwerkfreigabe (klappt auch bei einem privaten Repo):
    `unraid/p5assets.xml` → `\\<Unraid-IP>\flash\config\plugins\dockerMan\templates-user\my-p5assets.xml`
-   (Alternativ bei öffentlichem Repo per Terminal:
+   (Alternativ bei einem öffentlichen Repo per Terminal:
    `wget -O /boot/config/plugins/dockerMan/templates-user/my-p5assets.xml https://raw.githubusercontent.com/p5lukas/p5assets/dev/unraid/p5assets.xml`)
-2. *Docker → Add Container* → Template **p5assets** unter *User templates* wählen.
+2. *Docker → Add Container* → unter *User templates* das Template **p5assets** wählen.
 3. Pfade setzen: **Config** (z. B. `/mnt/user/appdata/p5assets`), **Assets 1** (dein Kometa-`asset_directory`),
-   bei Bedarf **Assets 2** (z. B. 4K). Nicht benötigte Assets-Pfade leer lassen.
-4. Der Host-Port ist standardmäßig **8484**. Ist er belegt, ändere nur den Host-Port, nicht den Container-Port 8080.
-5. WebUI öffnen und das Onboarding durchlaufen. Als Plex-URL trägst du `http://<Unraid-IP>:32400` ein.
+   bei Bedarf **Assets 2** (z. B. 4K). Nicht benötigte Assets-Pfade lässt du leer.
+4. Der Host-Port ist standardmäßig **8484**. Ist er belegt, änderst du nur den Host-Port, nicht den Container-Port 8080.
+5. WebUI öffnen und die Einrichtung durchgehen. Als Plex-URL trägst du `http://<Unraid-IP>:32400` ein.
 
 ### Image-Tags
 | Tag | Quelle | Zweck |
@@ -180,15 +174,15 @@ Aus dem Quellcode: `docker compose up -d --build`.
 | `:0.6.0` | Git-Tag `v0.6.0` | feste Version (aktuell `0.6.0`, `1.0.0` erst bei ausgereiftem Stand) |
 | `:sha-…` | jeder Build | Fehlersuche |
 
-Solange p5assets in der Entwicklung ist, nutzen Template und Compose-Datei `:dev`. Sobald alles stabil läuft,
-wird auf `:latest` (Branch `main`) umgestellt: im Container-Formular das Feld *Repository* auf
-`ghcr.io/p5lukas/p5assets:latest` ändern.
+Solange p5assets in Entwicklung ist, nutzen Template und Compose-Datei `:dev`. Sobald alles stabil läuft,
+stellen beide auf `:latest` (Branch `main`) um: Ändere dann im Container-Formular das Feld *Repository* auf
+`ghcr.io/p5lukas/p5assets:latest`.
 
-> Ist das GHCR-Paket privat, braucht Unraid einen Login: `docker login ghcr.io -u p5lukas` mit einem Token, der **nur** `read:packages` darf.
+> Ist das GHCR-Paket privat, braucht Unraid einen Login: `docker login ghcr.io -u p5lukas` mit einem Token, das **nur** `read:packages` darf.
 
-Der Build läuft per GitHub Action (`.github/workflows/docker.yml`) bei Push auf `dev` bzw. `main`.
+Gebaut wird per GitHub Action (`.github/workflows/docker.yml`) bei jedem Push auf `dev` bzw. `main`.
 Dateien werden mit `PUID=99` / `PGID=100` (nobody/users) geschrieben.
-Updates: Container in Unraid mit *Force Update* aktualisieren.
+Updates: Container in Unraid per *Force Update* aktualisieren.
 
 ## Speicherbedarf in `/config`
 | Ordner | Inhalt | Größe |
@@ -199,8 +193,8 @@ Updates: Container in Unraid mit *Force Update* aktualisieren.
 | `cache/dims.json`, `history.json`, `logs` | Bildgrößen, Abdeckungsverlauf, Log | klein |
 
 ## Anmeldung & Passwort zurücksetzen
-Optional lässt sich p5assets mit **Benutzername und Passwort** schützen (Onboarding-Schritt „Anmeldung“ oder später in den Einstellungen).
-Das Passwort wird nur als Hash (scrypt) in `/config/auth.json` gespeichert, die Anmeldung gilt auf Wunsch 30 Tage, nach mehreren
+Auf Wunsch schützt du p5assets mit **Benutzername und Passwort** (Einrichtungsschritt „Anmeldung“ oder später in den Einstellungen).
+Das Passwort wird nur als Hash (scrypt) in `/config/auth.json` gespeichert. Die Anmeldung gilt auf Wunsch 30 Tage, und nach mehreren
 Fehlversuchen gibt es eine Wartezeit. Die Anmeldeseite übernimmt die Farbe der zuletzt benutzten Welt.
 
 <table>
@@ -210,21 +204,21 @@ Fehlversuchen gibt es eine Wartezeit. Die Anmeldeseite übernimmt die Farbe der 
 </tr>
 </table>
 
-**Passwort vergessen?** Mit Zugriff auf den Server geht es auf drei Wegen:
-1. `docker exec -it p5assets python -m app.auth reset` – neues Passwort setzen oder die Anmeldung ausschalten (`python -m app.auth status` zeigt den Zustand).
-2. Die Umgebungsvariable `P5_AUTH_RESET=1` setzen und den Container neu starten: die Anmeldung wird zurückgesetzt (danach die Variable wieder entfernen und neu einrichten).
+**Passwort vergessen?** Mit Zugriff auf den Server gibt es drei Wege:
+1. `docker exec -it p5assets python -m app.auth reset` – neues Passwort setzen oder die Anmeldung ausschalten (`python -m app.auth status` zeigt den aktuellen Zustand).
+2. Die Umgebungsvariable `P5_AUTH_RESET=1` setzen und den Container neu starten: Die Anmeldung wird zurückgesetzt (danach die Variable wieder entfernen und die Anmeldung neu einrichten).
 3. Die Datei `/config/auth.json` löschen.
 
-## Hinweis
-Ohne eingeschaltete Anmeldung kann jeder im Netz p5assets bedienen – betreibe es dann nur im Heimnetz oder hinter einem Reverse Proxy mit Login.
-Bei Zugriff über das Internet bitte zusätzlich `https://` (Reverse Proxy) verwenden, damit Passwort und Sitzung verschlüsselt übertragen werden.
-Tipp: p5assets gehört nicht direkt ins offene Internet (keine Portfreigabe am Router). Besser per VPN (z. B. WireGuard/Tailscale) oder hinter einem Reverse Proxy mit `https://` erreichbar machen.
-Plex-Token, API-Keys und Benachrichtigungs-Zugangsdaten liegen in `/config/config.json` und werden nie ins Log geschrieben.
-Verbindungen zu Plex, Sonarr und Radarr im Heimnetz akzeptieren selbstsignierte Zertifikate (üblich bei `https://` im LAN); die Online-Suche und Benachrichtigungen im Internet nutzen die normale Zertifikatsprüfung.
+## Hinweise
+Ohne eingeschaltete Anmeldung kann jeder im Netzwerk p5assets bedienen – betreib es dann nur im Heimnetz oder hinter einem Reverse Proxy mit Login.
+Greifst du über das Internet zu, nutz zusätzlich `https://` (Reverse Proxy), damit Passwort und Sitzung verschlüsselt übertragen werden.
+Tipp: p5assets gehört nicht direkt ins offene Internet (keine Portfreigabe am Router). Besser erreichst du es per VPN (z. B. WireGuard/Tailscale) oder hinter einem Reverse Proxy mit `https://`.
+Plex-Token, API-Keys und Zugangsdaten für Benachrichtigungen liegen in `/config/config.json` und werden nie ins Log geschrieben.
+Verbindungen zu Plex, Sonarr und Radarr im Heimnetz akzeptieren selbstsignierte Zertifikate (üblich bei `https://` im LAN); die Online-Suche und Benachrichtigungen ins Internet nutzen die normale Zertifikatsprüfung.
 
-Die Tests (`pytest`) laufen in der GitHub-Action vor jedem Image-Bau.
+Die Tests (`pytest`) laufen in der GitHub Action vor jedem Image-Build.
 
 ## Lizenz
 p5assets steht unter der [GNU General Public License v3.0](LICENSE) (GPL-3.0): Du darfst den Code nutzen, ändern und weitergeben.
-Weiterentwicklungen, die du verbreitest, müssen ebenfalls unter der GPL-3.0 stehen und ihren Quellcode offenlegen.
+Abgeleitete Werke, die du verbreitest, müssen ebenfalls unter der GPL-3.0 stehen und ihren Quellcode offenlegen.
 Das Projekt ist unabhängig von Plex, Sonarr, Radarr, Kometa, TMDb, TVDB, fanart.tv und ThePosterDB und nicht mit ihnen verbunden.
