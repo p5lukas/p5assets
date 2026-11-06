@@ -590,3 +590,5 @@ input[type=search]::-webkit-search-cancel-button,input[type=search]::-webkit-sea
 @media(prefers-reduced-motion:reduce){.langsw u{animation:none}}
 @media(max-width:760px){.langsw .pr,.langsw u{display:none}.langsw{padding:5px 8px}}
 .rain.saving{animation:none;background:hsl(var(--h) var(--sat) 2% / .82)}
+/* language switch: letters glow while they scramble */
+body.glitching #app,body.glitching #foot{text-shadow:0 0 9px var(--glow);transition:text-shadow .3s ease}

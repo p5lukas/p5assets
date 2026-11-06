@@ -23,8 +23,8 @@ const fill = (el, ...kids) => { el.replaceChildren(...clean(kids)); return el; }
 /* ---------------------------------------------------------------- i18n --- */
 // German is the source language of the texts in this file; English comes from window.P5_EN (app/i18n/en.json, served as /i18n.js).
 // T(key, a, b) fills the placeholders {0}, {1} …; TP(n, keyOne, keyMany, …) picks by number ({0} = n).
-const LANG = (() => { try { return localStorage.getItem("p5lang") === "de" ? "de" : "en"; } catch { return "en"; } })();
-const LOCALE = LANG === "de" ? "de-DE" : "en-GB";
+let LANG = (() => { try { return localStorage.getItem("p5lang") === "de" ? "de" : "en"; } catch { return "en"; } })();
+let LOCALE = LANG === "de" ? "de-DE" : "en-GB";
 const T = (key, ...args) => {
   const s = LANG === "en" && window.P5_EN && key in window.P5_EN ? window.P5_EN[key] : key;
   return args.length ? s.replace(/\{(\d+)\}/g, (m, i) => (args[+i] ?? m)) : s;
@@ -36,9 +36,84 @@ function langSwitch() {
   return h("button", { class: "langsw", type: "button", title: "Language / Sprache", "aria-label": "Language / Sprache", onclick: () => setLang(LANG === "en" ? "de" : "en") },
     h("span", { class: "pr", "aria-hidden": "true" }, "$"), opt("en"), h("span", { class: "sep", "aria-hidden": "true" }, "/"), opt("de"), h("u", { "aria-hidden": "true" }, "_"));
 }
-function setLang(l) { try { localStorage.setItem("p5lang", l); } catch { /* private mode */ } location.reload(); }
-document.documentElement.lang = LANG;
-{ const dv = $("#dropveil"); if (dv) { dv.querySelector("b").textContent = T("Hier ablegen"); dv.querySelector("span").textContent = T("Bilder, Ordner oder ZIP – p5assets benennt alles Kometa-konform um"); } }
+/** Language switch without reloading: the visible letters scramble like a split-flap board / Matrix decode, the page is rebuilt in the new language in between. */
+function staticTexts() {
+  document.documentElement.lang = LANG;
+  const dv = $("#dropveil");
+  if (dv) { dv.querySelector("b").textContent = T("Hier ablegen"); dv.querySelector("span").textContent = T("Bilder, Ordner oder ZIP – p5assets benennt alles Kometa-konform um"); }
+}
+staticTexts();
+function applyLang(l) {
+  LANG = l; LOCALE = l === "de" ? "de-DE" : "en-GB";
+  staticTexts();
+  S.cards = null;                                   // cards were built with the old texts
+  const y = window.scrollY;
+  app.style.minHeight = document.documentElement.scrollHeight + "px";        // the page keeps its height while it is rebuilt, so the scroll position stays
+  setTimeout(() => { app.style.minHeight = ""; }, 50);
+  if (S.view === "dash") { dashboard({ keep: true }); window.scrollTo(0, y); }
+  else if (S.view === "wiz") drawWiz();
+  else if (S.view === "login") { S.view = ""; showLogin(); }
+  else if (S.view === "logs") logsPage();
+  else location.reload();
+  api("/status").then(r => { S.st.summary = r; if (S.view === "dash") updateHero(); }).catch(() => {});      // scan messages come from the server in the new language
+}
+const GLITCH = "01ABCDEFGHIJKLMNOPQRSTUVWXYZ#$%&*+<>=/|";      // all the same width in a monospace font: the layout does not jump
+/** Text nodes that are on screen right now (hidden or far away ones need no effect). */
+function visibleTextNodes() {
+  const out = [], vw = innerWidth, vh = innerHeight, r = document.createRange();
+  const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, { acceptNode: n => {
+    const p = n.parentElement;
+    if (!p || /^(SCRIPT|STYLE|CANVAS|TEXTAREA|SELECT|OPTION)$/.test(p.tagName) || p.closest("svg, #toasts")) return NodeFilter.FILTER_REJECT;
+    return /\S/.test(n.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+  } });
+  while (w.nextNode()) {
+    const n = w.currentNode; r.selectNodeContents(n);
+    const b = r.getBoundingClientRect();
+    if (b.width && b.bottom > 0 && b.top < vh && b.right > 0 && b.left < vw) out.push({ node: n, text: n.nodeValue, wave: Math.min(1, b.left / vw) * 0.3 + Math.min(1, Math.max(0, b.top) / vh) * 0.25 });
+  }
+  return out;
+}
+/** Runs the letter effect: dir "out" = the old text turns into noise, "in" = noise resolves into the (new) text, as a wave across the screen. */
+function glitch(items, dir, ms) {
+  const eased = p => p * p * (3 - 2 * p);
+  const st = items.map(it => ({ ...it, t: Array.from(it.text, (_, i) => it.wave + Math.random() * 0.18 + (i / Math.max(1, it.text.length)) * 0.12), g: [] }));
+  return new Promise(resolve => {
+    const t0 = performance.now(); let frame = 0;
+    (function step(now) {
+      const p = Math.min(1, (now - t0) / ms), e = eased(p);
+      if (frame++ % 2 === 0) for (const it of st) it.g = Array.from(it.text, () => GLITCH[Math.floor(Math.random() * GLITCH.length)]);
+      for (const it of st) {
+        let txt = "";
+        for (let i = 0; i < it.text.length; i++) {
+          const ch = it.text[i];
+          if (/\s/.test(ch)) { txt += ch; continue; }
+          const done = e * 1.25 >= it.t[i] + 0.1;
+          txt += (dir === "out" ? !done : done) ? ch : it.g[i];
+        }
+        if (it.node.nodeValue !== txt) it.node.nodeValue = txt;
+      }
+      if (p < 1) requestAnimationFrame(step);
+      else { if (dir === "in") for (const it of st) it.node.nodeValue = it.text; resolve(); }
+    })(t0);
+  });
+}
+let langBusy = false;
+async function setLang(l) {
+  if (l === LANG || langBusy) return;
+  try { localStorage.setItem("p5lang", l); } catch { /* private mode */ }
+  if (reduced() || !document.body.animate) { applyLang(l); return; }
+  langBusy = true;
+  try {
+    document.body.classList.add("glitching");
+    await glitch(visibleTextNodes(), "out", 420);
+    applyLang(l);                                           // rebuilds the page in the new language (synchronously)
+    const fresh = visibleTextNodes();
+    for (const it of fresh) it.node.nodeValue = it.text.replace(/\S/g, () => GLITCH[Math.floor(Math.random() * GLITCH.length)]);   // no flash of the final text
+    const done = glitch(fresh, "in", 760);
+    setTimeout(() => document.body.classList.remove("glitching"), 600);
+    await done;
+  } finally { document.body.classList.remove("glitching"); langBusy = false; }
+}
 
 async function api(path, opts = {}) {
   const o = { ...opts, headers: { "X-Requested-With": "p5assets", "X-Lang": LANG, ...(opts.headers || {}) } };     // the header protects writing requests when a login is set (CSRF)
@@ -281,7 +356,7 @@ const pl = (n, one, many) => {
 const fehlt = n => T(n === 1 ? "fehlt" : "fehlen");
 const fmtBytes = b => b >= 1048576 ? (b / 1048576).toFixed(1) + T(" MB") : Math.max(1, Math.round(b / 1024)) + T(" KB");
 const fmtWhen = ts => new Date(ts * 1000).toLocaleString(LOCALE, { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-const REASON = { replace: T("ersetzt"), delete: T("gelöscht"), orphan: T("verwaister Ordner"), restore: T("vor Wiederherstellung") };
+const REASON = { get replace() { return T("ersetzt"); }, get delete() { return T("gelöscht"); }, get orphan() { return T("verwaister Ordner"); }, get restore() { return T("vor Wiederherstellung"); } };
 
 /** "✕" that clears a search field with one tap (only visible while there is text); Esc in the field does the same. */
 function clearBtn(input) {
@@ -578,7 +653,8 @@ async function logsPage() {
 
 
 /* ========================================================== dashboard === */
-function dashboard() {
+function dashboard(opts) {
+  const keep = !!(opts && opts.keep === true);       // after a language switch: rebuild from the data we already have
   S.view = "dash";
   const qInput = h("input", { type: "search", placeholder: T("Titel suchen …"), id: "q", value: S.q, autocomplete: "off", enterkeyhint: "search", "aria-label": T("Titel suchen"), oninput: debounce(async e => { S.q = e.target.value; await loadItems(); renderChips(); renderGrid(); }, 150) });
   setAccent();
@@ -604,6 +680,7 @@ function dashboard() {
     h("main", {}, h("div", { id: "hero" }), h("div", { id: "tabrow", class: "tabrow" }, h("div", { id: "chips" }), h("div", { class: "search" }, icon("search", 16), qInput, clearBtn(qInput))), h("div", { id: "az", class: "azbar" }), h("div", { id: "grid" }), h("div", { id: "az2", class: "azbar" })),
   );
   updateHero();
+  if (keep) { paintAlert(); renderChips(); renderGrid(); return; }
   S.dimTries = 0; loadHistory();
   checkAlerts();
   if (!S.newsChecked) { S.newsChecked = true; setTimeout(checkNews, 1500); }
@@ -820,12 +897,12 @@ function posterBox(item, slot, known = true) {
   return wrap;
 }
 
-const NOT_IN_PLEX = T("Noch nicht in Plex");   // one label for everything Sonarr/Radarr know but Plex does not have yet (no file, not released …)
+const NOT_IN_PLEX = () => T("Noch nicht in Plex");   // one label for everything Sonarr/Radarr know but Plex does not have yet (no file, not released …)
 
 /** Status of a title as tag descriptors; the colour says what it means (ok = green, warn = yellow, bad = red). */
 function statusTags(it) {
   const t = [];
-  if (!it.in_plex) t.push({ text: NOT_IN_PLEX, cls: "warn" });
+  if (!it.in_plex) t.push({ text: NOT_IN_PLEX(), cls: "warn" });
   if (it.coming_soon) t.push({ text: T("Coming Soon"), cls: "warn" });
   if (it.monitored != null) {
     t.push(it.monitored ? { text: T("überwacht"), cls: "ok" } : { text: T("nicht überwacht"), cls: "" });
@@ -857,7 +934,7 @@ function card(item, local) {
   const bad = item.missing;
   if (bad) box.append(h("span", { class: "badge bad" }, TP(bad, "{0} fehlt", "{0} fehlen")));
   box.title = metaText(item);
-  if (!item.in_plex) box.append(h("span", { class: "badge warn b", title: T("Sonarr/Radarr kennen den Titel, in Plex fehlt er noch") }, NOT_IN_PLEX));
+  if (!item.in_plex) box.append(h("span", { class: "badge warn b", title: T("Sonarr/Radarr kennen den Titel, in Plex fehlt er noch") }, NOT_IN_PLEX()));
   else if (item.coming_soon) box.append(h("span", { class: "badge warn b", title: T("In Plex als Coming-Soon-Platzhalter sichtbar") }, T("Coming Soon")));
   if (S.filter === "weak") { const wk = weakSlot(item); if (wk) box.append(h("span", { class: "badge warn r", title: T("{0}: {1} × {2} px", slotLabel(wk.key, item.type), wk.w, wk.h) }, `${wk.w}×${wk.h}`)); }
   // a movie has one poster: no detail view, title/year and poster open the preview; the action buttons are built on first use
@@ -959,7 +1036,7 @@ async function openItem(id) {
     const sl = it.slots[key], exists = !!(sl && sl.exists);
     const box = posterBox(it, key, known);
     if (known && !exists) box.append(h("span", { class: "badge bad" }, T("fehlt")));      // a poster that is there needs no tag
-    if (sl && sl.only_arr) box.append(h("span", { class: "badge warn b", title: T("Diese Staffel kennt bisher nur Sonarr – in Plex gibt es sie noch nicht") }, NOT_IN_PLEX));
+    if (sl && sl.only_arr) box.append(h("span", { class: "badge warn b", title: T("Diese Staffel kennt bisher nur Sonarr – in Plex gibt es sie noch nicht") }, NOT_IN_PLEX()));
     const pick = () => pickFiles(files => uploadSlot(it, key, files, draw), false);
     box.append(slotActions(it, key, box, draw));
     const el = h("div", { class: "slot" }, box, h("div", { class: "lab" }, slotLabel(key, it.type)));
@@ -1727,8 +1804,8 @@ function wAuth(nav) {
     nav(null, T("Weiter")));
 }
 
-const STEP_LABELS = { welcome: T("Start"), plex: T("Plex"), libs: T("Bibliotheken"), arr: T("Sonarr/Radarr"), worlds: T("Welten"), assign: T("Zuordnung"), apis: T("Quellen"), notify: T("Benachrichtigungen"), auth: T("Anmeldung"), done: T("Fertig") };
-const STEP_GROUPS = [[T("Verbindungen"), ["plex", "libs", "arr"]], [T("Welten"), ["worlds", "assign"]], [T("Weiteres"), ["apis", "notify", "auth"]]];
+const STEP_LABELS = { get welcome() { return T("Start"); }, get plex() { return T("Plex"); }, get libs() { return T("Bibliotheken"); }, get arr() { return T("Sonarr/Radarr"); }, get worlds() { return T("Welten"); }, get assign() { return T("Zuordnung"); }, get apis() { return T("Quellen"); }, get notify() { return T("Benachrichtigungen"); }, get auth() { return T("Anmeldung"); }, get done() { return T("Fertig"); } };
+const STEP_GROUPS = [["Verbindungen", ["plex", "libs", "arr"]], ["Welten", ["worlds", "assign"]], ["Weiteres", ["apis", "notify", "auth"]]];     // group names are translated where they are shown
 // "Zuordnung" only exists when there is more than one world
 const stepList = () => ["welcome", "plex", "libs", "arr", "worlds", ...(cfg().worlds.length > 1 ? ["assign"] : []), "apis", "notify", "auth", "done"];
 
@@ -1768,7 +1845,7 @@ function drawWiz() {
   if (mobile && S.wizSettings && S.navList) {
     const rows = names => names.filter(n => list.includes(n)).map(n => h("button", { class: "mrow", onclick: () => goStep(n) }, h("span", {}, STEP_LABELS[n]), h("i", { "aria-hidden": "true" }, "›")));
     return fill(app, h("div", { class: "wiz" }, h("div", { class: "wizbar" }, logoEl("assets"), langSwitch()), h("div", { class: "mlist" }, h("h1", {}, T("Einstellungen")),
-      STEP_GROUPS.map(([g, names]) => [h("div", { class: "navgrp" }, g), h("div", { class: "mgroup" }, rows(names))]),
+      STEP_GROUPS.map(([g, names]) => [h("div", { class: "navgrp" }, T(g)), h("div", { class: "mgroup" }, rows(names))]),
       h("div", { style: "margin-top:22px" }, h("button", { class: "btn", onclick: closeSettings }, T("Schließen"))))));
   }
   const top = !mobile ? null : S.wizSettings
@@ -1786,7 +1863,7 @@ function drawWiz() {
   let lastGroup = null;
   shown.forEach((s, n) => {
     const g = (STEP_GROUPS.find(([, names]) => names.includes(s.name)) || [null])[0];
-    if (g !== lastGroup && g) side.push(h("div", { class: "navgrp" }, g));
+    if (g !== lastGroup && g) side.push(h("div", { class: "navgrp" }, T(g)));
     lastGroup = g;
     side.push(stepBtn(s, n));
   });
