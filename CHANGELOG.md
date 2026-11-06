@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.1 – 2026-11-06
+
+**Changed**
+- Switching the language no longer reloads the page: the visible letters scramble like a split-flap board or a Matrix decode and resolve into the new language within about a second; your place on the page, the open tab and the settings step stay as they are
+
 ## 0.7.0 – 2026-11-05
 
 The first release with an English interface and English GitHub pages. It rolls up 0.6.0 to 0.6.2 (below).

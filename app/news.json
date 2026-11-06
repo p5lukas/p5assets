@@ -1,4 +1,5 @@
 [
+  {"id": "glitch-1", "version": "0.7.1", "title": "Sprachwechsel im Matrix-Stil", "text": "Beim Umschalten der Sprache wirbeln die Buchstaben kurz durcheinander und setzen sich in der neuen Sprache wieder zusammen. Die Seite wird dabei nicht neu geladen."},
   {"id": "v070", "version": "0.7.0", "title": "p5assets 0.7.0", "text": "Die erste Version mit englischer Oberfläche und englischen GitHub-Seiten. Die Sprache stellst du mit „$ EN/DE“ in der Kopfzeile um. Beim Speichern eines Posters läuft jetzt sofort der Matrix-Regen."},
   {"id": "i18n-1", "version": "0.6.0", "title": "Englisch und Deutsch", "text": "p5assets startet jetzt auf Englisch. Mit dem Umschalter „$ EN/DE“ in der Kopfzeile wechselst du die Sprache; die Wahl wird im Browser gemerkt."},
   {"id": "term-1", "version": "0.6.0", "title": "Terminal-Optik statt Emojis", "text": "Die bunten Emojis sind durch Terminal-Zeichen wie „[ OK ]“ und „$ ready_“ ersetzt, damit alles zum Matrix-Stil passt."},
