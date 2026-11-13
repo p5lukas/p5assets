@@ -88,6 +88,14 @@ async def tmdb_posters(key: str, wanted: list[str], kind: str, tmdb_id: str, sea
     return out
 
 
+async def tmdb_logos(key: str, wanted: list[str], kind: str, tmdb_id: str) -> list[dict]:
+    codes = ["null" if c == "xx" else c for c in dict.fromkeys([*wanted, "en", "xx"])]
+    data = await tmdb_get(key, f"/{'movie' if kind == 'movie' else 'tv'}/{tmdb_id}/images", include_image_language=",".join(codes))
+    return [{"source": "TMDb", "url": f"{TMDB_IMG}original{p['file_path']}", "preview": f"{TMDB_IMG}w300{p['file_path']}",
+             "lang": langs.norm_tmdb(p.get("iso_639_1")), "width": p.get("width"), "height": p.get("height"),
+             "score": p.get("vote_average") or 0} for p in data.get("logos", []) if p.get("file_path")]
+
+
 # ------------------------------------------------------------- fanart.tv ---
 
 async def fanart_posters(key: str, kind: str, ids: dict, tmdb_id: str | None, season: int | None) -> list[dict]:
@@ -118,6 +126,32 @@ async def fanart_posters(key: str, kind: str, ids: dict, tmdb_id: str | None, se
             "lang": langs.norm_fanart(p.get("lang")),
             "score": int(p.get("likes") or 0) * 0.5,
         })
+    return out
+
+
+async def fanart_logos(key: str, kind: str, ids: dict, tmdb_id: str | None) -> list[dict]:
+    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+        if kind == "movie":
+            mid = tmdb_id or ids.get("imdb")
+            if not mid:
+                return []
+            r = await c.get(f"https://webservice.fanart.tv/v3/movies/{mid}", params={"api_key": key})
+            fields = ("hdmovielogo", "movielogo")
+        else:
+            if not ids.get("tvdb"):
+                return []
+            r = await c.get(f"https://webservice.fanart.tv/v3/tv/{ids['tvdb']}", params={"api_key": key})
+            fields = ("hdtvlogo", "clearlogo")
+        if r.status_code == 404:
+            return []
+        r.raise_for_status()
+        data = r.json()
+    out = []
+    for field in fields:
+        for p in data.get(field, []) or []:
+            url = p.get("url", "")
+            out.append({"source": "fanart.tv", "url": url, "preview": url.replace("/fanart/", "/preview/"),
+                        "lang": langs.norm_fanart(p.get("lang")), "score": int(p.get("likes") or 0) * 0.5 + (1 if field.startswith("hd") else 0)})
     return out
 
 
@@ -203,7 +237,77 @@ async def tvdb_posters(key: str, pin: str, kind: str, ids: dict, season: int | N
     return out
 
 
+async def tvdb_logos(key: str, pin: str, kind: str, ids: dict) -> list[dict]:
+    """Clear logos from TheTVDB (artwork type 25 for movies, 23 for series)."""
+    sid = ids.get("tvdb")
+    if not sid:
+        return []
+    token = await _tvdb_login(key, pin)
+    async with httpx.AsyncClient(timeout=TIMEOUT, headers={"Authorization": f"Bearer {token}"}) as c:
+        if kind == "movie":
+            r = await c.get(f"https://api4.thetvdb.com/v4/movies/{sid}/extended")
+            if r.status_code == 404:
+                return []
+            r.raise_for_status()
+            arts = [a for a in r.json()["data"].get("artworks") or [] if a.get("type") == 25]
+        else:
+            r = await c.get(f"https://api4.thetvdb.com/v4/series/{sid}/artworks", params={"type": 23})
+            if r.status_code == 404:
+                return []
+            r.raise_for_status()
+            arts = r.json()["data"].get("artworks") or []
+    out = []
+    for a in arts:
+        img = a.get("image") or ""
+        if not img:
+            continue
+        img = "https://artworks.thetvdb.com" + img if img.startswith("/") else img
+        thumb = a.get("thumbnail") or img
+        thumb = "https://artworks.thetvdb.com" + thumb if thumb.startswith("/") else thumb
+        out.append({"source": "TVDB", "url": img, "preview": thumb, "lang": langs.norm_tvdb(a.get("language")),
+                    "score": (a.get("score") or 0) / 100000})
+    return out
+
+
 # ------------------------------------------------------------ aggregate ---
+
+def _collect(status: dict, tasks: dict, results: list, order: list[str]) -> list[dict]:
+    """Merge the results of the providers (and their status for the UI), sorted by language rank, then score."""
+    images: list[dict] = []
+    for name, res in zip(tasks, results):
+        if isinstance(res, Exception):
+            status[name].update(state="error", error=short(res))
+        else:
+            status[name].update(state="ok", count=len(res))
+            images.extend(res)
+    rank = {c: i for i, c in enumerate(order)}
+    images.sort(key=lambda x: (rank.get(x["lang"], len(order)), -x.get("score", 0)))
+    return images
+
+
+async def search_logos(apis: dict, kind: str, ids: dict, title: str, year: int | None, order: list[str] | None = None) -> dict:
+    """Clear logos of a title from TMDb, fanart.tv and TheTVDB (same shape as ``search``)."""
+    order = order or langs.DEFAULT_ORDER
+    tmdb_id = ids.get("tmdb")
+    status: dict[str, dict] = {n: {"name": n, "state": "nokey", "count": 0, "error": None} for n in ("TMDb", "TVDB", "fanart.tv")}
+    tasks: dict[str, object] = {}
+    if apis.get("tmdb"):
+        try:
+            tmdb_id = await tmdb_find_id(apis["tmdb"], ids, kind, title, year)
+        except Exception as e:  # noqa: BLE001
+            status["TMDb"].update(state="error", error=short(e))
+        if tmdb_id:
+            tasks["TMDb"] = tmdb_logos(apis["tmdb"], order, kind, tmdb_id)
+        elif status["TMDb"]["state"] == "nokey":
+            status["TMDb"].update(state="ok")
+    if apis.get("fanart"):
+        tasks["fanart.tv"] = fanart_logos(apis["fanart"], kind, ids, tmdb_id)
+    if apis.get("tvdb"):
+        tasks["TVDB"] = tvdb_logos(apis["tvdb"], apis.get("tvdb_pin", ""), kind, ids)
+    results = await asyncio.gather(*tasks.values(), return_exceptions=True)
+    images = _collect(status, tasks, results, order)
+    return {"images": images, "providers": list(status.values()), "errors": {n: s["error"] for n, s in status.items() if s["error"]}}
+
 
 async def search(apis: dict, kind: str, ids: dict, title: str, year: int | None, season: int | None,
                  order: list[str] | None = None) -> dict:
@@ -227,15 +331,7 @@ async def search(apis: dict, kind: str, ids: dict, title: str, year: int | None,
     if apis.get("tvdb"):
         tasks["TVDB"] = tvdb_posters(apis["tvdb"], apis.get("tvdb_pin", ""), kind, ids, season)
     results = await asyncio.gather(*tasks.values(), return_exceptions=True)
-    images: list[dict] = []
-    for name, res in zip(tasks, results):
-        if isinstance(res, Exception):
-            status[name].update(state="error", error=short(res))
-        else:
-            status[name].update(state="ok", count=len(res))
-            images.extend(res)
-    rank = {c: i for i, c in enumerate(order)}
-    images.sort(key=lambda x: (rank.get(x["lang"], len(order)), -x.get("score", 0)))
+    images = _collect(status, tasks, results, order)
     catalogue = {l["code"]: l for l in langs.catalogue()}
     return {"images": images, "providers": list(status.values()),
             "languages": [{**catalogue.get(c, {"code": c, "name": c, "native": ""}), "rank": i} for i, c in enumerate(order)],

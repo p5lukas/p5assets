@@ -185,7 +185,7 @@ def test_every_translated_text_has_an_english_version():
             is_tr = isinstance(node, ast.Call) and getattr(node.func, "id", "") == "tr" and node.args and isinstance(node.args[0], ast.Constant)
             if is_tr and node.args[0].value not in en:
                 missing.append(f"{f.name}: {node.args[0].value}")
-    js = (app_dir / "static" / "app.js").read_text("utf-8")
+    js = (app_dir / "static" / "app.js").read_text("utf-8") + (app_dir / "static" / "builder.js").read_text("utf-8")
     for m in re.finditer(r'\b(?:T|TP)\(\s*(?:[^,"()]+,\s*)?"((?:[^"\\]|\\.)*)"', js):
         key = json.loads('"' + m.group(1) + '"')
         if key not in en and re.search(r"[A-Za-zÄÖÜäöüß]{3}", key) and not re.fullmatch(r"[a-z:_/*,. -]+", key):

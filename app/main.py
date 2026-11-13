@@ -36,6 +36,7 @@ from . import (
     notify,
     providers,
     scanner,
+    styles,
     thumbs,
     trash,
     uploads,
@@ -848,6 +849,48 @@ async def search_posters(item_id: str, slot: str):
     return res
 
 
+@app.get("/api/items/{item_id}/logos")
+async def search_item_logos(item_id: str):
+    """Clear logos (transparent PNGs) of a title for the poster builder: TMDb, fanart.tv and TheTVDB."""
+    it = _item(item_id)
+    apis = config.get()["apis"]
+    if not (apis["tmdb"] or apis["tvdb"] or apis["fanart"]):
+        raise HTTPException(400, tr("Keine API-Keys hinterlegt (Einstellungen → Quellen)"))
+    world = next((w for w in config.get()["worlds"] if w["id"] == it["world"]), None)
+    res = await providers.search_logos(apis, it["type"], it["ids"], it["title"], it["year"], (world or {}).get("languages"))
+    log.info("Logo search %s: %d logos (%s)", it["title"], len(res["images"]),
+             ", ".join(f"{p['name']}: {p['count'] if p['state'] == 'ok' else p['state']}" for p in res["providers"]))
+    return res
+
+
+@app.get("/api/styles")
+async def get_styles():
+    return styles.load()
+
+
+class StyleBody(BaseModel):
+    style: dict
+
+
+@app.put("/api/styles/last")
+async def put_last_style(body: StyleBody):
+    await asyncio.to_thread(styles.set_last, body.style)
+    return {"ok": True}
+
+
+@app.put("/api/styles/presets/{name}")
+async def put_style_preset(name: str, body: StyleBody):
+    if not await asyncio.to_thread(styles.save_preset, name, body.style):
+        raise HTTPException(400, tr("Name ungültig oder zu viele Vorlagen"))
+    return styles.load()
+
+
+@app.delete("/api/styles/presets/{name}")
+async def delete_style_preset(name: str):
+    await asyncio.to_thread(styles.delete_preset, name)
+    return styles.load()
+
+
 @app.get("/api/languages")
 async def language_catalogue():
     return langmod.catalogue()
@@ -856,7 +899,9 @@ async def language_catalogue():
 @app.get("/api/proxy")
 async def proxy_preview(url: str):
     """Preview thumbnails of whitelisted hosts (avoids mixed-content/CORS/hotlink issues)."""
-    return Response(await _download(url), media_type="image/jpeg", headers={"Cache-Control": "public, max-age=86400"})
+    data = await _download(url)
+    kind = "image/png" if data.startswith(b"\x89PNG") else "image/webp" if data[8:12] == b"WEBP" else "image/gif" if data[:3] == b"GIF" else "image/jpeg"
+    return Response(data, media_type=kind, headers={"Cache-Control": "public, max-age=86400"})
 
 
 @app.delete("/api/items/{item_id}/{slot}")
@@ -1193,7 +1238,7 @@ def _asset_version() -> str:
 async def index():
     html = (STATIC / "index.html").read_text("utf-8")
     v = _asset_version()
-    for name in ("style.css", "planets.js", "app.js"):
+    for name in ("style.css", "planets.js", "app.js", "builder.js"):
         html = html.replace(f"/static/{name}", f"/static/{name}?v={v}")
     # versioned icon addresses: browsers keep favicons very long, so a new version number makes them load the new icon
     ver = version.BASE_VERSION

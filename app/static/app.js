@@ -97,22 +97,26 @@ function glitch(items, dir, ms) {
     })(t0);
   });
 }
-let langBusy = false;
-async function setLang(l) {
-  if (l === LANG || langBusy) return;
-  try { localStorage.setItem("p5lang", l); } catch { /* private mode */ }
-  if (reduced() || !document.body.animate) { applyLang(l); return; }
-  langBusy = true;
+let glitchBusy = false;
+/** Runs fn (which rebuilds part of the page) between the two halves of the letter effect: the old text scrambles, the new text decodes. */
+async function matrixSwap(fn, outMs = 420, inMs = 760) {
+  if (reduced() || !document.body.animate || glitchBusy) { await fn(); return; }
+  glitchBusy = true;
   try {
     document.body.classList.add("glitching");
-    await glitch(visibleTextNodes(), "out", 420);
-    applyLang(l);                                           // rebuilds the page in the new language (synchronously)
+    await glitch(visibleTextNodes(), "out", outMs);
+    await fn();                                           // rebuilds the page (synchronously where possible)
     const fresh = visibleTextNodes();
     for (const it of fresh) it.node.nodeValue = it.text.replace(/\S/g, () => GLITCH[Math.floor(Math.random() * GLITCH.length)]);   // no flash of the final text
-    const done = glitch(fresh, "in", 760);
+    const done = glitch(fresh, "in", inMs);
     setTimeout(() => document.body.classList.remove("glitching"), 600);
     await done;
-  } finally { document.body.classList.remove("glitching"); langBusy = false; }
+  } finally { document.body.classList.remove("glitching"); glitchBusy = false; }
+}
+async function setLang(l) {
+  if (l === LANG || glitchBusy) return;
+  try { localStorage.setItem("p5lang", l); } catch { /* private mode */ }
+  await matrixSwap(() => applyLang(l));
 }
 
 async function api(path, opts = {}) {
@@ -166,6 +170,7 @@ const ICONS = {
   search: [{ c: [11, 11, 8] }, { d: "M21 21l-4.3-4.3" }],
   download: [{ d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" }, { d: "M7 10l5 5 5-5" }, { d: "M12 15V3" }],
   undo: [{ d: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" }, { d: "M3 3v5h5" }],
+  build: [{ d: "M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" }],
   trash: [{ d: "M3 6h18" }, { d: "M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" }, { d: "M10 11v6" }, { d: "M14 11v6" }, { d: "M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" }],
 };
 function icon(name, size = 18) {
@@ -1016,7 +1021,8 @@ async function openItem(id) {
     const zip = keys => downloadUrl(`/api/download-zip/${it.id}?slots=${encodeURIComponent(keys.join(","))}`);
     const upload = h("button", { class: "btn sm primary", title: T("Ordner oder ZIP mit allen Bildern dieser Serie – p5assets ordnet sie den Kacheln zu"), onclick: () => pickSet(files => importFiles(files, it.id, draw, it, true)) }, icon("upload", 14), T("Set hochladen"));
     const tpdb = h("button", { class: "btn sm", title: T("ThePosterDB durchsuchen: im Fenster öffnest du die Suche und legst danach das heruntergeladene Set ab"), onclick: () => openPosterDbSet(it, draw) }, icon("search", 14), T("ThePosterDB"));
-    return h("div", { class: "dlbar row wrap" }, selMode ? null : upload, selMode ? null : tpdb,
+    const build = h("button", { class: "btn sm", title: T("Poster selbst bauen: textloses Poster, Logo oder Titel und Staffeltext"), onclick: () => openSeriesBuilder({ it: cur, drawer, close, back: item => matrixSwap(() => draw(item || cur)) }) }, icon("build", 14), T("Bauen"));
+    return h("div", { class: "dlbar row wrap" }, selMode ? null : upload, selMode ? null : tpdb, selMode ? null : build,
       !have.length ? null : selMode ? [
         h("span", { class: "hint", style: "margin:0" }, T("{0} von {1} ausgewählt – Kacheln antippen", sel.size, have.length)),
         h("button", { class: "btn sm", onclick: () => { if (sel.size === have.length) sel.clear(); else have.forEach(k => sel.add(k)); draw(it); } }, sel.size === have.length ? T("Alle abwählen") : T("Alle wählen")),
@@ -1103,9 +1109,10 @@ function slotActions(it, key, box, draw) {
   return h("div", { class: "hover" },
     h("div", { class: "ovbtns" }, exists
       ? [ob(T("Ersetzen"), pick), ob(T("Vorschau"), () => openPreview(it, key, draw)), ob(T("Online suchen"), () => searchOnline(it, key, draw)),
+         it.type === "movie" ? ob(T("Bauen"), () => openMovieBuilder(it, draw)) : null,
          ob(T("Herunterladen"), () => downloadSlot(it, key, draw)),
          it.type === "show" ? ob(T("Auf alle …"), () => openApplyAll(it, key, draw)) : null, ob(T("Löschen"), del, "danger")]
-      : [ob(T("Hochladen"), pick), ob(T("Online suchen"), () => searchOnline(it, key, draw))]),
+      : [ob(T("Hochladen"), pick), ob(T("Online suchen"), () => searchOnline(it, key, draw)), it.type === "movie" ? ob(T("Bauen"), () => openMovieBuilder(it, draw)) : null]),
     h("div", { class: "ovhint" }, T("oder Bild hierher ziehen")));
 }
 
@@ -1313,9 +1320,9 @@ function modal(title, body, footer) {
   return { close, el: wrap };
 }
 
-async function searchOnline(it, slot, draw) {
+async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img): choose an image for something else (the poster builder) instead of saving it
   const body = h("div", {}, h("div", { class: "empty" }, h("span", { class: "spin" }), T(" Suche bei TMDb, TVDB und fanart.tv …")));
-  const m = modal(`${it.title} – ${slotLabel(slot, it.type)}`, body);
+  const m = modal(`${opts.title ? opts.title + " – " : ""}${it.title} – ${slotLabel(slot, it.type)}`, body);
   const byCode = Object.fromEntries(S.langs.map(l => [l.code, l]));
   const langTitle = code => { const l = byCode[code]; const name = !l ? code : code === "xx" ? T("Textless (No Text)") : l.native && l.native !== l.name ? `${l.name} (${l.native})` : l.name; return `${code} • ${name}`; };
   try {
@@ -1324,6 +1331,7 @@ async function searchOnline(it, slot, draw) {
     const tabs = h("div", { class: "tabs" }), content = h("div");
     const pick = img => {
       const p = h("div", { class: "pick", title: T("Übernehmen"), onclick: async () => {
+        if (opts.pick) { opts.pick(img); m.close(); return; }
         p.classList.add("busy");
         try { const res = await api(`/items/${it.id}/${slot}/url`, { json: { url: img.url } }); undoToast(T("Übernommen ✓"), res, draw); m.close(); S.rain.add(it.id + "|" + slot); draw(res.item); }
         catch (e) { p.classList.remove("busy"); toast(e.message, "bad"); }
@@ -1332,7 +1340,7 @@ async function searchOnline(it, slot, draw) {
       return p;
     };
     function render() {
-      fill(tabs, [{ name: "*", label: T("Alle"), state: "ok", count: r.images.length }, ...r.providers, { name: "ThePosterDB", state: "ok", tpdb: true }].map(pv => h("button", {
+      fill(tabs, [{ name: "*", label: T("Alle"), state: "ok", count: r.images.length }, ...r.providers, ...(opts.pick ? [] : [{ name: "ThePosterDB", state: "ok", tpdb: true }])].map(pv => h("button", {
         class: "tab" + (tab === pv.name ? " on" : "") + (pv.state !== "ok" ? " off" : ""), disabled: pv.state === "nokey",
         title: pv.state === "nokey" ? T("Kein API-Key hinterlegt (Einstellungen → Quellen)") : pv.state === "error" ? pv.error : "",
         onclick: () => { tab = pv.name; render(); } },
@@ -1353,7 +1361,7 @@ async function searchOnline(it, slot, draw) {
         list.length ? null : h("div", { class: "empty" }, T("Keine Poster gefunden.")));
     }
     fill(body, tabs, content); render();
-  } catch (e) { fill(body, h("div", { class: "status bad" }, e.message), h("h4", { style: "margin:18px 0 0;color:var(--accent)" }, T("ThePosterDB")), posterDbPanel(it, slot, draw, () => m.close())); }
+  } catch (e) { fill(body, h("div", { class: "status bad" }, e.message), opts.pick ? null : [h("h4", { style: "margin:18px 0 0;color:var(--accent)" }, T("ThePosterDB")), posterDbPanel(it, slot, draw, () => m.close())]); }
 }
 
 /* -------------------------------------------------------- ThePosterDB --- */

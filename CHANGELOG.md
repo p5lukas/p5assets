@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.0 – 2026-11-13
+
+**New**
+- Poster builder: build a poster when none fits. Textless background (online search, “find textless automatically”, file choose or drag & drop), clear logo from TMDb, fanart.tv and TheTVDB or the title as text, vertical position and size adjustable, output 1000×1500 JPG saved through the normal upload path (Kometa naming, trash/undo)
+- Movies: “Build” in the poster's hover menu
+- Series: build button in the detail view next to “Upload set”; build mode previews every poster, the one being edited has an animated Matrix frame, settings apply to all posters or only the selected one
+- Season line under the title (“Season One” … “Specials”) in a colour matched to the background, changeable
+- Eight bundled open-licence fonts, looks saved as named presets (`/config/styles.json`)
+
 ## 0.7.1 – 2026-11-06
 
 **Changed**
