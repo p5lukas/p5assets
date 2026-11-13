@@ -17,6 +17,20 @@ const numberWord = n => n < 20 ? ONES[n] : n < 100 ? TENS[Math.floor(n / 10)] + 
 /** The line under the title: "Season One" … "Season Twenty-One", "Specials" (always English, like the sets on ThePosterDB). */
 const seasonLine = n => n === 0 ? "Specials" : "Season " + numberWord(n);
 
+/** A short tick when a slider snaps to its default: Vibration API (Android), or the haptic of an iOS 17.4+ switch control; silently nothing elsewhere. */
+let hapticLabel = null;
+function haptic() {
+  try {
+    if (navigator.vibrate && navigator.vibrate(8)) return;
+    if (!hapticLabel) {
+      const i = h("input", { type: "checkbox", id: "p5haptic", tabindex: "-1" }); i.setAttribute("switch", "");
+      hapticLabel = h("label", { for: "p5haptic", "aria-hidden": "true", style: "position:fixed;left:-99px;top:0;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none" }, i);
+      document.body.append(hapticLabel);
+    }
+    hapticLabel.click();
+  } catch { /* no haptics here */ }
+}
+
 /* ------------------------------------------------------------ resources --- */
 const fontReady = {};
 function ensureFont(id) {
@@ -178,16 +192,23 @@ function makeBuilder(opts) {
   /* --- controls --------------------------------------------------------- */
   const ctl = {};
   function slider(label, attr, min, max, step, fmt) {
-    const def = BUILD_DEFAULT[attr], out = h("span", { class: "bval" }), inp = h("input", { type: "range", min, max, step, oninput: () => {
-      let v = +inp.value;
-      if (Math.abs(v - def) <= (max - min) * 0.03) { v = def; inp.value = v; }     // snaps to the default mark
+    const def = BUILD_DEFAULT[attr], out = h("span", { class: "bval" });
+    let snapped = false;
+    const apply = v => {
       if (BUILD_OVERRIDE.includes(attr)) { if (scope === "all") { G[attr] = v; slots.forEach(s => delete P[s.key].over[attr]); } else P[sel].over[attr] = v; } else G[attr] = v;
-      out.textContent = fmt(v); redraw(attr);
+      out.textContent = fmt(v); redraw(attr); reset.hidden = Math.abs(v - def) < step / 2;
+    };
+    const inp = h("input", { type: "range", min, max, step, oninput: () => {
+      let v = +inp.value;
+      const near = Math.abs(v - def) <= (max - min) * 0.03;
+      if (near) { v = def; inp.value = v; if (!snapped) haptic(); }     // snaps to the default mark
+      snapped = near; apply(v);
     } });
+    const reset = h("button", { class: "btn ghost sm breset", type: "button", title: T("Auf Standard zurücksetzen"), "aria-label": T("Auf Standard zurücksetzen"), onclick: e => { e.preventDefault(); inp.value = def; snapped = true; apply(def); haptic(); } }, "↺");
     const tick = h("i", { class: "btick", title: T("Standard") });
     tick.style.left = `calc(${(def - min) / (max - min)} * (100% - 16px) + 8px)`;
-    const row = h("label", { class: "brow" }, h("span", { class: "blab" }, label), h("span", { class: "btrack" }, inp, tick), out);
-    ctl[attr] = () => { const v = BUILD_OVERRIDE.includes(attr) ? val(sel, attr) : G[attr]; inp.value = v; out.textContent = fmt(v); };
+    const row = h("label", { class: "brow" }, h("span", { class: "blab" }, label), h("span", { class: "btrack" }, inp, tick), out, reset);
+    ctl[attr] = () => { const v = BUILD_OVERRIDE.includes(attr) ? val(sel, attr) : G[attr]; inp.value = v; out.textContent = fmt(v); reset.hidden = Math.abs(v - def) < step / 2; };
     ctl[attr].row = row;
     return row;
   }

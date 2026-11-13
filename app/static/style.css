@@ -653,3 +653,4 @@ body.glitching #app,body.glitching #foot{text-shadow:0 0 9px var(--glow);transit
 @font-face{font-family:"p5-source-sans-3";src:url("/static/fonts/source-sans-3.woff2") format("woff2");font-weight:400;font-style:normal;font-display:swap}
 .btrack{position:relative;isolation:isolate;flex:1;min-width:0;display:flex;align-items:center}.btrack input{flex:1;width:100%}.btick{position:absolute;z-index:2;top:50%;width:2px;height:14px;margin:-7px 0 0 -1px;background:var(--text);opacity:.55;pointer-events:none;border-radius:1px}
 .drawer .builder .bgrid,.builder .bgrid{grid-template-columns:repeat(auto-fill,minmax(110px,150px))}.bcard{min-width:0}.blabel{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.bposter{max-width:100%}
+.breset{flex:0 0 auto;padding:2px 8px;min-width:30px}

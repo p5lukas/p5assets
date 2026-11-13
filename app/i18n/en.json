@@ -767,5 +767,6 @@
 "Poster gespeichert ✓": "Poster saved ✓",
 "Poster-Builder": "Poster builder",
 "Kein passendes Poster gefunden? Bei Filmen findest du „Bauen“ im Hover-Menü, bei Serien den Bauen-Knopf in der Detailansicht. Textloser Hintergrund, Logo oder Titel und Staffelzeile ergeben Poster im einheitlichen Look.": "No suitable poster? For movies, find “Build” in the hover menu; for series, the build button in the detail view. A textless background, logo or title and a season line give posters in one consistent look.",
-"Standard": "Default"
+"Standard": "Default",
+"Auf Standard zurücksetzen": "Reset to default"
 }
