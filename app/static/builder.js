@@ -178,12 +178,15 @@ function makeBuilder(opts) {
   /* --- controls --------------------------------------------------------- */
   const ctl = {};
   function slider(label, attr, min, max, step, fmt) {
-    const out = h("span", { class: "bval" }), inp = h("input", { type: "range", min, max, step, oninput: () => {
-      const v = +inp.value;
+    const def = BUILD_DEFAULT[attr], out = h("span", { class: "bval" }), inp = h("input", { type: "range", min, max, step, oninput: () => {
+      let v = +inp.value;
+      if (Math.abs(v - def) <= (max - min) * 0.03) { v = def; inp.value = v; }     // snaps to the default mark
       if (BUILD_OVERRIDE.includes(attr)) { if (scope === "all") { G[attr] = v; slots.forEach(s => delete P[s.key].over[attr]); } else P[sel].over[attr] = v; } else G[attr] = v;
       out.textContent = fmt(v); redraw(attr);
     } });
-    const row = h("label", { class: "brow" }, h("span", { class: "blab" }, label), inp, out);
+    const tick = h("i", { class: "btick", title: T("Standard") });
+    tick.style.left = `calc(${(def - min) / (max - min)} * (100% - 16px) + 8px)`;
+    const row = h("label", { class: "brow" }, h("span", { class: "blab" }, label), h("span", { class: "btrack" }, inp, tick), out);
     ctl[attr] = () => { const v = BUILD_OVERRIDE.includes(attr) ? val(sel, attr) : G[attr]; inp.value = v; out.textContent = fmt(v); };
     ctl[attr].row = row;
     return row;
