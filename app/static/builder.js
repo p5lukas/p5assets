@@ -21,7 +21,7 @@ const seasonLine = n => n === 0 ? "Specials" : "Season " + numberWord(n);
 const fontReady = {};
 function ensureFont(id) {
   const def = BUILD_FONTS.find(f => f[0] === id) || BUILD_FONTS[0];
-  return fontReady[def[0]] ||= document.fonts.load(`${def[2]} 48px "p5-${def[0]}"`).catch(() => []);
+  return fontReady[def[0]] ||= Promise.all([document.fonts.load(`${def[2]} 48px "p5-${def[0]}"`), document.fonts.load('400 48px "p5-source-sans-3"')]).catch(() => []);
 }
 const imageCache = new Map();
 function loadImage(src) {
@@ -86,7 +86,7 @@ function drawBuilt(canvas, o) {
   const top = Math.min(Math.max(st.titleY * H - total / 2, H * 0.03), H * 0.97 - total);
   drawTitle(top);
   if (o.line) {
-    ctx.font = `${def[2]} ${fsS}px ${fam}`; ctx.fillStyle = o.color || "#ffffff"; ctx.textBaseline = "alphabetic";
+    ctx.font = `400 ${fsS}px "p5-source-sans-3", sans-serif`; ctx.fillStyle = o.color || "#ffffff"; ctx.textBaseline = "alphabetic";
     drawTracked(ctx, upper(o.line), W / 2, top + titleH + gapPx + fsS * 0.86, st.tracking * fsS);
   }
 }

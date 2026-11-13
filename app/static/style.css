@@ -650,3 +650,4 @@ body.glitching #app,body.glitching #foot{text-shadow:0 0 9px var(--glow);transit
 @media(max-height:520px){.bfoot{position:static}}
 @media(prefers-reduced-motion:reduce){.bcard.editing .bposter::before{animation:none}}
 .builder [hidden]{display:none!important}
+@font-face{font-family:"p5-source-sans-3";src:url("/static/fonts/source-sans-3.woff2") format("woff2");font-weight:400;font-style:normal;font-display:swap}

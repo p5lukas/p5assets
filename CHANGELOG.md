@@ -7,6 +7,7 @@
 - Movies: “Build” in the poster's hover menu
 - Series: build button in the detail view next to “Upload set”; build mode previews every poster, the one being edited has an animated Matrix frame, settings apply to all posters or only the selected one
 - Season line under the title (“Season One” … “Specials”) in a colour matched to the background, changeable
+- The season line uses a light, widely spaced sans (Source Sans 3) like the ThePosterDB sets
 - Eight bundled open-licence fonts, looks saved as named presets (`/config/styles.json`)
 
 ## 0.7.1 – 2026-11-06
