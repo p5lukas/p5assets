@@ -76,13 +76,15 @@ function visibleTextNodes() {
 /** Runs the letter effect: dir "out" = the old text turns into noise, "in" = noise resolves into the (new) text, as a wave across the screen. */
 function glitch(items, dir, ms) {
   const eased = p => p * p * (3 - 2 * p);
-  const st = items.map(it => ({ ...it, t: Array.from(it.text, (_, i) => it.wave + Math.random() * 0.18 + (i / Math.max(1, it.text.length)) * 0.12), g: [] }));
+  const st = items.map(it => ({ ...it, t: Array.from(it.text, (_, i) => it.wave + Math.random() * 0.18 + (i / Math.max(1, it.text.length)) * 0.12), g: [], last: it.node.nodeValue, dead: false }));
   return new Promise(resolve => {
     const t0 = performance.now(); let frame = 0;
     (function step(now) {
       const p = Math.min(1, (now - t0) / ms), e = eased(p);
       if (frame++ % 2 === 0) for (const it of st) it.g = Array.from(it.text, () => GLITCH[Math.floor(Math.random() * GLITCH.length)]);
       for (const it of st) {
+        if (it.dead) continue;
+        if (it.node.nodeValue !== it.last || !it.node.isConnected) { it.dead = true; continue; }     // the page changed this text meanwhile: leave it alone
         let txt = "";
         for (let i = 0; i < it.text.length; i++) {
           const ch = it.text[i];
@@ -91,9 +93,10 @@ function glitch(items, dir, ms) {
           txt += (dir === "out" ? !done : done) ? ch : it.g[i];
         }
         if (it.node.nodeValue !== txt) it.node.nodeValue = txt;
+        it.last = txt;
       }
       if (p < 1) requestAnimationFrame(step);
-      else { if (dir === "in") for (const it of st) it.node.nodeValue = it.text; resolve(); }
+      else { if (dir === "in") for (const it of st) if (!it.dead && it.node.nodeValue === it.last) it.node.nodeValue = it.text; resolve(); }
     })(t0);
   });
 }
@@ -104,8 +107,11 @@ async function matrixSwap(fn, outMs = 420, inMs = 760) {
   glitchBusy = true;
   try {
     document.body.classList.add("glitching");
-    await glitch(visibleTextNodes(), "out", outMs);
+    const old = visibleTextNodes();
+    await glitch(old, "out", outMs);
+    const noise = old.map(it => it.node.nodeValue);
     await fn();                                           // rebuilds the page (synchronously where possible)
+    old.forEach((it, i) => { if (it.node.isConnected && it.node.nodeValue === noise[i]) it.node.nodeValue = it.text; });     // text fn did not touch (e.g. the list behind a window) must not stay scrambled
     const fresh = visibleTextNodes();
     for (const it of fresh) it.node.nodeValue = it.text.replace(/\S/g, () => GLITCH[Math.floor(Math.random() * GLITCH.length)]);   // no flash of the final text
     const done = glitch(fresh, "in", inMs);
