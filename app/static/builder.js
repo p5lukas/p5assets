@@ -6,7 +6,7 @@ const BW = 1000, BH = 1500;
 // id = file name in /static/fonts and part of the CSS family "p5-<id>"; the list must match FONTS in app/styles.py
 const BUILD_FONTS = [["montserrat", "Montserrat", 700], ["raleway", "Raleway", 700], ["oswald", "Oswald", 700], ["bebas-neue", "Bebas Neue", 400],
   ["anton", "Anton", 400], ["cinzel", "Cinzel", 700], ["playfair-display", "Playfair Display", 700], ["lato", "Lato", 700]];
-const BUILD_DEFAULT = { font: "montserrat", upper: true, mode: "logo", titleScale: 1, titleY: 0.5, seasonScale: 1, gap: 0.03, tracking: 0.16, color: null, titleColor: "#ffffff" };
+const BUILD_DEFAULT = { font: "montserrat", upper: true, mode: "logo", titleScale: 0.7, titleY: 0.86, seasonScale: 0.9, gap: 0.02, tracking: 0.22, color: null, titleColor: "#ffffff" };
 const BUILD_OVERRIDE = ["titleScale", "titleY", "seasonScale", "gap", "color"];     // may differ per poster; everything else is the same on all posters
 
 /* ---------------------------------------------------------------- texts --- */
