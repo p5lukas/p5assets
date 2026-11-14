@@ -306,7 +306,10 @@ async def search_logos(apis: dict, kind: str, ids: dict, title: str, year: int |
         tasks["TVDB"] = tvdb_logos(apis["tvdb"], apis.get("tvdb_pin", ""), kind, ids)
     results = await asyncio.gather(*tasks.values(), return_exceptions=True)
     images = _collect(status, tasks, results, order)
-    return {"images": images, "providers": list(status.values()), "errors": {n: s["error"] for n, s in status.items() if s["error"]}}
+    catalogue = {l["code"]: l for l in langs.catalogue()}
+    return {"images": images, "providers": list(status.values()),
+            "languages": [{**catalogue.get(c, {"code": c, "name": c, "native": ""}), "rank": i} for i, c in enumerate(order)],
+            "errors": {n: s["error"] for n, s in status.items() if s["error"]}}
 
 
 async def search(apis: dict, kind: str, ids: dict, title: str, year: int | None, season: int | None,

@@ -6,8 +6,7 @@ const BW = 1000, BH = 1500;
 // id = file name in /static/fonts and part of the CSS family "p5-<id>"; the list must match FONTS in app/styles.py
 const BUILD_FONTS = [["montserrat", "Montserrat", 700], ["raleway", "Raleway", 700], ["oswald", "Oswald", 700], ["bebas-neue", "Bebas Neue", 400],
   ["anton", "Anton", 400], ["cinzel", "Cinzel", 700], ["playfair-display", "Playfair Display", 700], ["lato", "Lato", 700]];
-const BUILD_DEFAULT = { font: "montserrat", upper: true, mode: "logo", titleScale: 0.7, titleY: 0.86, seasonScale: 0.9, gap: 0.02, tracking: 0.22, color: null, titleColor: "#ffffff" };
-const BUILD_OVERRIDE = ["titleScale", "titleY", "seasonScale", "gap", "color"];     // may differ per poster; everything else is the same on all posters
+const BUILD_DEFAULT = { font: "montserrat", upper: true, mode: "logo", titleScale: 0.7, titleY: 0.82, seasonScale: 0.9, gap: 0.02, tracking: 0.22, titleColor: "#ffffff" };     // same on all posters; only the colour of the season line is per poster
 
 /* ---------------------------------------------------------------- texts --- */
 const ONES = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen",
@@ -16,20 +15,6 @@ const TENS = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", 
 const numberWord = n => n < 20 ? ONES[n] : n < 100 ? TENS[Math.floor(n / 10)] + (n % 10 ? "-" + ONES[n % 10] : "") : String(n);
 /** The line under the title: "Season One" … "Season Twenty-One", "Specials" (always English, like the sets on ThePosterDB). */
 const seasonLine = n => n === 0 ? "Specials" : "Season " + numberWord(n);
-
-/** A short tick when a slider snaps to its default: Vibration API (Android), or the haptic of an iOS 17.4+ switch control; silently nothing elsewhere. */
-let hapticLabel = null;
-function haptic() {
-  try {
-    if (navigator.vibrate && navigator.vibrate(8)) return;
-    if (!hapticLabel) {
-      const i = h("input", { type: "checkbox", id: "p5haptic", tabindex: "-1" }); i.setAttribute("switch", "");
-      hapticLabel = h("label", { for: "p5haptic", "aria-hidden": "true", style: "position:fixed;left:-99px;top:0;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none" }, i);
-      document.body.append(hapticLabel);
-    }
-    hapticLabel.click();
-  } catch { /* no haptics here */ }
-}
 
 /* ------------------------------------------------------------ resources --- */
 const fontReady = {};
@@ -94,10 +79,10 @@ function drawBuilt(canvas, o) {
       lines.forEach((l, i) => ctx.fillText(l, W / 2, top + lh * i + fs * 0.86));
     };
   }
-  // season line under the title
-  const fsS = W * 0.05 * st.seasonScale, gapPx = o.line ? st.gap * H : 0, lineH = o.line ? fsS * 1.15 : 0;
-  const total = titleH + gapPx + lineH;
-  const top = Math.min(Math.max(st.titleY * H - total / 2, H * 0.03), H * 0.97 - total);
+  // The title (logo or text) sits at the same height on every poster; the season line hangs below it. Room for the line is always reserved so
+  // that the clamp near the edges is the same with and without a line.
+  const fsS = W * 0.05 * st.seasonScale, gapPx = st.gap * H, lineH = fsS * 1.15;
+  const top = Math.min(Math.max(st.titleY * H - titleH / 2, H * 0.03), H * 0.97 - (titleH + gapPx + lineH));
   drawTitle(top);
   if (o.line) {
     ctx.font = `400 ${fsS}px "p5-source-sans-3", sans-serif`; ctx.fillStyle = o.color || "#ffffff"; ctx.textBaseline = "alphabetic";
@@ -120,15 +105,14 @@ function drawTracked(ctx, text, cx, y, track) {
 }
 
 /* -------------------------------------------------------------- builder --- */
-/** The editor. opts = { item, slots: [{ key, season, label }], multi, onSaved(lastItem, keys, trashId), onCancel }. Returns the DOM element. */
+/** The editor. opts = { item, slots: [{ key, season, label }], multi, onSaved(lastItem, keys, trashId), onCancel }. Returns the DOM element.
+ *  Size, position and fonts are the same on every poster (consistency); only the background and the colour of the season line belong to a poster. */
 function makeBuilder(opts) {
   const it = opts.item, multi = !!opts.multi, slots = opts.slots;
   const G = { ...BUILD_DEFAULT };                                   // the look shared by all posters
-  let titleText = it.title, logo = null /* { url, preview, source } */, logoList = null, logoNote = "", presets = {}, scope = "all", sel = slots[0].key, saving = false;
-  const P = Object.fromEntries(slots.map(s => [s.key, { bg: null, line: s.season == null ? "" : seasonLine(s.season), lineEdited: false, over: {}, checked: true, auto: null }]));
-  const val = (key, attr) => attr in P[key].over ? P[key].over[attr] : G[attr];
-  const style = key => ({ ...G, ...Object.fromEntries(BUILD_OVERRIDE.map(a => [a, val(key, a)])) });
-  const colorOf = key => { const c = val(key, "color"); return c || P[key].auto || "#f1f1ee"; };
+  let titleText = it.title, logo = null /* { url, preview, source } */, logoRes = null, logoNote = "", presets = {}, sel = slots[0].key, saving = false;
+  const P = Object.fromEntries(slots.map(s => [s.key, { bg: null, line: s.season == null ? "" : seasonLine(s.season), color: null, checked: true, auto: null }]));
+  const colorOf = key => P[key].color || P[key].auto || "#f1f1ee";
 
   const root = h("div", { class: "builder" });
   const cards = {}, canvases = {};
@@ -142,73 +126,93 @@ function makeBuilder(opts) {
       logo && G.mode === "logo" ? loadImage(proxied(full ? logo.url : logo.preview || logo.url)).catch(() => null) : null]);
     if (bg && !p.auto) p.auto = autoColorOf(bg);
     const out = full ? Object.assign(document.createElement("canvas"), { width: BW, height: BH }) : cv;
-    drawBuilt(out, { bg, logo: lg, title: titleText, line: P[key].line, st: style(key), color: colorOf(key) });
+    drawBuilt(out, { bg, logo: lg, title: titleText, line: p.line, st: G, color: colorOf(key) });
     return out;
   }
   const paintAll = () => slots.forEach(s => paint(s.key));
-  const redraw = attr => (BUILD_OVERRIDE.includes(attr) && scope === "one" ? paint(sel) : paintAll());
 
   /* --- backgrounds ------------------------------------------------------ */
-  async function setBg(key, bg) { P[key].bg = bg; P[key].auto = null; cards[key].classList.toggle("nobg", !bg); await paint(key); syncControls(); }
+  async function setBg(key, bg) { P[key].bg = bg; P[key].auto = null; cards[key].draggable = !!bg; await paint(key); syncControls(); }
   const bgFromFile = (key, files) => {
     const f = (files || []).map(x => x.file).find(x => x && /^image\//.test(x.type));
     if (!f) { toast(T("Keine Bilder gefunden"), "bad"); return; }
     const u = URL.createObjectURL(f); setBg(key, { url: u, preview: u, name: f.name });
   };
   const bgOnline = key => searchOnline(it, key, null, { pick: img => setBg(key, { url: img.url, preview: img.preview || img.url, name: img.source }), title: T("Hintergrund wählen") });
-  async function autoBackgrounds() {
-    const todo = slots.filter(s => !P[s.key].bg);
-    if (!todo.length) { toast(T("Alle Poster haben schon einen Hintergrund"), "ok"); return; }
-    let found = 0;
-    for (const [i, s] of todo.entries()) {
-      status.textContent = T("Suche textlose Poster … {0} von {1}", i + 1, todo.length);
-      try {
-        const r = await api(`/items/${it.id}/${s.key}/search`);
-        const best = r.images.filter(x => x.lang === "xx").sort((a, b) => (b.score || 0) - (a.score || 0))[0];
-        if (best) { found++; await setBg(s.key, { url: best.url, preview: best.preview || best.url, name: best.source }); }
-      } catch (e) { toast(e.message, "bad"); break; }
-    }
-    status.textContent = T("{0} von {1} textlosen Postern gefunden – die übrigen kannst du selbst suchen oder hochladen", found, todo.length);
+  const copyBg = (from, to) => { if (from !== to && P[from].bg) setBg(to, { ...P[from].bg }); };
+  function bgForAll() {
+    const src = P[sel].bg; if (!src) return;
+    const others = slots.filter(s => s.key !== sel), filled = others.filter(s => P[s.key].bg);
+    const replace = filled.length ? confirm(TP(filled.length, "Ein Poster hat schon einen Hintergrund. Auch dieses ersetzen? (Abbrechen = nur leere Poster füllen)",
+      "{0} Poster haben schon einen Hintergrund. Auch diese ersetzen? (Abbrechen = nur leere Poster füllen)")) : false;
+    others.filter(s => replace || !P[s.key].bg).forEach(s => setBg(s.key, { ...src }));
   }
 
   /* --- logo ------------------------------------------------------------- */
   async function loadLogos() {
     try {
-      const r = await api(`/items/${it.id}/logos`);
-      logoList = r.images;
-      if (!logoList.length) { logoNote = T("Kein Logo gefunden – der Titel wird als Text gesetzt"); G.mode = "text"; }
-      else if (!logo) { logo = { url: logoList[0].url, preview: logoList[0].preview, source: logoList[0].source }; G.mode = "logo"; }
-    } catch (e) { logoList = []; logoNote = e.message; G.mode = "text"; }
+      logoRes = await api(`/items/${it.id}/logos`);
+      const first = logoRes.images[0];
+      if (!first) { logoNote = T("Kein Logo gefunden – der Titel wird als Text gesetzt"); if (!logo) G.mode = "text"; }
+      else if (!logo) { logo = { url: first.url, preview: first.preview, source: first.source }; G.mode = "logo"; }
+    } catch (e) { logoRes = { images: [], providers: [], languages: [] }; logoNote = e.message; if (!logo) G.mode = "text"; }
     syncControls(); paintAll();
   }
+  function useLogo(l) { logo = l; G.mode = "logo"; syncControls(); paintAll(); }
+  function logoFromFile(files) {
+    const f = (files || []).map(x => x.file).find(Boolean);
+    if (!f) return;
+    if (!/\.(png|webp)$/i.test(f.name) && !/^image\/(png|webp)$/.test(f.type)) { toast(T("Nur PNG oder WebP mit Transparenz – ein JPG hat keinen transparenten Hintergrund"), "bad"); return; }
+    const u = URL.createObjectURL(f); useLogo({ url: u, preview: u, source: f.name });
+  }
+  function pickLogoFile() {
+    const i = h("input", { type: "file", accept: "image/png,image/webp,.png,.webp", onchange: () => { if (i.files[0]) logoFromFile([{ file: i.files[0], path: i.files[0].name }]); } });
+    i.click();
+  }
+  /** Same layout as the poster search: sources as tabs on top, the logos below grouped by language. */
   function pickLogo() {
-    const list = logoList || [];
-    const grid = h("div", { class: "logogrid" }, list.map(l => h("button", { class: "logopick" + (logo && logo.url === l.url ? " on" : ""), onclick: () => { logo = { url: l.url, preview: l.preview, source: l.source }; G.mode = "logo"; m.close(); syncControls(); paintAll(); } },
-      h("img", { src: proxied(l.preview || l.url), alt: "", loading: "lazy" }), h("small", {}, `${l.source}${l.lang && l.lang !== "xx" ? " · " + l.lang : ""}`))));
-    const m = modal(T("Logo wählen"), h("div", {}, list.length ? grid : h("div", { class: "hint" }, logoNote || T("Kein Logo gefunden – der Titel wird als Text gesetzt"))),
-      [h("button", { class: "btn", onclick: () => { G.mode = "text"; m.close(); syncControls(); paintAll(); } }, T("Titel als Text verwenden")), h("button", { class: "btn ghost", onclick: () => m.close() }, T("Schließen"))]);
+    const r = { images: [], providers: [], languages: [], ...(logoRes || {}) };
+    const body = h("div", {}), tabs = h("div", { class: "tabs" }), content = h("div");
+    const byCode = Object.fromEntries(S.langs.map(l => [l.code, l]));
+    const langTitle = code => { const l = byCode[code]; if (code === "xx") return T("Ohne Sprache"); const name = !l ? code : l.native && l.native !== l.name ? `${l.name} (${l.native})` : l.name; return `${code} • ${name}`; };
+    let tab = "*";
+    const m = modal(T("Logo wählen"), body, [h("button", { class: "btn", onclick: () => { m.close(); pickLogoFile(); } }, icon("upload", 14), T("Logo hochladen")),
+      h("button", { class: "btn", onclick: () => { G.mode = "text"; m.close(); syncControls(); paintAll(); } }, T("Titel als Text verwenden")), h("button", { class: "btn ghost", onclick: () => m.close() }, T("Schließen"))]);
+    const pick = l => h("div", { class: "pick" + (logo && logo.url === l.url ? " on" : ""), onclick: () => { m.close(); useLogo({ url: l.url, preview: l.preview, source: l.source }); } },
+      h("img", { src: proxied(l.preview || l.url), alt: "", loading: "lazy" }));
+    function render() {
+      fill(tabs, [{ name: "*", label: T("Alle"), state: "ok", count: r.images.length }, ...r.providers].map(pv => h("button", {
+        class: "tab" + (tab === pv.name ? " on" : "") + (pv.state !== "ok" ? " off" : ""), disabled: pv.state === "nokey",
+        title: pv.state === "nokey" ? T("Kein API-Key hinterlegt (Einstellungen → Quellen)") : pv.state === "error" ? pv.error : "",
+        onclick: () => { tab = pv.name; render(); } },
+        pv.label || pv.name, h("small", {}, pv.state === "nokey" ? T("kein Key") : pv.state === "error" ? T("Fehler") : pv.count))));
+      const list = tab === "*" ? r.images : r.images.filter(i => i.source === tab);
+      const groups = r.languages.map(l => ({ code: l.code, imgs: list.filter(i => i.lang === l.code) }));
+      const others = {};
+      list.filter(i => !r.languages.some(l => l.code === i.lang)).forEach(i => (others[i.lang || "xx"] ||= []).push(i));
+      Object.keys(others).sort((a, b) => others[b].length - others[a].length).forEach(code => groups.push({ code, imgs: others[code], other: true }));
+      const prov = r.providers.find(p => p.name === tab);
+      fill(content,
+        prov && prov.state === "error" ? h("div", { class: "status bad" }, `[ !! ] ${prov.name}: ${prov.error}`) : null,
+        tab === "*" ? r.providers.filter(p => p.state === "error").map(p => h("div", { class: "status bad" }, `[ !! ] ${p.name}: ${p.error}`)) : null,
+        groups.filter(g => g.imgs.length).map((g, n) => h("div", { class: "langgroup" },
+          h("h4", {}, g.other ? T("Weitere Sprache · ") : `${n + 1}. `, langTitle(g.code), h("small", {}, ` ${g.imgs.length}`)),
+          h("div", { class: "picks logos" }, g.imgs.map(pick)))),
+        list.length ? null : h("div", { class: "empty" }, logoNote || T("Keine Logos gefunden.")));
+    }
+    fill(body, tabs, content); render();
   }
 
   /* --- controls --------------------------------------------------------- */
   const ctl = {};
+  /** A slider row: label, slider, value, "Default" button. The row always has the same layout so the sliders keep the same length. */
   function slider(label, attr, min, max, step, fmt) {
     const def = BUILD_DEFAULT[attr], out = h("span", { class: "bval" });
-    let snapped = false;
-    const apply = v => {
-      if (BUILD_OVERRIDE.includes(attr)) { if (scope === "all") { G[attr] = v; slots.forEach(s => delete P[s.key].over[attr]); } else P[sel].over[attr] = v; } else G[attr] = v;
-      out.textContent = fmt(v); redraw(attr); reset.hidden = Math.abs(v - def) < step / 2;
-    };
-    const inp = h("input", { type: "range", min, max, step, oninput: () => {
-      let v = +inp.value;
-      const near = Math.abs(v - def) <= (max - min) * 0.03;
-      if (near) { v = def; inp.value = v; if (!snapped) haptic(); }     // snaps to the default mark
-      snapped = near; apply(v);
-    } });
-    const reset = h("button", { class: "btn ghost sm breset", type: "button", title: T("Auf Standard zurücksetzen"), "aria-label": T("Auf Standard zurücksetzen"), onclick: e => { e.preventDefault(); inp.value = def; snapped = true; apply(def); haptic(); } }, "↺");
-    const tick = h("i", { class: "btick", title: T("Standard") });
-    tick.style.left = `calc(${(def - min) / (max - min)} * (100% - 16px) + 8px)`;
-    const row = h("label", { class: "brow" }, h("span", { class: "blab" }, label), h("span", { class: "btrack" }, inp, tick), out, reset);
-    ctl[attr] = () => { const v = BUILD_OVERRIDE.includes(attr) ? val(sel, attr) : G[attr]; inp.value = v; out.textContent = fmt(v); reset.hidden = Math.abs(v - def) < step / 2; };
+    const show = v => { out.textContent = fmt(v); reset.classList.toggle("dim", Math.abs(v - def) < step / 2); };
+    const inp = h("input", { type: "range", min, max, step, oninput: () => { G[attr] = +inp.value; show(G[attr]); paintAll(); } });
+    const reset = h("button", { class: "btn sm breset", type: "button", title: T("Auf Standard zurücksetzen"), onclick: () => { inp.value = def; G[attr] = def; show(def); paintAll(); } }, T("Standard"));
+    const row = h("div", { class: "brow srow" }, h("span", { class: "blab" }, label), inp, out, reset);
+    ctl[attr] = () => { inp.value = G[attr]; show(G[attr]); };
     ctl[attr].row = row;
     return row;
   }
@@ -216,23 +220,21 @@ function makeBuilder(opts) {
   const fontSel = h("select", { onchange: async e => { G.font = e.target.value; await ensureFont(G.font); paintAll(); } }, BUILD_FONTS.map(f => h("option", { value: f[0] }, f[1])));
   const upperChk = h("input", { type: "checkbox", onchange: e => { G.upper = e.target.checked; paintAll(); } });
   const textInp = h("input", { type: "text", maxlength: 120, oninput: e => { titleText = e.target.value; paintAll(); } });
-  const lineInp = h("input", { type: "text", maxlength: 40, oninput: e => { P[sel].line = e.target.value; P[sel].lineEdited = true; paint(sel); } });
-  const colorInp = h("input", { type: "color", oninput: e => setAttr("color", e.target.value) });
-  const colorAuto = h("button", { class: "btn sm", type: "button", title: T("Die Farbe passend zum Poster automatisch wählen"), onclick: () => setAttr("color", null) }, T("Auto"));
+  const lineInp = h("input", { type: "text", maxlength: 40, oninput: e => { P[sel].line = e.target.value; paint(sel); } });
+  const setColor = c => { P[sel].color = c; syncControls(); paint(sel); };
+  const colorInp = h("input", { type: "color", oninput: e => setColor(e.target.value) });
+  const colorAuto = h("button", { class: "btn sm", type: "button", title: T("Die Farbe passend zum Poster automatisch wählen"), onclick: () => setColor(null) }, T("Auto"));
   const titleColorInp = h("input", { type: "color", oninput: e => { G.titleColor = e.target.value; paintAll(); } });
   const modeLogo = h("button", { class: "seg", type: "button", onclick: () => { if (logo) { G.mode = "logo"; syncControls(); paintAll(); } else pickLogo(); } }, T("Logo"));
   const modeText = h("button", { class: "seg", type: "button", onclick: () => { G.mode = "text"; syncControls(); paintAll(); } }, T("Text"));
   const logoBtn = h("button", { class: "btn sm", type: "button", onclick: pickLogo }, T("Logo wählen …"));
+  const logoUp = h("button", { class: "btn sm", type: "button", onclick: pickLogoFile }, icon("upload", 14), T("Logo hochladen"));
   const bgName = h("span", { class: "hint bgname" });
-  const scopeAll = h("input", { type: "radio", name: "bscope", checked: true, onchange: () => { scope = "all"; syncControls(); } });
-  const scopeOne = h("input", { type: "radio", name: "bscope", onchange: () => { scope = "one"; syncControls(); } });
+  const allBtn = h("button", { class: "btn sm", type: "button", onclick: bgForAll }, T("Für alle übernehmen"));
+  const copySel = h("select", { class: "bcopy", "aria-label": T("Hintergrund übernehmen von …"), onchange: e => { const k = e.target.value; e.target.value = ""; if (k) copyBg(k, sel); } });
   const presetSel = h("select", { onchange: e => { const p = presets[e.target.value]; if (!p) return; applyPreset(p); e.target.value = ""; } });
-  function setAttr(attr, v) {
-    if (scope === "all") { G[attr] = v; slots.forEach(s => delete P[s.key].over[attr]); } else P[sel].over[attr] = v;
-    syncControls(); redraw(attr);
-  }
   function applyPreset(p) {
-    Object.assign(G, BUILD_DEFAULT, p); if (!logo) G.mode = "text"; slots.forEach(s => { P[s.key].over = {}; });
+    Object.assign(G, BUILD_DEFAULT, p); delete G.color; if (!logo) G.mode = "text";
     syncControls(); paintAll();
   }
   function drawPresets() {
@@ -256,17 +258,22 @@ function makeBuilder(opts) {
     root.querySelectorAll(".bcard").forEach(c => c.classList.toggle("editing", c.dataset.key === key));
     fontSel.value = G.font; upperChk.checked = !!G.upper; textInp.value = titleText;
     modeLogo.classList.toggle("on", G.mode === "logo"); modeText.classList.toggle("on", G.mode === "text");
-    modeLogo.disabled = false; logoBtn.hidden = false; logoBtn.textContent = logo ? T("Anderes Logo …") : T("Logo wählen …");
+    logoBtn.textContent = logo ? T("Anderes Logo …") : T("Logo wählen …");
     textInp.closest(".brow").hidden = G.mode === "logo"; titleColorInp.closest(".brow").hidden = G.mode === "logo";
     titleColorInp.value = G.titleColor || "#ffffff"; colorInp.value = colorOf(key);
     lineInp.value = P[key].line; lineInp.closest(".brow").hidden = !seasonSlot;
     colorInp.closest(".brow").hidden = !seasonSlot;
     for (const a of ["seasonScale", "gap", "tracking"]) ctl[a].row.hidden = !seasonSlot;
     controls.querySelector(".bseason").hidden = !seasonSlot;
-    for (const k of Object.keys(ctl)) if (typeof ctl[k] === "function") ctl[k]();
-    colorAuto.classList.toggle("on", val(key, "color") == null);
+    for (const k of Object.keys(ctl)) ctl[k]();
+    colorAuto.classList.toggle("on", P[key].color == null);
     bgName.textContent = P[key].bg ? P[key].bg.name : T("noch kein Hintergrund");
-    scopeAll.checked = scope === "all"; scopeOne.checked = scope === "one";
+    if (multi) {
+      allBtn.disabled = !P[key].bg || slots.length < 2;
+      const from = slots.filter(s => s.key !== key && P[s.key].bg);
+      fill(copySel, h("option", { value: "" }, T("Hintergrund übernehmen von …")), from.map(s => h("option", { value: s.key }, s.label)));
+      copySel.disabled = !from.length;
+    }
     root.querySelector(".bedit").textContent = slots.find(s => s.key === key).label;
     root.querySelector(".bnote").textContent = logoNote;
     const n = slots.filter(s => P[s.key].checked && P[s.key].bg).length;
@@ -275,14 +282,21 @@ function makeBuilder(opts) {
 
   /* --- cards ------------------------------------------------------------ */
   function selectSlot(key) { sel = key; syncControls(); }
+  const SLOT_DRAG = "application/x-p5slot";
   const grid = h("div", { class: "bgrid" }, slots.map(s => {
     const cv = h("canvas", { width: 300, height: 450 }); canvases[s.key] = cv;
     const chk = h("input", { type: "checkbox", checked: true, title: T("Dieses Poster speichern"), onclick: e => e.stopPropagation(), onchange: e => { P[s.key].checked = e.target.checked; syncControls(); } });
-    const card = h("div", { class: "bcard nobg", "data-key": s.key, onclick: () => selectSlot(s.key) },
-      h("div", { class: "poster bposter", "data-key": it.id + "|" + s.key }, cv,
-        h("button", { class: "bplus", type: "button", title: T("Hintergrund wählen"), onclick: e => { e.stopPropagation(); selectSlot(s.key); bgOnline(s.key); } }, "＋", h("small", {}, T("Hintergrund")))),
+    const zoom = h("button", { class: "bzoom", type: "button", title: T("Groß ansehen"), "aria-label": T("Groß ansehen"), onclick: e => { e.stopPropagation(); selectSlot(s.key); openZoom(slots, s.key, k => paint(k, true)); } }, icon("search", 14));
+    const card = h("div", { class: "bcard", "data-key": s.key, onclick: () => selectSlot(s.key), ondblclick: () => openZoom(slots, s.key, k => paint(k, true)) },
+      h("div", { class: "poster bposter", "data-key": it.id + "|" + s.key }, cv, zoom),
       h("div", { class: "blabel" }, multi ? chk : null, h("span", {}, s.label)));
     makeDropTarget(card, files => bgFromFile(s.key, files));
+    if (multi) {                                                    // drag a poster onto another one: it gets the same background
+      card.addEventListener("dragstart", e => { e.dataTransfer.setData(SLOT_DRAG, s.key); e.dataTransfer.effectAllowed = "copy"; });
+      card.addEventListener("dragover", e => { if ([...e.dataTransfer.types].includes(SLOT_DRAG)) { e.preventDefault(); card.classList.add("dropping"); } });
+      card.addEventListener("dragleave", () => card.classList.remove("dropping"));
+      card.addEventListener("drop", e => { const from = e.dataTransfer.getData(SLOT_DRAG); card.classList.remove("dropping"); if (from) { e.preventDefault(); copyBg(from, s.key); } });
+    }
     cards[s.key] = card; return card;
   }));
   const saveBtn = h("button", { class: "btn primary", type: "button", onclick: () => save() }, "");
@@ -316,22 +330,24 @@ function makeBuilder(opts) {
   }
 
   /* --- layout ----------------------------------------------------------- */
+  const titleSec = h("div", { class: "bsec" }, h("h4", {}, T("Titel")),
+    h("div", { class: "row wrap" }, h("div", { class: "segs" }, modeLogo, modeText), logoBtn, logoUp),
+    h("div", { class: "hint" }, T("PNG oder WebP mit Transparenz, auch per Drag & Drop hier ablegen")),
+    h("div", { class: "hint bnote" }),
+    h("label", { class: "brow" }, h("span", { class: "blab" }, T("Text")), textInp),
+    h("label", { class: "brow" }, h("span", { class: "blab" }, T("Titelfarbe")), titleColorInp),
+    h("label", { class: "brow" }, h("span", { class: "blab" }, T("Schrift")), fontSel, h("label", { class: "bchk" }, upperChk, T("Großbuchstaben"))),
+    slider(T("Titelgröße"), "titleScale", 0.4, 1.6, 0.01, pct),
+    slider(T("Titelhöhe"), "titleY", 0.1, 0.9, 0.005, pct));
+  makeDropTarget(titleSec, logoFromFile);
   const controls = h("div", { class: "bcontrols" },
-    h("div", { class: "bhead" }, h("span", { class: "hint", style: "margin:0" }, T("Bearbeitet:")), h("b", { class: "bedit" }), multi ? h("span", { class: "spacer" }) : null,
-      multi ? h("div", { class: "bscope", role: "radiogroup", "aria-label": T("Änderungen gelten für") }, h("label", {}, scopeAll, T("alle Poster")), h("label", {}, scopeOne, T("nur dieses"))) : null),
+    h("div", { class: "bhead" }, h("span", { class: "hint", style: "margin:0" }, T("Bearbeitet:")), h("b", { class: "bedit" })),
     h("div", { class: "bsec" }, h("h4", {}, T("Hintergrund")),
       h("div", { class: "row wrap" }, h("button", { class: "btn sm", type: "button", onclick: () => bgOnline(sel) }, icon("search", 14), T("Online suchen")),
         h("button", { class: "btn sm", type: "button", onclick: () => pickFiles(files => bgFromFile(sel, files), false) }, icon("upload", 14), T("Datei wählen")),
-        multi ? h("button", { class: "btn sm", type: "button", title: T("Sucht für jedes Poster ohne Hintergrund das beste textlose Poster"), onclick: autoBackgrounds }, T("Textlose automatisch suchen")) : null),
+        multi ? allBtn : null, multi ? copySel : null),
       h("div", { class: "hint" }, bgName, " · ", T("oder ein Bild auf ein Poster ziehen"))),
-    h("div", { class: "bsec" }, h("h4", {}, T("Titel")),
-      h("div", { class: "row wrap" }, h("div", { class: "segs" }, modeLogo, modeText), logoBtn),
-      h("div", { class: "hint bnote" }),
-      h("label", { class: "brow" }, h("span", { class: "blab" }, T("Text")), textInp),
-      h("label", { class: "brow" }, h("span", { class: "blab" }, T("Titelfarbe")), titleColorInp),
-      h("label", { class: "brow" }, h("span", { class: "blab" }, T("Schrift")), fontSel, h("label", { class: "bchk" }, upperChk, T("Großbuchstaben"))),
-      slider(T("Titelgröße"), "titleScale", 0.4, 1.6, 0.01, pct),
-      slider(T("Titelhöhe"), "titleY", 0.1, 0.9, 0.005, pct)),
+    titleSec,
     h("div", { class: "bsec bseason" }, h("h4", {}, T("Staffeltext")),
       h("label", { class: "brow" }, h("span", { class: "blab" }, T("Text")), lineInp),
       slider(T("Textgröße"), "seasonScale", 0.5, 2.4, 0.01, pct), slider(T("Abstand zum Titel"), "gap", 0, 0.1, 0.002, pct), slider(T("Laufweite"), "tracking", 0, 0.4, 0.005, pct),
@@ -342,10 +358,37 @@ function makeBuilder(opts) {
   root.append(grid, controls);
 
   (async () => {
-    try { const st = await api("/styles"); presets = st.presets || {}; if (st.last) Object.assign(G, st.last); } catch { /* optional */ }
+    try { const st = await api("/styles"); presets = st.presets || {}; if (st.last) { Object.assign(G, st.last); delete G.color; } } catch { /* optional */ }
     drawPresets(); syncControls(); paintAll(); loadLogos();
   })();
   return root;
+}
+
+/** Large view of one poster in full resolution (what will be saved), with arrows / arrow keys to flip through the series. */
+function openZoom(slots, startKey, render) {
+  let i = Math.max(0, slots.findIndex(s => s.key === startKey)), token = 0;
+  const holder = h("div", { class: "zoomcv" }), title = h("div", { class: "zoomtitle" });
+  const prev = h("button", { class: "btn zoomnav zoomprev", type: "button", "aria-label": T("Vorheriges Poster"), onclick: () => go(-1) }, "‹");
+  const next = h("button", { class: "btn zoomnav zoomnext", type: "button", "aria-label": T("Nächstes Poster"), onclick: () => go(1) }, "›");
+  const wrap = h("div", { class: "zoomwrap", onclick: e => { if (e.target === wrap || e.target === holder) close(); } },
+    h("button", { class: "btn zoomclose", type: "button", "aria-label": T("Schließen"), onclick: () => close() }, "✕"), prev, holder, next, title);
+  function onKey(e) {
+    if (!["Escape", "ArrowLeft", "ArrowRight"].includes(e.key)) return;
+    e.stopImmediatePropagation(); e.preventDefault();
+    if (e.key === "Escape") close(); else go(e.key === "ArrowLeft" ? -1 : 1);
+  }
+  function close() { wrap.remove(); document.removeEventListener("keydown", onKey, true); }
+  async function show() {
+    const my = ++token;
+    prev.hidden = next.hidden = slots.length < 2;
+    title.textContent = slots[i].label + (slots.length > 1 ? `  ·  ${i + 1} / ${slots.length}` : "");
+    fill(holder, h("div", { class: "empty" }, h("span", { class: "spin" }), T(" Poster wird gezeichnet …")));
+    const cv = await render(slots[i].key);
+    if (my === token) fill(holder, cv);
+  }
+  function go(d) { i = (i + d + slots.length) % slots.length; show(); }
+  document.addEventListener("keydown", onKey, true);
+  document.body.append(wrap); show();
 }
 
 /* ---------------------------------------------------------- entry points --- */

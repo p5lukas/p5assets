@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.8.1 – 2026-11-14
+
+**Changed**
+- Poster builder: size, height, spacing and font are the same on every poster; only the background and the colour of the season line belong to a poster. The “all posters / only this one” switch is gone
+- The logo (or title text) now sits at exactly the same height on every poster, with or without a season line; the season line hangs below it. Default height raised a little
+- Sliders: always the same length, with a permanent “Default” button; no snapping, tick mark or vibration
+- Matrix frame only around the poster being edited; no more “+ Background” on the tiles
+- Backgrounds like in the series overview: search or choose a file for the selected poster, “Use for all posters”, drag a poster onto another one, or “Copy background from …” (also for touch screens)
+- Logo search looks like the poster search: sources as tabs, logos grouped by language
+- “Find textless automatically” removed
+
+**New**
+- Upload your own clear logo (PNG or WebP with transparency, file picker or drag & drop)
+- View every poster large, in the resolution that will be saved, and flip through the series with arrows (magnifier on the tile or double click); also for movies
+- The language list of a logo search is returned by the API (`languages`)
+
+**Fixed**
+- The letter effect left scrambled text behind (names of titles behind a window) and could overwrite text the page changed meanwhile
+- Build tiles could grow step by step on iOS (WebKit)
+
 ## 0.8.0 – 2026-11-13
 
 **New**

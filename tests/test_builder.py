@@ -61,6 +61,7 @@ def test_search_logos_merges_providers(monkeypatch):
     res = asyncio.run(providers.search_logos({"tmdb": "k", "fanart": "k", "tvdb": "k"}, "movie", {}, "X", 2000, ["de", "en"]))
     assert [i["url"] for i in res["images"]] == ["f", "t"]
     assert "TVDB" in res["errors"]
+    assert [l["code"] for l in res["languages"]] == ["de", "en"]
 
 
 @pytest.fixture()

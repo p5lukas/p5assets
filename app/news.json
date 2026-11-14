@@ -1,4 +1,5 @@
 [
+  {"id": "builder-2", "version": "0.8.1", "title": "Poster-Builder überarbeitet", "text": "Alle Poster einer Serie teilen jetzt Größe und Höhe, das Logo sitzt überall gleich hoch. Neu: eigenes Logo hochladen, Poster groß ansehen, Hintergrund auf andere Poster übernehmen und eine Logo-Suche wie die Poster-Suche."},
   {"id": "builder-1", "version": "0.8.0", "title": "Poster-Builder", "text": "Kein passendes Poster gefunden? Bei Filmen findest du „Bauen“ im Hover-Menü, bei Serien den Bauen-Knopf in der Detailansicht. Textloser Hintergrund, Logo oder Titel und Staffelzeile ergeben Poster im einheitlichen Look."},
   {"id": "glitch-1", "version": "0.7.1", "title": "Sprachwechsel im Matrix-Stil", "text": "Beim Umschalten der Sprache wirbeln die Buchstaben kurz durcheinander und setzen sich in der neuen Sprache wieder zusammen. Die Seite wird dabei nicht neu geladen."},
   {"id": "v070", "version": "0.7.0", "title": "p5assets 0.7.0", "text": "Die erste Version mit englischer Oberfläche und englischen GitHub-Seiten. Die Sprache stellst du mit „$ EN/DE“ in der Kopfzeile um. Beim Speichern eines Posters läuft jetzt sofort der Matrix-Regen."},
