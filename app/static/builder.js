@@ -158,7 +158,7 @@ function makeBuilder(opts) {
     if (!f) { toast(T("Keine Bilder gefunden"), "bad"); return; }
     const u = URL.createObjectURL(f); setBg(key, { url: u, preview: u, name: f.name });
   };
-  const bgOnline = key => searchOnline(it, key, null, { pick: img => setBg(key, { url: img.url, preview: img.preview || img.url, name: img.source }), title: T("Hintergrund wählen") });
+  const bgOnline = key => searchOnline(it, key, null, { pick: img => setBg(key, { url: img.url, preview: img.preview || img.url, name: img.source }), title: T("Hintergrund wählen"), scopes: slots.map(x => ({ key: x.key, label: x.label })) });
   const copyBg = (from, to) => { if (from !== to && P[from].bg) setBg(to, { ...P[from].bg }); };
   function bgForAll(from) {
     const src = P[from].bg; if (!src) return;

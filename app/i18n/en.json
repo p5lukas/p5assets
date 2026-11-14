@@ -785,5 +785,8 @@
 "Specials hinzufügen": "Add Specials",
 "Hintergrund: über ein Poster fahren (am Handy antippen) – suchen, Datei wählen, Vorschau. Ein Poster auf ein anderes ziehen kopiert den Hintergrund.": "Background: hover over a poster (tap it on a phone) to search, choose a file or preview. Dragging a poster onto another one copies its background.",
 "Poster-Builder: Hintergrund direkt auf dem Poster": "Poster builder: background right on the poster",
-"Im Baumodus wählst du den Hintergrund jetzt direkt auf der Kachel. Das Logo kann bei Bedarf für einzelne Poster abweichen, die Staffelfarbe bekommt Vorschläge, und fehlende Specials lassen sich hinzufügen. Unter den Serien steht jetzt die Zahl der Poster.": "In build mode you now choose the background right on the tile. The logo can differ for single posters if needed, the season colour gets suggestions, and missing Specials can be added. Series now show their number of posters."
+"Im Baumodus wählst du den Hintergrund jetzt direkt auf der Kachel. Das Logo kann bei Bedarf für einzelne Poster abweichen, die Staffelfarbe bekommt Vorschläge, und fehlende Specials lassen sich hinzufügen. Unter den Serien steht jetzt die Zahl der Poster.": "In build mode you now choose the background right on the tile. The logo can differ for single posters if needed, the season colour gets suggestions, and missing Specials can be added. Series now show their number of posters.",
+"Suchen in": "Search in",
+"Poster-Suche im Builder": "Poster search in the builder",
+"Textlose Poster stehen jetzt immer zuerst. Mit „Suchen in“ durchsuchst du außer dem Poster selbst auch das Serienposter und beliebige Staffeln gleichzeitig.": "Textless posters now always come first. With “Search in” you can search the series poster and any seasons at the same time, besides the poster itself."
 }

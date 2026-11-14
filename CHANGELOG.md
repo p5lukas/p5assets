@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.3 – 2026-11-14
+
+**Changed**
+- Poster builder, online search: textless posters always come first, whatever the language preferences say
+- Poster builder, online search: “Search in” chips (series poster, every season, All) search several posters at once; by default the poster itself plus the series poster, the rest loads when selected; with several chips each result shows where it comes from
+
 ## 0.8.2 – 2026-11-14
 
 **Changed**

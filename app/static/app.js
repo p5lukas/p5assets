@@ -1334,9 +1334,26 @@ async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img):
   const byCode = Object.fromEntries(S.langs.map(l => [l.code, l]));
   const langTitle = code => { const l = byCode[code]; const name = !l ? code : code === "xx" ? T("Textless (No Text)") : l.native && l.native !== l.name ? `${l.name} (${l.native})` : l.name; return `${code} • ${name}`; };
   try {
-    const r = await api(`/items/${it.id}/${slot}/search`);
-    let tab = "*";
-    const tabs = h("div", { class: "tabs" }), content = h("div");
+    // Several posters can be searched at once (the poster builder: textless posters of a series are often filed under the series poster)
+    const scopes = opts.scopes && opts.scopes.length > 1 ? opts.scopes : null, cache = {}, done = {};
+    const load = key => cache[key] ||= api(`/items/${it.id}/${key}/search`).then(res => (done[key] = res));
+    const chosen = new Set([slot, ...(scopes && scopes.some(x => x.key === "poster") ? ["poster"] : [])]);
+    const loadSafe = key => load(key).catch(e => { toast(e.message, "bad"); done[key] = { images: [], providers: first.providers, languages: [] }; });
+    const first = await load(slot);
+    await Promise.all([...chosen].map(loadSafe));
+    const short = k => k === "poster" ? T("Serie") : seasonNum(k) === 0 ? T("Specials") : "S" + seasonNum(k);
+    function merge() {                                    // the results of all chosen posters as one (same shape as a single search)
+      const seen = new Set(), images = [];
+      for (const k of chosen) for (const i of (done[k] ? done[k].images : [])) if (!seen.has(i.url)) { seen.add(i.url); images.push({ ...i, scope: k }); }
+      const providers = first.providers.map(pv => {
+        const all = [...chosen].filter(k => done[k]).map(k => done[k].providers.find(x => x.name === pv.name)).filter(Boolean);
+        const err = all.find(x => x.state === "error"), ok = all.some(x => x.state === "ok");
+        return { ...pv, state: ok ? "ok" : err ? "error" : pv.state, error: err ? err.error : pv.error, count: images.filter(i => i.source === pv.name).length };
+      });
+      return { images, providers, languages: first.languages };
+    }
+    let r = merge(), tab = "*";
+    const scopeBar = h("div", { class: "tabs scopes" }), tabs = h("div", { class: "tabs" }), content = h("div");
     const pick = img => {
       const p = h("div", { class: "pick", title: T("Übernehmen"), onclick: async () => {
         if (opts.pick) { opts.pick(img); m.close(); return; }
@@ -1344,10 +1361,25 @@ async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img):
         try { const res = await api(`/items/${it.id}/${slot}/url`, { json: { url: img.url } }); undoToast(T("Übernommen ✓"), res, draw); m.close(); S.rain.add(it.id + "|" + slot); draw(res.item); }
         catch (e) { p.classList.remove("busy"); toast(e.message, "bad"); }
       } }, h("img", { loading: "lazy", src: "/api/proxy?url=" + encodeURIComponent(img.preview || img.url) }),
-        h("span", {}, img.source, img.width ? h("b", {}, `${img.width}×${img.height}`) : ""));
+        h("span", {}, img.source + (chosen.size > 1 ? " · " + short(img.scope) : ""), img.width ? h("b", {}, `${img.width}×${img.height}`) : ""));
       return p;
     };
+    async function toggleScope(keys) {
+      const next = new Set(keys);
+      if (!next.size) return;
+      chosen.clear(); next.forEach(k => chosen.add(k)); render();
+      await Promise.all(keys.map(loadSafe)); render();
+    }
     function render() {
+      r = merge();
+      if (scopes) {
+        const loading = k => chosen.has(k) && !done[k];
+        const allOn = scopes.every(x => chosen.has(x.key));
+        fill(scopeBar, h("span", { class: "hint", style: "margin:0 4px 0 0;align-self:center" }, T("Suchen in")),
+          scopes.map(x => h("button", { class: "tab" + (chosen.has(x.key) ? " on" : ""), type: "button", onclick: () => { const n = new Set(chosen); n.has(x.key) ? n.delete(x.key) : n.add(x.key); toggleScope([...n]); } },
+            x.label, loading(x.key) ? h("span", { class: "spin" }) : null)),
+          h("button", { class: "tab" + (allOn ? " on" : ""), type: "button", onclick: () => toggleScope(allOn ? [slot, ...(scopes.some(x => x.key === "poster") && slot !== "poster" ? ["poster"] : [])] : scopes.map(x => x.key)) }, T("Alle")));
+      }
       fill(tabs, [{ name: "*", label: T("Alle"), state: "ok", count: r.images.length }, ...r.providers, ...(opts.pick ? [] : [{ name: "ThePosterDB", state: "ok", tpdb: true }])].map(pv => h("button", {
         class: "tab" + (tab === pv.name ? " on" : "") + (pv.state !== "ok" ? " off" : ""), disabled: pv.state === "nokey",
         title: pv.state === "nokey" ? T("Kein API-Key hinterlegt (Einstellungen → Quellen)") : pv.state === "error" ? pv.error : "",
@@ -1360,6 +1392,7 @@ async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img):
       const others = {};
       list.filter(i => !r.languages.some(l => l.code === i.lang)).forEach(i => (others[i.lang] ||= []).push(i));
       Object.keys(others).sort((a, b) => others[b].length - others[a].length).forEach(code => groups.push({ code, imgs: others[code], other: true }));
+      if (opts.pick) groups.sort((a, b) => (b.code === "xx") - (a.code === "xx"));      // building: textless first, whatever the language preferences say
       fill(content,
         prov && prov.state === "error" ? h("div", { class: "status bad" }, `[ !! ] ${prov.name}: ${prov.error}`) : null,
         tab === "*" ? r.providers.filter(p => p.state === "error").map(p => h("div", { class: "status bad" }, `[ !! ] ${p.name}: ${p.error}`)) : null,
@@ -1368,7 +1401,7 @@ async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img):
           h("div", { class: "picks" }, g.imgs.map(pick)))),
         list.length ? null : h("div", { class: "empty" }, T("Keine Poster gefunden.")));
     }
-    fill(body, tabs, content); render();
+    fill(body, scopes ? scopeBar : null, tabs, content); render();
   } catch (e) { fill(body, h("div", { class: "status bad" }, e.message), opts.pick ? null : [h("h4", { style: "margin:18px 0 0;color:var(--accent)" }, T("ThePosterDB")), posterDbPanel(it, slot, draw, () => m.close())]); }
 }
 
