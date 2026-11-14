@@ -6,7 +6,7 @@ const BW = 1000, BH = 1500;
 // id = file name in /static/fonts and part of the CSS family "p5-<id>"; the list must match FONTS in app/styles.py
 const BUILD_FONTS = [["montserrat", "Montserrat", 700], ["raleway", "Raleway", 700], ["oswald", "Oswald", 700], ["bebas-neue", "Bebas Neue", 400],
   ["anton", "Anton", 400], ["cinzel", "Cinzel", 700], ["playfair-display", "Playfair Display", 700], ["lato", "Lato", 700]];
-const BUILD_DEFAULT = { font: "montserrat", upper: true, mode: "logo", blend: "off", blendAmount: 0.7, blendHeight: 0.35, titleScale: 0.7, titleY: 0.82, seasonScale: 0.9, gap: 0.02, tracking: 0.22, titleColor: "#ffffff" };     // same on all posters; only the colour of the season line is per poster
+const BUILD_DEFAULT = { font: "montserrat", upper: true, mode: "logo", blend: "off", blendAmount: 0.7, blendHeight: 0.35, titleScale: 0.7, titleY: 0.82, seasonScale: 0.9, gap: 0.02, seasonPos: "below", seasonY: 0.92, tracking: 0.22, titleColor: "#ffffff" };     // same on all posters; only the colour of the season line is per poster
 
 /* ---------------------------------------------------------------- texts --- */
 const ONES = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen",
@@ -97,14 +97,15 @@ function drawBuilt(canvas, o) {
       lines.forEach((l, i) => ctx.fillText(l, W / 2, top + lh * i + fs * 0.86));
     };
   }
-  // The title (logo or text) sits at the same height on every poster; the season line hangs below it. Room for the line is always reserved so
-  // that the clamp near the edges is the same with and without a line.
-  const fsS = W * 0.05 * st.seasonScale, gapPx = st.gap * H, lineH = fsS * 1.15;
-  const top = Math.min(Math.max(st.titleY * H - titleH / 2, H * 0.03), H * 0.97 - (titleH + gapPx + lineH));
+  // The title (logo or text) sits at the same height on every poster. The season line either hangs below it ("below") or is placed freely over the whole
+  // poster ("free"). In "below" room for the line is always reserved so that the clamp near the edges is the same with and without a line.
+  const fsS = W * 0.05 * st.seasonScale, gapPx = st.gap * H, lineH = fsS * 1.15, free = st.seasonPos === "free";
+  const top = Math.min(Math.max(st.titleY * H - titleH / 2, H * 0.03), H * 0.97 - (free ? titleH : titleH + gapPx + lineH));
   drawTitle(top);
   if (o.line) {
+    const lineTop = free ? Math.min(Math.max(st.seasonY * H - lineH / 2, H * 0.03), H * 0.97 - lineH) : top + titleH + gapPx;
     ctx.font = `400 ${fsS}px "p5-source-sans-3", sans-serif`; ctx.fillStyle = o.color || "#ffffff"; ctx.textBaseline = "alphabetic";
-    drawTracked(ctx, upper(o.line), W / 2, top + titleH + gapPx + fsS * 0.86, st.tracking * fsS);
+    drawTracked(ctx, upper(o.line), W / 2, lineTop + fsS * 0.86, st.tracking * fsS);
   }
 }
 function wrapLines(ctx, text, maxW) {
@@ -275,6 +276,8 @@ function makeBuilder(opts) {
   const logoUp = h("button", { class: "btn sm", type: "button", onclick: pickLogoFile }, icon("upload", 14), T("Logo hochladen"));
   const blendBtn = (v, label) => h("button", { class: "seg", type: "button", onclick: () => { setTitle("blend", v); syncControls(); repaintTitle(); syncCustom(); } }, label);
   const blendOff = blendBtn("off", T("Aus")), blendDark = blendBtn("dark", T("Dunkel")), blendLight = blendBtn("light", T("Hell"));
+  const setPos = v => { G.seasonPos = v; syncControls(); paintAll(); };
+  const posBelow = h("button", { class: "seg", type: "button", onclick: () => setPos("below") }, T("Unter dem Titel")), posFree = h("button", { class: "seg", type: "button", onclick: () => setPos("free") }, T("Frei"));
   const allChk = h("input", { type: "checkbox", checked: true, onchange: e => {
     if (e.target.checked && slots.some(s => custom(s.key)) && !confirm(T("Die abweichenden Einstellungen einzelner Poster gehen verloren. Fortfahren?"))) { e.target.checked = false; return; }
     allTitle = e.target.checked;
@@ -317,6 +320,8 @@ function makeBuilder(opts) {
     const bl = val(key, "blend");
     blendOff.classList.toggle("on", bl === "off"); blendDark.classList.toggle("on", bl === "dark"); blendLight.classList.toggle("on", bl === "light");
     ctl.blendAmount.row.hidden = ctl.blendHeight.row.hidden = bl === "off";
+    posBelow.classList.toggle("on", G.seasonPos !== "free"); posFree.classList.toggle("on", G.seasonPos === "free");
+    ctl.gap.row.hidden = G.seasonPos === "free"; ctl.seasonY.row.hidden = G.seasonPos !== "free";
     allChk.checked = allTitle; allChk.closest("label").hidden = !multi;
     lineInp.value = P[key].line;
     controls.querySelector(".bseason").hidden = !seasonSlot;
@@ -419,8 +424,10 @@ function makeBuilder(opts) {
     h("div", { class: "bsec bseason" }, h("h4", {}, T("Staffeltext")),
       h("label", { class: "brow" }, h("span", { class: "blab" }, T("Text")), lineInp),
       h("div", { class: "brow" }, h("span", { class: "blab" }, T("Farbe")), swatches, pipette, colorInp, colorAuto),
+      h("div", { class: "brow" }, h("span", { class: "blab" }, T("Position der Zeile")), h("div", { class: "segs" }, posBelow, posFree)),
+      slider(T("Abstand zum Titel"), "gap", 0, 0.1, 0.002, pct), slider(T("Texthöhe"), "seasonY", 0.03, 0.97, 0.005, pct),
       h("details", { class: "bfine" }, h("summary", {}, T("Feinabstimmung")),
-        slider(T("Textgröße"), "seasonScale", 0.5, 2.4, 0.01, pct), slider(T("Abstand zum Titel"), "gap", 0, 0.1, 0.002, pct), slider(T("Laufweite"), "tracking", 0, 0.4, 0.005, pct))),
+        slider(T("Textgröße"), "seasonScale", 0.5, 2.4, 0.01, pct), slider(T("Laufweite"), "tracking", 0, 0.4, 0.005, pct))),
     h("div", { class: "bsec" }, h("h4", {}, T("Vorlagen")),
       h("div", { class: "row wrap" }, presetSel, h("button", { class: "btn sm", type: "button", onclick: savePreset }, T("Als Vorlage speichern …")), h("button", { class: "btn sm ghost", type: "button", onclick: deletePreset }, T("Vorlage löschen …")))),
     h("div", { class: "row wrap bfoot" }, saveBtn, opts.onCancel ? h("button", { class: "btn", type: "button", onclick: opts.onCancel }, T("Abbrechen")) : null, status));

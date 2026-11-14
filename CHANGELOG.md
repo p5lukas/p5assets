@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.6 – 2026-11-14
+
+**New**
+- Poster builder: the season line can be placed freely over the whole poster (“Line position: Free” with a “Text height” slider), e.g. the title at the top and the season line at the bottom. “Below the title” (default) keeps the old behaviour with “Distance to the title”. The same on all posters; presets include it
+
 ## 0.8.5 – 2026-11-14
 
 **Changed**

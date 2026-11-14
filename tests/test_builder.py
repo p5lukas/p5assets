@@ -20,6 +20,11 @@ def test_sanitize_blend():
     assert styles.sanitize({"blend": "red"}) == {}
 
 
+def test_sanitize_season_position():
+    assert styles.sanitize({"seasonPos": "free", "seasonY": 2}) == {"seasonPos": "free", "seasonY": 0.97}
+    assert styles.sanitize({"seasonPos": "left"}) == {}
+
+
 def test_presets_roundtrip_and_limits(tmp_path, monkeypatch):
     monkeypatch.setattr(styles.config, "CONFIG_DIR", tmp_path)
     assert styles.load() == {"presets": {}, "last": None}

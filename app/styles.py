@@ -9,7 +9,7 @@ import threading
 from . import config
 
 FONTS = ("montserrat", "raleway", "oswald", "bebas-neue", "anton", "cinzel", "playfair-display", "lato")
-NUMBERS = {"blendAmount": (0.1, 1.0), "blendHeight": (0.1, 0.8), "titleScale": (0.3, 2.0), "titleY": (0.05, 0.95), "seasonScale": (0.3, 3.0), "gap": (0.0, 0.12), "tracking": (0.0, 0.5)}
+NUMBERS = {"seasonY": (0.03, 0.97), "blendAmount": (0.1, 1.0), "blendHeight": (0.1, 0.8), "titleScale": (0.3, 2.0), "titleY": (0.05, 0.95), "seasonScale": (0.3, 3.0), "gap": (0.0, 0.12), "tracking": (0.0, 0.5)}
 MAX_PRESETS = 50
 _lock = threading.Lock()
 
@@ -27,6 +27,8 @@ def sanitize(style: object) -> dict:
         out["font"] = style["font"]
     if isinstance(style.get("upper"), bool):
         out["upper"] = style["upper"]
+    if style.get("seasonPos") in ("below", "free"):
+        out["seasonPos"] = style["seasonPos"]
     if style.get("blend") in ("off", "dark", "light"):
         out["blend"] = style["blend"]
     if style.get("mode") in ("logo", "text"):
