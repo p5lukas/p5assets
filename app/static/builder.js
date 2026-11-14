@@ -186,7 +186,7 @@ function makeBuilder(opts) {
   async function loadLogos() {
     try {
       logoRes = await api(`/items/${it.id}/logos`);
-      const first = logoRes.images[0];
+      const first = logoRes.images.find(i => i.lang !== "xx") || logoRes.images[0];     // preferred language first, a logo without language only as a fallback
       if (!first) { logoNote = T("Kein Logo gefunden – der Titel wird als Text gesetzt"); if (!logo) G.mode = "text"; }
       else if (!logo) { logo = { url: first.url, preview: first.preview, source: first.source }; G.mode = "logo"; }
     } catch (e) { logoRes = { images: [], providers: [], languages: [] }; logoNote = e.message; if (!logo) G.mode = "text"; }
@@ -226,6 +226,7 @@ function makeBuilder(opts) {
       const others = {};
       list.filter(i => !r.languages.some(l => l.code === i.lang)).forEach(i => (others[i.lang || "xx"] ||= []).push(i));
       Object.keys(others).sort((a, b) => others[b].length - others[a].length).forEach(code => groups.push({ code, imgs: others[code], other: true }));
+      groups.sort((a, b) => (a.code === "xx") - (b.code === "xx"));       // logos without a language last (for posters "xx" = textless and comes first)
       const prov = r.providers.find(p => p.name === tab);
       fill(content,
         prov && prov.state === "error" ? h("div", { class: "status bad" }, `[ !! ] ${prov.name}: ${prov.error}`) : null,
@@ -454,9 +455,11 @@ function pickFromPoster(canvas, onPick) {
     const [, , l] = hexHsl(c); tip.style.color = l > 0.55 ? "#000" : "#fff";
   };
   const take = e => { const c = colorAt(e); if (!c || done) return; done = true; close(); onPick(c); };
-  canvas.addEventListener("pointermove", show); canvas.addEventListener("pointerdown", show);
+  // the colour is taken when the pointer is released (tap, click, or drag with a finger / the mouse), where it is released
+  canvas.addEventListener("pointermove", show);
+  canvas.addEventListener("pointerdown", e => { try { canvas.setPointerCapture(e.pointerId); } catch { /* not supported */ } show(e); });
+  canvas.addEventListener("pointerup", take);
   canvas.addEventListener("pointerleave", () => { tip.hidden = true; });
-  canvas.addEventListener("click", take);
   function onKey(e) { if (e.key !== "Escape") return; e.stopImmediatePropagation(); e.preventDefault(); close(); }
   function close() { wrap.remove(); document.removeEventListener("keydown", onKey, true); }
   document.addEventListener("keydown", onKey, true);

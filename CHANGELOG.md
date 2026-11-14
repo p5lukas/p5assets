@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.5 – 2026-11-14
+
+**Changed**
+- Poster builder, logo search: the groups follow your preferred language order, logos without a language come last (the “textless first” rule only applies to poster searches); the logo chosen by default is the first one in a preferred language
+- Eyedropper: the colour is taken when you release (tap, click, or drag with a finger or the mouse), at the spot where you let go; releasing outside the poster takes nothing
+
 ## 0.8.4 – 2026-11-14
 
 **New**
