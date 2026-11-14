@@ -338,6 +338,7 @@ function makeBuilder(opts) {
   /* --- cards ------------------------------------------------------------ */
   function selectSlot(key) {
     sel = key;
+    if (cards[key]) cards[key].scrollIntoView({ block: "nearest", inline: "nearest" });     // the poster column scrolls for itself
     root.querySelectorAll(".bposter.show").forEach(e => { if (e.closest(".bcard").dataset.key !== key) e.classList.remove("show"); });
     syncControls();
   }
@@ -426,8 +427,7 @@ function makeBuilder(opts) {
       h("div", { class: "brow" }, h("span", { class: "blab" }, T("Farbe")), swatches, pipette, colorInp, colorAuto),
       h("div", { class: "brow" }, h("span", { class: "blab" }, T("Position der Zeile")), h("div", { class: "segs" }, posBelow, posFree)),
       slider(T("Abstand zum Titel"), "gap", 0, 0.1, 0.002, pct), slider(T("Texthöhe"), "seasonY", 0.03, 0.97, 0.005, pct),
-      h("details", { class: "bfine" }, h("summary", {}, T("Feinabstimmung")),
-        slider(T("Textgröße"), "seasonScale", 0.5, 2.4, 0.01, pct), slider(T("Laufweite"), "tracking", 0, 0.4, 0.005, pct))),
+      slider(T("Textgröße"), "seasonScale", 0.5, 2.4, 0.01, pct), slider(T("Laufweite"), "tracking", 0, 0.4, 0.005, pct)),
     h("div", { class: "bsec" }, h("h4", {}, T("Vorlagen")),
       h("div", { class: "row wrap" }, presetSel, h("button", { class: "btn sm", type: "button", onclick: savePreset }, T("Als Vorlage speichern …")), h("button", { class: "btn sm ghost", type: "button", onclick: deletePreset }, T("Vorlage löschen …")))),
     h("div", { class: "row wrap bfoot" }, saveBtn, opts.onCancel ? h("button", { class: "btn", type: "button", onclick: opts.onCancel }, T("Abbrechen")) : null, status));

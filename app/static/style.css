@@ -684,3 +684,8 @@ body.glitching #app,body.glitching #foot{text-shadow:0 0 9px var(--glow);transit
 .ballchk{margin:2px 0}
 .pipecv canvas{cursor:crosshair;touch-action:none}
 .pipetip{position:fixed;z-index:700;transform:translateX(-50%);padding:4px 10px;border-radius:var(--r);border:1px solid #fff8;font-size:12px;font-family:monospace;pointer-events:none;white-space:nowrap}
+@media(min-width:761px){
+  .drawer .builder{flex-direction:row;align-items:flex-start;gap:24px}
+  .drawer .builder .bgrid{flex:0 0 170px;grid-template-columns:1fr;position:sticky;top:100px;max-height:calc(100vh - 116px);overflow-y:auto;overflow-x:hidden;padding:6px 6px 6px 2px;margin:-6px 0}
+  .drawer .builder .bcontrols{flex:1;min-width:0}
+}

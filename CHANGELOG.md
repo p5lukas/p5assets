@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.7 – 2026-11-14
+
+**Changed**
+- Poster builder, series: from 760 px width the posters stand in a fixed column on the left (top to bottom) that stays in view and scrolls for itself, the settings are on the right, so every change is visible at once; the selected poster scrolls into view. On phones the strip stays at the top
+- Season text: size and letter spacing are always visible (no “Fine tuning” fold)
+
 ## 0.8.6 – 2026-11-14
 
 **New**

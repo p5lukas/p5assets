@@ -779,7 +779,6 @@
 "{0} Poster": "{0} posters",
 "angepasst": "custom",
 "Eigene Farbe": "Custom colour",
-"Feinabstimmung": "Fine tuning",
 "Einstellungen für alle Poster": "Settings for all posters",
 "Die abweichenden Einstellungen einzelner Poster gehen verloren. Fortfahren?": "The custom settings of individual posters will be lost. Continue?",
 "Specials hinzufügen": "Add Specials",
@@ -806,5 +805,7 @@
 "Staffelzeile frei platzieren": "Place the season line freely",
 "Im Poster-Builder lässt sich die Staffelzeile jetzt über das ganze Poster verschieben, zum Beispiel der Titel oben und die Zeile unten. „Unter dem Titel“ bleibt der Standard.": "In the poster builder the season line can now be moved over the whole poster, for example the title at the top and the line at the bottom. “Below the title” remains the default.",
 "Logo-Sprachen und Pipette": "Logo languages and eyedropper",
-"Die Logo-Auswahl folgt deiner Sprachreihenfolge, Logos ohne Sprache stehen am Ende. Die Pipette übernimmt die Farbe jetzt beim Loslassen, auch nach dem Ziehen mit Finger oder Maus.": "The logo picker follows your language order, logos without a language come last. The eyedropper now takes the colour when you release, also after dragging with a finger or the mouse."
+"Die Logo-Auswahl folgt deiner Sprachreihenfolge, Logos ohne Sprache stehen am Ende. Die Pipette übernimmt die Farbe jetzt beim Loslassen, auch nach dem Ziehen mit Finger oder Maus.": "The logo picker follows your language order, logos without a language come last. The eyedropper now takes the colour when you release, also after dragging with a finger or the mouse.",
+"Poster immer im Blick": "Posters always in view",
+"Im Baumodus stehen die Poster der Serie jetzt in einer festen Spalte links, die beim Scrollen stehen bleibt. So siehst du jede Änderung sofort. Die Einstellungen für den Staffeltext sind immer aufgeklappt.": "In build mode the posters of the series now stand in a fixed column on the left that stays put while you scroll, so you see every change at once. The season text settings are always expanded."
 }
