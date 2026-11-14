@@ -788,5 +788,15 @@
 "Im Baumodus wählst du den Hintergrund jetzt direkt auf der Kachel. Das Logo kann bei Bedarf für einzelne Poster abweichen, die Staffelfarbe bekommt Vorschläge, und fehlende Specials lassen sich hinzufügen. Unter den Serien steht jetzt die Zahl der Poster.": "In build mode you now choose the background right on the tile. The logo can differ for single posters if needed, the season colour gets suggestions, and missing Specials can be added. Series now show their number of posters.",
 "Suchen in": "Search in",
 "Poster-Suche im Builder": "Poster search in the builder",
-"Textlose Poster stehen jetzt immer zuerst. Mit „Suchen in“ durchsuchst du außer dem Poster selbst auch das Serienposter und beliebige Staffeln gleichzeitig.": "Textless posters now always come first. With “Search in” you can search the series poster and any seasons at the same time, besides the poster itself."
+"Textlose Poster stehen jetzt immer zuerst. Mit „Suchen in“ durchsuchst du außer dem Poster selbst auch das Serienposter und beliebige Staffeln gleichzeitig.": "Textless posters now always come first. With “Search in” you can search the series poster and any seasons at the same time, besides the poster itself.",
+"Überblendung": "Fade from the bottom",
+"Dunkel": "Dark",
+"Hell": "Light",
+"Stärke": "Strength",
+"Höhe": "Height",
+"Pipette": "Eyedropper",
+"Farbe aus dem Poster aufnehmen": "Pick a colour from the poster",
+"Klicke auf eine Stelle des Posters, deren Farbe übernommen werden soll": "Click a spot on the poster whose colour you want to use",
+"Überblendung und Pipette im Builder": "Fade and eyedropper in the builder",
+"Unruhige Poster lassen sich unten dunkel oder hell überblenden, für alle Poster oder einzeln. Die Staffelfarbe nimmst du mit der Pipette direkt aus dem großen Poster auf.": "Busy posters can be faded dark or light at the bottom, for all posters or one by one. Pick the season colour with the eyedropper straight from the large poster."
 }

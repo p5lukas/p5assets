@@ -6,7 +6,7 @@ const BW = 1000, BH = 1500;
 // id = file name in /static/fonts and part of the CSS family "p5-<id>"; the list must match FONTS in app/styles.py
 const BUILD_FONTS = [["montserrat", "Montserrat", 700], ["raleway", "Raleway", 700], ["oswald", "Oswald", 700], ["bebas-neue", "Bebas Neue", 400],
   ["anton", "Anton", 400], ["cinzel", "Cinzel", 700], ["playfair-display", "Playfair Display", 700], ["lato", "Lato", 700]];
-const BUILD_DEFAULT = { font: "montserrat", upper: true, mode: "logo", titleScale: 0.7, titleY: 0.82, seasonScale: 0.9, gap: 0.02, tracking: 0.22, titleColor: "#ffffff" };     // same on all posters; only the colour of the season line is per poster
+const BUILD_DEFAULT = { font: "montserrat", upper: true, mode: "logo", blend: "off", blendAmount: 0.7, blendHeight: 0.35, titleScale: 0.7, titleY: 0.82, seasonScale: 0.9, gap: 0.02, tracking: 0.22, titleColor: "#ffffff" };     // same on all posters; only the colour of the season line is per poster
 
 /* ---------------------------------------------------------------- texts --- */
 const ONES = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen",
@@ -75,6 +75,11 @@ function drawBuilt(canvas, o) {
   } else {
     const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#0b1a12"); g.addColorStop(1, "#03100a"); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
+  if (st.blend === "dark" || st.blend === "light") {               // a soft fade from the bottom edge for busy pictures
+    const hgt = H * st.blendHeight, g = ctx.createLinearGradient(0, H, 0, H - hgt), rgb = st.blend === "dark" ? "0,0,0" : "255,255,255";
+    [[0, 1], [0.3, 0.78], [0.6, 0.38], [0.85, 0.1], [1, 0]].forEach(([t, k]) => g.addColorStop(t, `rgba(${rgb},${(k * st.blendAmount).toFixed(3)})`));
+    ctx.fillStyle = g; ctx.fillRect(0, H - hgt, W, hgt);
+  }
   const upper = t => st.upper ? t.toUpperCase() : t;
   // title: logo or text lines
   let titleH = 0, drawTitle = () => {};
@@ -127,9 +132,9 @@ function makeBuilder(opts) {
   let titleText = it.title, logo = null /* { url, preview, source } */, logoRes = null, logoNote = "", presets = {}, sel = slots[0].key, saving = false, allTitle = true;
   const newP = s => ({ bg: null, line: s.season == null ? "" : seasonLine(s.season), color: null, auto: null, ov: {} });
   const P = Object.fromEntries(slots.map(s => [s.key, newP(s)]));
-  const TITLE_OV = ["titleScale", "titleY", "mode", "logo"];        // what a single poster may do differently (when "for all posters" is off)
+  const TITLE_OV = ["titleScale", "titleY", "mode", "logo", "blend", "blendAmount", "blendHeight"];        // what a single poster may do differently (when "for all posters" is off)
   const val = (key, a) => a in P[key].ov ? P[key].ov[a] : a === "logo" ? logo : G[a];
-  const style = key => ({ ...G, titleScale: val(key, "titleScale"), titleY: val(key, "titleY"), mode: val(key, "mode") });
+  const style = key => ({ ...G, ...Object.fromEntries(["titleScale", "titleY", "mode", "blend", "blendAmount", "blendHeight"].map(a => [a, val(key, a)])) });
   const colorOf = key => P[key].color || P[key].auto || "#f1f1ee";
   const custom = key => Object.keys(P[key].ov).length > 0;
 
@@ -138,14 +143,14 @@ function makeBuilder(opts) {
   const status = h("div", { class: "hint bstatus", "aria-live": "polite" });
 
   /* --- drawing ---------------------------------------------------------- */
-  async function paint(key, full = false) {
+  async function paint(key, full = false, bgOnly = false) {
     const p = P[key], cv = canvases[key], lg0 = val(key, "logo"), useLogoImg = lg0 && val(key, "mode") === "logo";
     await ensureFont(G.font);
     const [bg, lg] = await Promise.all([p.bg ? loadImage(proxied(full ? p.bg.url : p.bg.preview || p.bg.url)).catch(() => null) : null,
       useLogoImg ? loadImage(proxied(full ? lg0.url : lg0.preview || lg0.url)).catch(() => null) : null]);
     if (bg && !p.auto) p.auto = autoColorOf(bg);
     const out = full ? Object.assign(document.createElement("canvas"), { width: BW, height: BH }) : cv;
-    drawBuilt(out, { bg, logo: lg, title: titleText, line: p.line, st: style(key), color: colorOf(key) });
+    drawBuilt(out, { bg, logo: bgOnly ? null : lg, title: bgOnly ? "" : titleText, line: bgOnly ? "" : p.line, st: style(key), color: colorOf(key) });
     return out;
   }
   const paintAll = () => slots.forEach(s => paint(s.key));
@@ -258,11 +263,17 @@ function makeBuilder(opts) {
   const colorInp = h("input", { type: "color", title: T("Eigene Farbe"), oninput: e => setColor(e.target.value) });
   const colorAuto = h("button", { class: "btn sm", type: "button", title: T("Die Farbe passend zum Poster automatisch wählen"), onclick: () => setColor(null) }, T("Auto"));
   const swatches = h("div", { class: "swatches" });
+  const pipette = h("button", { class: "btn sm", type: "button", title: T("Farbe aus dem Poster aufnehmen"), onclick: async () => {
+    const key = sel, cv = await paint(key, true, true);
+    pickFromPoster(cv, hex => { sel = key; setColor(hex); });
+  } }, icon("eye", 14), T("Pipette"));
   const titleColorInp = h("input", { type: "color", oninput: e => { G.titleColor = e.target.value; paintAll(); } });
   const modeLogo = h("button", { class: "seg", type: "button", onclick: () => { if (val(sel, "logo")) setLogoMode("logo"); else pickLogo(); } }, T("Logo"));
   const modeText = h("button", { class: "seg", type: "button", onclick: () => setLogoMode("text") }, T("Text"));
   const logoBtn = h("button", { class: "btn sm", type: "button", onclick: pickLogo }, T("Logo wählen …"));
   const logoUp = h("button", { class: "btn sm", type: "button", onclick: pickLogoFile }, icon("upload", 14), T("Logo hochladen"));
+  const blendBtn = (v, label) => h("button", { class: "seg", type: "button", onclick: () => { setTitle("blend", v); syncControls(); repaintTitle(); syncCustom(); } }, label);
+  const blendOff = blendBtn("off", T("Aus")), blendDark = blendBtn("dark", T("Dunkel")), blendLight = blendBtn("light", T("Hell"));
   const allChk = h("input", { type: "checkbox", checked: true, onchange: e => {
     if (e.target.checked && slots.some(s => custom(s.key)) && !confirm(T("Die abweichenden Einstellungen einzelner Poster gehen verloren. Fortfahren?"))) { e.target.checked = false; return; }
     allTitle = e.target.checked;
@@ -302,6 +313,9 @@ function makeBuilder(opts) {
     logoBtn.textContent = val(key, "logo") ? T("Anderes Logo …") : T("Logo wählen …");
     textInp.closest(".brow").hidden = mode === "logo"; titleColorInp.closest(".brow").hidden = mode === "logo";
     titleColorInp.value = G.titleColor || "#ffffff"; colorInp.value = colorOf(key);
+    const bl = val(key, "blend");
+    blendOff.classList.toggle("on", bl === "off"); blendDark.classList.toggle("on", bl === "dark"); blendLight.classList.toggle("on", bl === "light");
+    ctl.blendAmount.row.hidden = ctl.blendHeight.row.hidden = bl === "off";
     allChk.checked = allTitle; allChk.closest("label").hidden = !multi;
     lineInp.value = P[key].line;
     controls.querySelector(".bseason").hidden = !seasonSlot;
@@ -384,7 +398,6 @@ function makeBuilder(opts) {
 
   /* --- layout ----------------------------------------------------------- */
   const titleSec = h("div", { class: "bsec" }, h("h4", {}, T("Titel")),
-    h("label", { class: "bchk" }, allChk, T("Einstellungen für alle Poster")),
     h("div", { class: "row wrap" }, h("div", { class: "segs" }, modeLogo, modeText), logoBtn, logoUp),
     h("div", { class: "hint" }, T("PNG oder WebP mit Transparenz, auch per Drag & Drop hier ablegen")),
     h("div", { class: "hint bnote" }),
@@ -397,10 +410,14 @@ function makeBuilder(opts) {
   const controls = h("div", { class: "bcontrols" },
     h("div", { class: "hint bbghint" }, T("Hintergrund: über ein Poster fahren (am Handy antippen) – suchen, Datei wählen, Vorschau. Ein Poster auf ein anderes ziehen kopiert den Hintergrund.")),
     h("div", { class: "bhead" }, h("span", { class: "hint", style: "margin:0" }, T("Bearbeitet:")), h("b", { class: "bedit" })),
+    h("label", { class: "bchk ballchk" }, allChk, T("Einstellungen für alle Poster")),
     titleSec,
+    h("div", { class: "bsec" }, h("h4", {}, T("Überblendung")),
+      h("div", { class: "row wrap" }, h("div", { class: "segs" }, blendOff, blendDark, blendLight)),
+      slider(T("Stärke"), "blendAmount", 0.1, 1, 0.01, pct, true), slider(T("Höhe"), "blendHeight", 0.1, 0.8, 0.01, pct, true)),
     h("div", { class: "bsec bseason" }, h("h4", {}, T("Staffeltext")),
       h("label", { class: "brow" }, h("span", { class: "blab" }, T("Text")), lineInp),
-      h("div", { class: "brow" }, h("span", { class: "blab" }, T("Farbe")), swatches, colorInp, colorAuto),
+      h("div", { class: "brow" }, h("span", { class: "blab" }, T("Farbe")), swatches, pipette, colorInp, colorAuto),
       h("details", { class: "bfine" }, h("summary", {}, T("Feinabstimmung")),
         slider(T("Textgröße"), "seasonScale", 0.5, 2.4, 0.01, pct), slider(T("Abstand zum Titel"), "gap", 0, 0.1, 0.002, pct), slider(T("Laufweite"), "tracking", 0, 0.4, 0.005, pct))),
     h("div", { class: "bsec" }, h("h4", {}, T("Vorlagen")),
@@ -413,6 +430,37 @@ function makeBuilder(opts) {
     drawPresets(); syncControls(); paintAll(); loadLogos();
   })();
   return root;
+}
+
+/** Pick a colour from the picture itself: the poster is shown large, the colour under the pointer is previewed, a click / tap takes it (mean of a small patch). */
+function pickFromPoster(canvas, onPick) {
+  const tip = h("div", { class: "pipetip" }), hint = h("div", { class: "zoomtitle" }, T("Klicke auf eine Stelle des Posters, deren Farbe übernommen werden soll"));
+  const holder = h("div", { class: "zoomcv pipecv" }, canvas);
+  const wrap = h("div", { class: "zoomwrap", onclick: e => { if (e.target === wrap) close(); } },
+    h("button", { class: "btn zoomclose", type: "button", "aria-label": T("Schließen"), onclick: () => close() }, "✕"), holder, hint, tip);
+  let done = false;
+  const colorAt = e => {
+    const r = canvas.getBoundingClientRect();
+    if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return null;
+    const x = Math.round((e.clientX - r.left) / r.width * canvas.width), y = Math.round((e.clientY - r.top) / r.height * canvas.height), k = 2;
+    const d = canvas.getContext("2d", { willReadFrequently: true }).getImageData(Math.max(0, x - k), Math.max(0, y - k), 2 * k + 1, 2 * k + 1).data;
+    let R = 0, Gc = 0, B = 0, n = 0;
+    for (let i = 0; i < d.length; i += 4) { R += d[i]; Gc += d[i + 1]; B += d[i + 2]; n++; }
+    return "#" + [R, Gc, B].map(v => Math.round(v / n).toString(16).padStart(2, "0")).join("");
+  };
+  const show = e => {
+    const c = colorAt(e); tip.hidden = !c; if (!c) return;
+    tip.style.background = c; tip.textContent = c; tip.style.left = e.clientX + "px"; tip.style.top = (e.clientY + (e.pointerType === "touch" ? -70 : 26)) + "px";
+    const [, , l] = hexHsl(c); tip.style.color = l > 0.55 ? "#000" : "#fff";
+  };
+  const take = e => { const c = colorAt(e); if (!c || done) return; done = true; close(); onPick(c); };
+  canvas.addEventListener("pointermove", show); canvas.addEventListener("pointerdown", show);
+  canvas.addEventListener("pointerleave", () => { tip.hidden = true; });
+  canvas.addEventListener("click", take);
+  function onKey(e) { if (e.key !== "Escape") return; e.stopImmediatePropagation(); e.preventDefault(); close(); }
+  function close() { wrap.remove(); document.removeEventListener("keydown", onKey, true); }
+  document.addEventListener("keydown", onKey, true);
+  tip.hidden = true; document.body.append(wrap);
 }
 
 /** Large view of one poster in full resolution (what will be saved), with arrows / arrow keys to flip through the series. */

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.4 – 2026-11-14
+
+**New**
+- Poster builder: optional fade from the bottom edge (off / dark / light) with strength and height, for busy pictures. Like the logo it applies to all posters by default (“Settings for all posters” now sits above Title and Fade) and can be set differently for a single poster; presets include it
+- Eyedropper for the season colour: opens the poster large (without logo and text) so the colour is taken from the picture, not from the rest of the screen; the browser's own colour picker stays for free colours
+
 ## 0.8.3 – 2026-11-14
 
 **Changed**

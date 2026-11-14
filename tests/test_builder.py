@@ -15,6 +15,11 @@ def test_sanitize_keeps_only_known_values_in_range():
     assert styles.sanitize({"color": None}) == {"color": None}
 
 
+def test_sanitize_blend():
+    assert styles.sanitize({"blend": "dark", "blendAmount": 5, "blendHeight": 0.01}) == {"blend": "dark", "blendAmount": 1.0, "blendHeight": 0.1}
+    assert styles.sanitize({"blend": "red"}) == {}
+
+
 def test_presets_roundtrip_and_limits(tmp_path, monkeypatch):
     monkeypatch.setattr(styles.config, "CONFIG_DIR", tmp_path)
     assert styles.load() == {"presets": {}, "last": None}
