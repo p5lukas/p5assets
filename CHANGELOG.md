@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.8.2 – 2026-11-14
+
+**Changed**
+- Poster builder, series: the background is chosen directly on the poster tile (search online, choose file, preview, use for all); the tiles no longer have checkboxes, every poster with a background is saved; “Copy background from …” is gone, dragging a poster onto another one remains
+- Title: “Settings for all posters” (on by default). Switched off, the selected poster can have its own logo or text, size and height (marked “custom” on its tile)
+- Season text is one compact block: text, colour suggestions taken from the picture (plus Auto and a free colour); size, spacing and letter spacing moved into “Fine tuning”
+- Series tiles show the number of posters (series poster plus every season, Specials included) instead of the number of seasons
+
+**New**
+- “Add Specials” in the builder for series without a season 0
+
+**Fixed**
+- Specials were missing in the builder when “Specials (Season00) not monitored” is on
+
 ## 0.8.1 – 2026-11-14
 
 **Changed**

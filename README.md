@@ -74,7 +74,7 @@ p5assets reads the title, year and season from file and folder names, shows you 
 - **Download** in original quality: single posters, or a selection as a ZIP. On iPhone/iPad the original opens in p5assets; long-press the image and choose “Add to Photos”.
 
 ### Poster builder
-No suitable poster? Build one. Pick a textless background (online search or your own file), then a clear logo from TMDb, fanart.tv or TheTVDB, or the title as text if there is none. Series get a season line (“Season One”, “Specials”) under it, with a colour picked from the background that you can change. Movies: **Build** in the hover menu. Series: the build button in the detail view opens build mode, where every poster is previewed and the one being edited has a Matrix frame. Posters are rendered at 1000×1500 JPG, saved with the usual naming, trash and undo, and looks can be saved as presets. Eight bundled open-licence fonts (OFL).
+No suitable poster? Build one. Pick a textless background on the poster tile (online search or your own file), then a clear logo from TMDb, fanart.tv or TheTVDB, or the title as text if there is none. Series get a season line (“Season One”, “Specials”) under it, with a colour picked from the background that you can change. Movies: **Build** in the hover menu. Series: the build button in the detail view opens build mode, where every poster is previewed and the one being edited has a Matrix frame. Posters are rendered at 1000×1500 JPG, saved with the usual naming, trash and undo, and looks can be saved as presets. Eight bundled open-licence fonts (OFL).
 
 <img src="docs/images/poster-builder.png" alt="Poster builder for a series: all posters in one look" width="640">
 

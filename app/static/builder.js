@@ -50,6 +50,19 @@ function hslHex(hue, s, l) {
   return "#" + [f(0), f(8), f(4)].map(v => v.toString(16).padStart(2, "0")).join("");
 }
 
+function hexHsl(hex) {
+  const n = parseInt(hex.slice(1), 16), r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, ch = mx - mn;
+  if (!ch) return [0, 0, l];
+  const hue = mx === r ? ((g - b) / ch + 6) % 6 : mx === g ? (b - r) / ch + 2 : (r - g) / ch + 4;
+  return [hue * 60, ch / (1 - Math.abs(2 * l - 1)), l];
+}
+/** Colour suggestions for the season line, derived from the picture: its main colour, a light and a strong variant, the opposite hue, white, near-black. */
+function colorChoices(auto) {
+  const [hu] = hexHsl(auto || "#f1f1ee"), base = auto || "#f1f1ee";
+  return [base, hslHex(hu, 0.6, 0.88), hslHex(hu, 0.85, 0.5), hslHex((hu + 180) % 360, 0.7, 0.72), "#ffffff", "#141414"];
+}
+
 /* -------------------------------------------------------------- drawing --- */
 /** Draws one poster. o = { bg, logo, title, line, st (merged style), color } – images are already loaded (or null). */
 function drawBuilt(canvas, o) {
@@ -106,13 +119,19 @@ function drawTracked(ctx, text, cx, y, track) {
 
 /* -------------------------------------------------------------- builder --- */
 /** The editor. opts = { item, slots: [{ key, season, label }], multi, onSaved(lastItem, keys, trashId), onCancel }. Returns the DOM element.
- *  Size, position and fonts are the same on every poster (consistency); only the background and the colour of the season line belong to a poster. */
+ *  Backgrounds belong to a poster and are chosen on its tile. Logo, size and height are the same on all posters unless "for all posters" is switched off;
+ *  the colour of the season line is always per poster; font and the fine tuning of the season line are the same everywhere. */
 function makeBuilder(opts) {
   const it = opts.item, multi = !!opts.multi, slots = opts.slots;
   const G = { ...BUILD_DEFAULT };                                   // the look shared by all posters
-  let titleText = it.title, logo = null /* { url, preview, source } */, logoRes = null, logoNote = "", presets = {}, sel = slots[0].key, saving = false;
-  const P = Object.fromEntries(slots.map(s => [s.key, { bg: null, line: s.season == null ? "" : seasonLine(s.season), color: null, checked: true, auto: null }]));
+  let titleText = it.title, logo = null /* { url, preview, source } */, logoRes = null, logoNote = "", presets = {}, sel = slots[0].key, saving = false, allTitle = true;
+  const newP = s => ({ bg: null, line: s.season == null ? "" : seasonLine(s.season), color: null, auto: null, ov: {} });
+  const P = Object.fromEntries(slots.map(s => [s.key, newP(s)]));
+  const TITLE_OV = ["titleScale", "titleY", "mode", "logo"];        // what a single poster may do differently (when "for all posters" is off)
+  const val = (key, a) => a in P[key].ov ? P[key].ov[a] : a === "logo" ? logo : G[a];
+  const style = key => ({ ...G, titleScale: val(key, "titleScale"), titleY: val(key, "titleY"), mode: val(key, "mode") });
   const colorOf = key => P[key].color || P[key].auto || "#f1f1ee";
+  const custom = key => Object.keys(P[key].ov).length > 0;
 
   const root = h("div", { class: "builder" });
   const cards = {}, canvases = {};
@@ -120,18 +139,19 @@ function makeBuilder(opts) {
 
   /* --- drawing ---------------------------------------------------------- */
   async function paint(key, full = false) {
-    const p = P[key], cv = canvases[key];
+    const p = P[key], cv = canvases[key], lg0 = val(key, "logo"), useLogoImg = lg0 && val(key, "mode") === "logo";
     await ensureFont(G.font);
     const [bg, lg] = await Promise.all([p.bg ? loadImage(proxied(full ? p.bg.url : p.bg.preview || p.bg.url)).catch(() => null) : null,
-      logo && G.mode === "logo" ? loadImage(proxied(full ? logo.url : logo.preview || logo.url)).catch(() => null) : null]);
+      useLogoImg ? loadImage(proxied(full ? lg0.url : lg0.preview || lg0.url)).catch(() => null) : null]);
     if (bg && !p.auto) p.auto = autoColorOf(bg);
     const out = full ? Object.assign(document.createElement("canvas"), { width: BW, height: BH }) : cv;
-    drawBuilt(out, { bg, logo: lg, title: titleText, line: p.line, st: G, color: colorOf(key) });
+    drawBuilt(out, { bg, logo: lg, title: titleText, line: p.line, st: style(key), color: colorOf(key) });
     return out;
   }
   const paintAll = () => slots.forEach(s => paint(s.key));
+  const repaintTitle = () => allTitle ? paintAll() : paint(sel);
 
-  /* --- backgrounds ------------------------------------------------------ */
+  /* --- backgrounds (chosen on the tiles) -------------------------------- */
   async function setBg(key, bg) { P[key].bg = bg; P[key].auto = null; cards[key].draggable = !!bg; await paint(key); syncControls(); }
   const bgFromFile = (key, files) => {
     const f = (files || []).map(x => x.file).find(x => x && /^image\//.test(x.type));
@@ -140,15 +160,24 @@ function makeBuilder(opts) {
   };
   const bgOnline = key => searchOnline(it, key, null, { pick: img => setBg(key, { url: img.url, preview: img.preview || img.url, name: img.source }), title: T("Hintergrund wählen") });
   const copyBg = (from, to) => { if (from !== to && P[from].bg) setBg(to, { ...P[from].bg }); };
-  function bgForAll() {
-    const src = P[sel].bg; if (!src) return;
-    const others = slots.filter(s => s.key !== sel), filled = others.filter(s => P[s.key].bg);
+  function bgForAll(from) {
+    const src = P[from].bg; if (!src) return;
+    const others = slots.filter(s => s.key !== from), filled = others.filter(s => P[s.key].bg);
     const replace = filled.length ? confirm(TP(filled.length, "Ein Poster hat schon einen Hintergrund. Auch dieses ersetzen? (Abbrechen = nur leere Poster füllen)",
       "{0} Poster haben schon einen Hintergrund. Auch diese ersetzen? (Abbrechen = nur leere Poster füllen)")) : false;
     others.filter(s => replace || !P[s.key].bg).forEach(s => setBg(s.key, { ...src }));
   }
 
-  /* --- logo ------------------------------------------------------------- */
+  /* --- title: logo / text, size, height (for all posters, or for one) ---- */
+  function setTitle(attr, v) {
+    if (allTitle) { G[attr] = v; slots.forEach(s => delete P[s.key].ov[attr]); } else P[sel].ov[attr] = v;
+  }
+  function setLogoMode(mode, l) {
+    if (l) setTitle("logo", l);
+    if (allTitle && l) logo = l;                                    // the shared logo lives in `logo`, not in G
+    setTitle("mode", mode);
+    syncControls(); repaintTitle();
+  }
   async function loadLogos() {
     try {
       logoRes = await api(`/items/${it.id}/logos`);
@@ -158,7 +187,7 @@ function makeBuilder(opts) {
     } catch (e) { logoRes = { images: [], providers: [], languages: [] }; logoNote = e.message; if (!logo) G.mode = "text"; }
     syncControls(); paintAll();
   }
-  function useLogo(l) { logo = l; G.mode = "logo"; syncControls(); paintAll(); }
+  const useLogo = l => setLogoMode("logo", l);
   function logoFromFile(files) {
     const f = (files || []).map(x => x.file).find(Boolean);
     if (!f) return;
@@ -177,8 +206,9 @@ function makeBuilder(opts) {
     const langTitle = code => { const l = byCode[code]; if (code === "xx") return T("Ohne Sprache"); const name = !l ? code : l.native && l.native !== l.name ? `${l.name} (${l.native})` : l.name; return `${code} • ${name}`; };
     let tab = "*";
     const m = modal(T("Logo wählen"), body, [h("button", { class: "btn", onclick: () => { m.close(); pickLogoFile(); } }, icon("upload", 14), T("Logo hochladen")),
-      h("button", { class: "btn", onclick: () => { G.mode = "text"; m.close(); syncControls(); paintAll(); } }, T("Titel als Text verwenden")), h("button", { class: "btn ghost", onclick: () => m.close() }, T("Schließen"))]);
-    const pick = l => h("div", { class: "pick" + (logo && logo.url === l.url ? " on" : ""), onclick: () => { m.close(); useLogo({ url: l.url, preview: l.preview, source: l.source }); } },
+      h("button", { class: "btn", onclick: () => { m.close(); setLogoMode("text"); } }, T("Titel als Text verwenden")), h("button", { class: "btn ghost", onclick: () => m.close() }, T("Schließen"))]);
+    const cur = val(sel, "logo");
+    const pick = l => h("div", { class: "pick" + (cur && cur.url === l.url ? " on" : ""), onclick: () => { m.close(); useLogo({ url: l.url, preview: l.preview, source: l.source }); } },
       h("img", { src: proxied(l.preview || l.url), alt: "", loading: "lazy" }));
     function render() {
       fill(tabs, [{ name: "*", label: T("Alle"), state: "ok", count: r.images.length }, ...r.providers].map(pv => h("button", {
@@ -205,14 +235,17 @@ function makeBuilder(opts) {
 
   /* --- controls --------------------------------------------------------- */
   const ctl = {};
-  /** A slider row: label, slider, value, "Default" button. The row always has the same layout so the sliders keep the same length. */
-  function slider(label, attr, min, max, step, fmt) {
+  /** A slider row: label, slider, value, "Default" button. Always the same layout, so the sliders keep the same length.
+   *  perPoster = the value may differ per poster (size and height of the title, when "for all posters" is off). */
+  function slider(label, attr, min, max, step, fmt, perPoster) {
     const def = BUILD_DEFAULT[attr], out = h("span", { class: "bval" });
+    const cur = () => perPoster ? val(sel, attr) : G[attr];
     const show = v => { out.textContent = fmt(v); reset.classList.toggle("dim", Math.abs(v - def) < step / 2); };
-    const inp = h("input", { type: "range", min, max, step, oninput: () => { G[attr] = +inp.value; show(G[attr]); paintAll(); } });
-    const reset = h("button", { class: "btn sm breset", type: "button", title: T("Auf Standard zurücksetzen"), onclick: () => { inp.value = def; G[attr] = def; show(def); paintAll(); } }, T("Standard"));
+    const put = v => { if (perPoster) setTitle(attr, v); else G[attr] = v; show(v); perPoster ? repaintTitle() : paintAll(); if (perPoster) syncCustom(); };
+    const inp = h("input", { type: "range", min, max, step, oninput: () => put(+inp.value) });
+    const reset = h("button", { class: "btn sm breset", type: "button", title: T("Auf Standard zurücksetzen"), onclick: () => { inp.value = def; put(def); } }, T("Standard"));
     const row = h("div", { class: "brow srow" }, h("span", { class: "blab" }, label), inp, out, reset);
-    ctl[attr] = () => { inp.value = G[attr]; show(G[attr]); };
+    ctl[attr] = () => { inp.value = cur(); show(cur()); };
     ctl[attr].row = row;
     return row;
   }
@@ -222,19 +255,23 @@ function makeBuilder(opts) {
   const textInp = h("input", { type: "text", maxlength: 120, oninput: e => { titleText = e.target.value; paintAll(); } });
   const lineInp = h("input", { type: "text", maxlength: 40, oninput: e => { P[sel].line = e.target.value; paint(sel); } });
   const setColor = c => { P[sel].color = c; syncControls(); paint(sel); };
-  const colorInp = h("input", { type: "color", oninput: e => setColor(e.target.value) });
+  const colorInp = h("input", { type: "color", title: T("Eigene Farbe"), oninput: e => setColor(e.target.value) });
   const colorAuto = h("button", { class: "btn sm", type: "button", title: T("Die Farbe passend zum Poster automatisch wählen"), onclick: () => setColor(null) }, T("Auto"));
+  const swatches = h("div", { class: "swatches" });
   const titleColorInp = h("input", { type: "color", oninput: e => { G.titleColor = e.target.value; paintAll(); } });
-  const modeLogo = h("button", { class: "seg", type: "button", onclick: () => { if (logo) { G.mode = "logo"; syncControls(); paintAll(); } else pickLogo(); } }, T("Logo"));
-  const modeText = h("button", { class: "seg", type: "button", onclick: () => { G.mode = "text"; syncControls(); paintAll(); } }, T("Text"));
+  const modeLogo = h("button", { class: "seg", type: "button", onclick: () => { if (val(sel, "logo")) setLogoMode("logo"); else pickLogo(); } }, T("Logo"));
+  const modeText = h("button", { class: "seg", type: "button", onclick: () => setLogoMode("text") }, T("Text"));
   const logoBtn = h("button", { class: "btn sm", type: "button", onclick: pickLogo }, T("Logo wählen …"));
   const logoUp = h("button", { class: "btn sm", type: "button", onclick: pickLogoFile }, icon("upload", 14), T("Logo hochladen"));
-  const bgName = h("span", { class: "hint bgname" });
-  const allBtn = h("button", { class: "btn sm", type: "button", onclick: bgForAll }, T("Für alle übernehmen"));
-  const copySel = h("select", { class: "bcopy", "aria-label": T("Hintergrund übernehmen von …"), onchange: e => { const k = e.target.value; e.target.value = ""; if (k) copyBg(k, sel); } });
+  const allChk = h("input", { type: "checkbox", checked: true, onchange: e => {
+    if (e.target.checked && slots.some(s => custom(s.key)) && !confirm(T("Die abweichenden Einstellungen einzelner Poster gehen verloren. Fortfahren?"))) { e.target.checked = false; return; }
+    allTitle = e.target.checked;
+    if (allTitle) slots.forEach(s => { P[s.key].ov = {}; });
+    syncControls(); paintAll();
+  } });
   const presetSel = h("select", { onchange: e => { const p = presets[e.target.value]; if (!p) return; applyPreset(p); e.target.value = ""; } });
   function applyPreset(p) {
-    Object.assign(G, BUILD_DEFAULT, p); delete G.color; if (!logo) G.mode = "text";
+    Object.assign(G, BUILD_DEFAULT, p); delete G.color; if (!logo) G.mode = "text"; slots.forEach(s => { P[s.key].ov = {}; });
     syncControls(); paintAll();
   }
   function drawPresets() {
@@ -253,43 +290,50 @@ function makeBuilder(opts) {
     if (!presets[pick]) return;
     presets = (await api("/styles/presets/" + encodeURIComponent(pick), { method: "DELETE" })).presets; drawPresets();
   }
+  function syncCustom() {
+    slots.forEach(s => { cards[s.key].classList.toggle("custom", custom(s.key)); });
+  }
   function syncControls() {
-    const key = sel, seasonSlot = P[key].line !== "" || slots.find(s => s.key === key).season != null;
+    const key = sel, seasonSlot = P[key].line !== "" || slots.find(s => s.key === key).season != null, mode = val(key, "mode");
     root.querySelectorAll(".bcard").forEach(c => c.classList.toggle("editing", c.dataset.key === key));
+    syncCustom();
     fontSel.value = G.font; upperChk.checked = !!G.upper; textInp.value = titleText;
-    modeLogo.classList.toggle("on", G.mode === "logo"); modeText.classList.toggle("on", G.mode === "text");
-    logoBtn.textContent = logo ? T("Anderes Logo …") : T("Logo wählen …");
-    textInp.closest(".brow").hidden = G.mode === "logo"; titleColorInp.closest(".brow").hidden = G.mode === "logo";
+    modeLogo.classList.toggle("on", mode === "logo"); modeText.classList.toggle("on", mode === "text");
+    logoBtn.textContent = val(key, "logo") ? T("Anderes Logo …") : T("Logo wählen …");
+    textInp.closest(".brow").hidden = mode === "logo"; titleColorInp.closest(".brow").hidden = mode === "logo";
     titleColorInp.value = G.titleColor || "#ffffff"; colorInp.value = colorOf(key);
-    lineInp.value = P[key].line; lineInp.closest(".brow").hidden = !seasonSlot;
-    colorInp.closest(".brow").hidden = !seasonSlot;
-    for (const a of ["seasonScale", "gap", "tracking"]) ctl[a].row.hidden = !seasonSlot;
+    allChk.checked = allTitle; allChk.closest("label").hidden = !multi;
+    lineInp.value = P[key].line;
     controls.querySelector(".bseason").hidden = !seasonSlot;
     for (const k of Object.keys(ctl)) ctl[k]();
     colorAuto.classList.toggle("on", P[key].color == null);
-    bgName.textContent = P[key].bg ? P[key].bg.name : T("noch kein Hintergrund");
-    if (multi) {
-      allBtn.disabled = !P[key].bg || slots.length < 2;
-      const from = slots.filter(s => s.key !== key && P[s.key].bg);
-      fill(copySel, h("option", { value: "" }, T("Hintergrund übernehmen von …")), from.map(s => h("option", { value: s.key }, s.label)));
-      copySel.disabled = !from.length;
-    }
+    fill(swatches, colorChoices(P[key].auto).map(c => h("button", { type: "button", class: "swatch" + (P[key].color && P[key].color.toLowerCase() === c.toLowerCase() ? " on" : ""),
+      style: `background:${c}`, title: c, "aria-label": c, onclick: () => setColor(c) })));
     root.querySelector(".bedit").textContent = slots.find(s => s.key === key).label;
     root.querySelector(".bnote").textContent = logoNote;
-    const n = slots.filter(s => P[s.key].checked && P[s.key].bg).length;
+    const n = slots.filter(s => P[s.key].bg).length;
     saveBtn.disabled = saving || !n; saveBtn.textContent = TP(n, "Ein Poster speichern", "{0} Poster speichern");
   }
 
   /* --- cards ------------------------------------------------------------ */
-  function selectSlot(key) { sel = key; syncControls(); }
+  function selectSlot(key) {
+    sel = key;
+    root.querySelectorAll(".bposter.show").forEach(e => { if (e.closest(".bcard").dataset.key !== key) e.classList.remove("show"); });
+    syncControls();
+  }
   const SLOT_DRAG = "application/x-p5slot";
-  const grid = h("div", { class: "bgrid" }, slots.map(s => {
+  const zoom = key => openZoom(slots, key, k => paint(k, true));
+  function makeCard(s) {
     const cv = h("canvas", { width: 300, height: 450 }); canvases[s.key] = cv;
-    const chk = h("input", { type: "checkbox", checked: true, title: T("Dieses Poster speichern"), onclick: e => e.stopPropagation(), onchange: e => { P[s.key].checked = e.target.checked; syncControls(); } });
-    const zoom = h("button", { class: "bzoom", type: "button", title: T("Groß ansehen"), "aria-label": T("Groß ansehen"), onclick: e => { e.stopPropagation(); selectSlot(s.key); openZoom(slots, s.key, k => paint(k, true)); } }, icon("search", 14));
-    const card = h("div", { class: "bcard", "data-key": s.key, onclick: () => selectSlot(s.key), ondblclick: () => openZoom(slots, s.key, k => paint(k, true)) },
-      h("div", { class: "poster bposter", "data-key": it.id + "|" + s.key }, cv, zoom),
-      h("div", { class: "blabel" }, multi ? chk : null, h("span", {}, s.label)));
+    const ov = (name, label, fn) => h("button", { class: "ov-btn bov", type: "button", title: label, "aria-label": label, onclick: e => { e.stopPropagation(); box.classList.remove("show"); selectSlot(s.key); fn(); } }, icon(name, 16), h("span", {}, label));
+    const box = h("div", { class: "poster bposter", "data-key": it.id + "|" + s.key }, cv,
+      h("div", { class: "hover" }, h("div", { class: "ovbtns" },
+        ov("search", T("Online suchen"), () => bgOnline(s.key)),
+        ov("upload", T("Datei wählen"), () => pickFiles(files => bgFromFile(s.key, files), false)),
+        ov("eye", T("Vorschau"), () => zoom(s.key)),
+        multi ? ov("copy", T("Für alle übernehmen"), () => bgForAll(s.key)) : null)));
+    const card = h("div", { class: "bcard", "data-key": s.key, onclick: () => { selectSlot(s.key); if (matchMedia("(hover:none)").matches) box.classList.toggle("show"); }, ondblclick: () => zoom(s.key) },
+      box, h("div", { class: "blabel" }, h("span", {}, s.label), h("small", { class: "bcustom" }, T("angepasst"))));
     makeDropTarget(card, files => bgFromFile(s.key, files));
     if (multi) {                                                    // drag a poster onto another one: it gets the same background
       card.addEventListener("dragstart", e => { e.dataTransfer.setData(SLOT_DRAG, s.key); e.dataTransfer.effectAllowed = "copy"; });
@@ -298,12 +342,21 @@ function makeBuilder(opts) {
       card.addEventListener("drop", e => { const from = e.dataTransfer.getData(SLOT_DRAG); card.classList.remove("dropping"); if (from) { e.preventDefault(); copyBg(from, s.key); } });
     }
     cards[s.key] = card; return card;
-  }));
+  }
+  const grid = h("div", { class: "bgrid" }, slots.map(makeCard));
+  // a series without Specials (season 0) can get a Specials poster too
+  const addSpecials = multi && it.type === "show" && !slots.some(s => s.season === 0) ? h("button", { class: "btn sm baddsp", type: "button", onclick: () => {
+    const s = { key: "season-0", season: 0, label: slotLabel("season-0", "show") };
+    P[s.key] = newP(s); slots.splice(1, 0, s);
+    grid.insertBefore(makeCard(s), grid.children[1]);
+    addSpecials.remove(); selectSlot(s.key); paint(s.key);
+  } }, "＋ ", T("Specials hinzufügen")) : null;
+  if (addSpecials) grid.append(addSpecials);
   const saveBtn = h("button", { class: "btn primary", type: "button", onclick: () => save() }, "");
 
   /* --- saving ----------------------------------------------------------- */
   async function save() {
-    const keys = slots.filter(s => P[s.key].checked && P[s.key].bg).map(s => s.key);
+    const keys = slots.filter(s => P[s.key].bg).map(s => s.key);
     if (!keys.length || saving) return;
     const overwritten = keys.filter(k => it.slots[k] && it.slots[k].exists);
     if (overwritten.length && !confirm(TP(overwritten.length, "Ein vorhandenes Poster wird ersetzt (das alte liegt 30 Tage im Papierkorb). Fortfahren?", "{0} vorhandene Poster werden ersetzt (die alten liegen 30 Tage im Papierkorb). Fortfahren?"))) return;
@@ -331,27 +384,25 @@ function makeBuilder(opts) {
 
   /* --- layout ----------------------------------------------------------- */
   const titleSec = h("div", { class: "bsec" }, h("h4", {}, T("Titel")),
+    h("label", { class: "bchk" }, allChk, T("Einstellungen für alle Poster")),
     h("div", { class: "row wrap" }, h("div", { class: "segs" }, modeLogo, modeText), logoBtn, logoUp),
     h("div", { class: "hint" }, T("PNG oder WebP mit Transparenz, auch per Drag & Drop hier ablegen")),
     h("div", { class: "hint bnote" }),
     h("label", { class: "brow" }, h("span", { class: "blab" }, T("Text")), textInp),
     h("label", { class: "brow" }, h("span", { class: "blab" }, T("Titelfarbe")), titleColorInp),
     h("label", { class: "brow" }, h("span", { class: "blab" }, T("Schrift")), fontSel, h("label", { class: "bchk" }, upperChk, T("Großbuchstaben"))),
-    slider(T("Titelgröße"), "titleScale", 0.4, 1.6, 0.01, pct),
-    slider(T("Titelhöhe"), "titleY", 0.1, 0.9, 0.005, pct));
+    slider(T("Titelgröße"), "titleScale", 0.4, 1.6, 0.01, pct, true),
+    slider(T("Titelhöhe"), "titleY", 0.1, 0.9, 0.005, pct, true));
   makeDropTarget(titleSec, logoFromFile);
   const controls = h("div", { class: "bcontrols" },
+    h("div", { class: "hint bbghint" }, T("Hintergrund: über ein Poster fahren (am Handy antippen) – suchen, Datei wählen, Vorschau. Ein Poster auf ein anderes ziehen kopiert den Hintergrund.")),
     h("div", { class: "bhead" }, h("span", { class: "hint", style: "margin:0" }, T("Bearbeitet:")), h("b", { class: "bedit" })),
-    h("div", { class: "bsec" }, h("h4", {}, T("Hintergrund")),
-      h("div", { class: "row wrap" }, h("button", { class: "btn sm", type: "button", onclick: () => bgOnline(sel) }, icon("search", 14), T("Online suchen")),
-        h("button", { class: "btn sm", type: "button", onclick: () => pickFiles(files => bgFromFile(sel, files), false) }, icon("upload", 14), T("Datei wählen")),
-        multi ? allBtn : null, multi ? copySel : null),
-      h("div", { class: "hint" }, bgName, " · ", T("oder ein Bild auf ein Poster ziehen"))),
     titleSec,
     h("div", { class: "bsec bseason" }, h("h4", {}, T("Staffeltext")),
       h("label", { class: "brow" }, h("span", { class: "blab" }, T("Text")), lineInp),
-      slider(T("Textgröße"), "seasonScale", 0.5, 2.4, 0.01, pct), slider(T("Abstand zum Titel"), "gap", 0, 0.1, 0.002, pct), slider(T("Laufweite"), "tracking", 0, 0.4, 0.005, pct),
-      h("label", { class: "brow" }, h("span", { class: "blab" }, T("Farbe")), colorInp, colorAuto)),
+      h("div", { class: "brow" }, h("span", { class: "blab" }, T("Farbe")), swatches, colorInp, colorAuto),
+      h("details", { class: "bfine" }, h("summary", {}, T("Feinabstimmung")),
+        slider(T("Textgröße"), "seasonScale", 0.5, 2.4, 0.01, pct), slider(T("Abstand zum Titel"), "gap", 0, 0.1, 0.002, pct), slider(T("Laufweite"), "tracking", 0, 0.4, 0.005, pct))),
     h("div", { class: "bsec" }, h("h4", {}, T("Vorlagen")),
       h("div", { class: "row wrap" }, presetSel, h("button", { class: "btn sm", type: "button", onclick: savePreset }, T("Als Vorlage speichern …")), h("button", { class: "btn sm ghost", type: "button", onclick: deletePreset }, T("Vorlage löschen …")))),
     h("div", { class: "row wrap bfoot" }, saveBtn, opts.onCancel ? h("button", { class: "btn", type: "button", onclick: opts.onCancel }, T("Abbrechen")) : null, status));
@@ -394,7 +445,10 @@ function openZoom(slots, startKey, render) {
 /* ---------------------------------------------------------- entry points --- */
 /** The tiles of a title that can be built: the series poster / movie poster and all seasons, in order. */
 function buildSlotsFor(it) {
-  const keys = Object.keys(it.slots).filter(k => !it.slots[k].extra && (it.type === "show" || k === "poster")).sort((a, b) => seasonNum(a) - seasonNum(b));
+  const keys = Object.keys(it.slots).filter(k => (it.type === "show" || k === "poster") && (!it.slots[k].extra || k === "season-0"));
+  // Specials are offered whenever the series has a season 0, even when they are not monitored (then they are no tile of their own)
+  if (it.type === "show" && (it.seasons || []).some(x => x.number === 0) && !keys.includes("season-0")) keys.push("season-0");
+  keys.sort((a, b) => seasonNum(a) - seasonNum(b));
   return keys.map(k => ({ key: k, season: k === "poster" ? null : seasonNum(k), label: slotLabel(k, it.type) }));
 }
 /** Movies: a window with one poster. */

@@ -91,3 +91,11 @@ def test_logos_endpoint_needs_keys_and_returns_result(client, monkeypatch):
     monkeypatch.setattr(main.config, "get", lambda: {"apis": {"tmdb": "k", "tvdb": "", "fanart": ""}, "worlds": []})
     monkeypatch.setattr(main.providers, "search_logos", fake)
     assert client.get("/api/items/w:1/logos").json()["images"][0]["url"] == "u"
+
+
+def test_poster_count_is_series_poster_plus_every_season():
+    base = {"id": "w:9", "world": "hd", "type": "show", "title": "S", "year": 2020, "folder": "S", "library_title": "", "missing": 0,
+            "updated": 0, "in_plex": True, "sources": [], "dupes": [], "slots": {}, "ids": {}}
+    seasons = [{"number": n, "title": "", "rating_key": None, "thumb": ""} for n in (0, 1, 2)]
+    assert main._public_item({**base, "seasons": seasons})["poster_count"] == 4
+    assert main._public_item({**base, "seasons": []})["poster_count"] == 1

@@ -774,5 +774,16 @@
 "Keine Logos gefunden.": "No logos found.",
 " Poster wird gezeichnet …": " Drawing poster …",
 "Poster-Builder überarbeitet": "Poster builder reworked",
-"Alle Poster einer Serie teilen jetzt Größe und Höhe, das Logo sitzt überall gleich hoch. Neu: eigenes Logo hochladen, Poster groß ansehen, Hintergrund auf andere Poster übernehmen und eine Logo-Suche wie die Poster-Suche.": "All posters of a series now share size and height, so the logo sits at the same height everywhere. New: upload your own logo, view posters large, copy a background to other posters, and a logo search like the poster search."
+"Alle Poster einer Serie teilen jetzt Größe und Höhe, das Logo sitzt überall gleich hoch. Neu: eigenes Logo hochladen, Poster groß ansehen, Hintergrund auf andere Poster übernehmen und eine Logo-Suche wie die Poster-Suche.": "All posters of a series now share size and height, so the logo sits at the same height everywhere. New: upload your own logo, view posters large, copy a background to other posters, and a logo search like the poster search.",
+"1 Poster": "1 poster",
+"{0} Poster": "{0} posters",
+"angepasst": "custom",
+"Eigene Farbe": "Custom colour",
+"Feinabstimmung": "Fine tuning",
+"Einstellungen für alle Poster": "Settings for all posters",
+"Die abweichenden Einstellungen einzelner Poster gehen verloren. Fortfahren?": "The custom settings of individual posters will be lost. Continue?",
+"Specials hinzufügen": "Add Specials",
+"Hintergrund: über ein Poster fahren (am Handy antippen) – suchen, Datei wählen, Vorschau. Ein Poster auf ein anderes ziehen kopiert den Hintergrund.": "Background: hover over a poster (tap it on a phone) to search, choose a file or preview. Dragging a poster onto another one copies its background.",
+"Poster-Builder: Hintergrund direkt auf dem Poster": "Poster builder: background right on the poster",
+"Im Baumodus wählst du den Hintergrund jetzt direkt auf der Kachel. Das Logo kann bei Bedarf für einzelne Poster abweichen, die Staffelfarbe bekommt Vorschläge, und fehlende Specials lassen sich hinzufügen. Unter den Serien steht jetzt die Zahl der Poster.": "In build mode you now choose the background right on the tile. The logo can differ for single posters if needed, the season colour gets suggestions, and missing Specials can be added. Series now show their number of posters."
 }

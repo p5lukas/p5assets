@@ -668,3 +668,16 @@ body.glitching #app,body.glitching #foot{text-shadow:0 0 9px var(--glow);transit
 .zoomprev{left:12px}.zoomnext{right:12px}
 .zoomtitle{position:absolute;bottom:12px;left:0;right:0;text-align:center;font-size:13px;color:var(--muted)}
 @media(max-width:760px){.zoomwrap{padding:56px 8px 44px}.zoomnav{top:auto;bottom:6px;transform:none}}
+.bposter .hover{background:color-mix(in srgb,var(--bg) 55%,transparent);padding:8px;align-items:stretch}
+.bposter .ovbtns{gap:5px}
+.bov{display:flex;align-items:center;justify-content:center;gap:6px;min-height:30px;padding:4px 6px;font-size:12px;white-space:nowrap}
+.bov span{overflow:hidden;text-overflow:ellipsis}
+.bcustom{display:none;color:var(--accent);margin-left:6px}.bcard.custom .bcustom{display:inline}
+.swatches{display:flex;gap:8px;flex-wrap:wrap;align-items:center;flex:1;min-width:0}
+.swatch{width:26px;height:26px;border-radius:50%;border:2px solid var(--line);padding:0;cursor:pointer}
+.swatch.on{border-color:var(--accent);box-shadow:0 0 8px var(--glow)}
+.bfine{border-top:1px dashed var(--line);padding-top:8px}.bfine summary{cursor:pointer;color:var(--muted);font-size:13px;margin-bottom:8px}
+.bfine .brow{margin-top:8px}
+.baddsp{align-self:center;flex:0 0 auto;white-space:nowrap}
+.bbghint{margin:0}
+@media(max-width:760px){.bov span{display:none}.bov{min-height:28px;padding:3px}.bposter .ovbtns{flex-direction:row;flex-wrap:wrap;justify-content:center}.bov{flex:0 0 30px;min-width:0}}

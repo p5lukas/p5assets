@@ -164,6 +164,8 @@ const slotLabel = (k, type) => k === "poster" ? (type === "movie" ? T("Poster") 
 
 /* ---------------------------------------------------------------- icons --- */
 const ICONS = {
+  eye: [{ d: "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" }, { c: [12, 12, 3] }],
+  copy: [{ d: "M9 9h11v11H9z" }, { d: "M5 15H4V4h11v1" }],
   upload: [{ d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" }, { d: "M17 8l-5-5-5 5" }, { d: "M12 3v12" }],
   folder: [{ d: "M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z" }],
   // two arrows chasing each other in a circle (rotates while a scan is running)
@@ -951,7 +953,7 @@ function card(item, local) {
   // a movie has one poster: no detail view, title/year and poster open the preview; the action buttons are built on first use
   const info = h("div", { class: "info", onclick: movie ? () => openPreview(item, "poster", changed) : null, title: movie ? T("Vorschau öffnen") : null },
     h("div", { class: "t", title: item.title }, item.title),
-    h("div", { class: "s" }, [item.year, item.type === "show" ? pl(item.season_count, "Staffel", "Staffeln") : T("Film")].filter(Boolean).join(" · ")));
+    h("div", { class: "s" }, [item.year, item.type === "show" ? TP(item.poster_count, "1 Poster", "{0} Poster") : T("Film")].filter(Boolean).join(" · ")));
   function changed(it) {
     const i = S.items.findIndex(x => x.id === it.id);
     if (i >= 0) S.items[i] = it;

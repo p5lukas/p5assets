@@ -157,6 +157,7 @@ def _public_item(it: dict, full: bool = False) -> dict:
     out["available"] = it.get("available")
     out["slots"] = {k: {kk: vv for kk, vv in v.items() if kk != "path"} for k, v in it["slots"].items()}
     out["season_count"] = len(it["seasons"])
+    out["poster_count"] = 1 + len(it["seasons"])      # series poster + every season (Specials included when there is a season 0)
     if full:
         out["seasons"] = [{"number": s["number"], "title": s["title"], "slot": kometa.slot_key(s["number"]),
                            "label": kometa.slot_label(s["number"])} for s in it["seasons"]]
