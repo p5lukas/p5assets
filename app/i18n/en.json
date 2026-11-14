@@ -802,5 +802,9 @@
 "Position der Zeile": "Line position",
 "Unter dem Titel": "Below the title",
 "Frei": "Free",
-"Texthöhe": "Text height"
+"Texthöhe": "Text height",
+"Staffelzeile frei platzieren": "Place the season line freely",
+"Im Poster-Builder lässt sich die Staffelzeile jetzt über das ganze Poster verschieben, zum Beispiel der Titel oben und die Zeile unten. „Unter dem Titel“ bleibt der Standard.": "In the poster builder the season line can now be moved over the whole poster, for example the title at the top and the line at the bottom. “Below the title” remains the default.",
+"Logo-Sprachen und Pipette": "Logo languages and eyedropper",
+"Die Logo-Auswahl folgt deiner Sprachreihenfolge, Logos ohne Sprache stehen am Ende. Die Pipette übernimmt die Farbe jetzt beim Loslassen, auch nach dem Ziehen mit Finger oder Maus.": "The logo picker follows your language order, logos without a language come last. The eyedropper now takes the colour when you release, also after dragging with a finger or the mouse."
 }
