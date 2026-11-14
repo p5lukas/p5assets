@@ -1380,12 +1380,12 @@ async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img):
             x.label, loading(x.key) ? h("span", { class: "spin" }) : null)),
           h("button", { class: "tab" + (allOn ? " on" : ""), type: "button", onclick: () => toggleScope(allOn ? [slot, ...(scopes.some(x => x.key === "poster") && slot !== "poster" ? ["poster"] : [])] : scopes.map(x => x.key)) }, T("Alle")));
       }
-      fill(tabs, [{ name: "*", label: T("Alle"), state: "ok", count: r.images.length }, ...r.providers, ...(opts.pick ? [] : [{ name: "ThePosterDB", state: "ok", tpdb: true }])].map(pv => h("button", {
+      fill(tabs, [{ name: "*", label: T("Alle"), state: "ok", count: r.images.length }, ...r.providers, { name: "ThePosterDB", state: "ok", tpdb: true }].map(pv => h("button", {
         class: "tab" + (tab === pv.name ? " on" : "") + (pv.state !== "ok" ? " off" : ""), disabled: pv.state === "nokey",
         title: pv.state === "nokey" ? T("Kein API-Key hinterlegt (Einstellungen → Quellen)") : pv.state === "error" ? pv.error : "",
         onclick: () => { tab = pv.name; render(); } },
         pv.label || pv.name, pv.tpdb ? null : h("small", {}, pv.state === "nokey" ? T("kein Key") : pv.state === "error" ? T("Fehler") : pv.count))));
-      if (tab === "ThePosterDB") { fill(content, posterDbPanel(it, slot, draw, () => m.close())); return; }
+      if (tab === "ThePosterDB") { fill(content, posterDbPanel(it, slot, draw, () => m.close(), opts.pick)); return; }
       const prov = r.providers.find(p => p.name === tab);
       const list = tab === "*" ? r.images : r.images.filter(i => i.source === tab);
       const groups = r.languages.map(l => ({ code: l.code, imgs: list.filter(i => i.lang === l.code) }));
@@ -1402,14 +1402,14 @@ async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img):
         list.length ? null : h("div", { class: "empty" }, T("Keine Poster gefunden.")));
     }
     fill(body, scopes ? scopeBar : null, tabs, content); render();
-  } catch (e) { fill(body, h("div", { class: "status bad" }, e.message), opts.pick ? null : [h("h4", { style: "margin:18px 0 0;color:var(--accent)" }, T("ThePosterDB")), posterDbPanel(it, slot, draw, () => m.close())]); }
+  } catch (e) { fill(body, h("div", { class: "status bad" }, e.message), [h("h4", { style: "margin:18px 0 0;color:var(--accent)" }, T("ThePosterDB")), posterDbPanel(it, slot, draw, () => m.close(), opts.pick)]); }
 }
 
 /* -------------------------------------------------------- ThePosterDB --- */
 /** ThePosterDB has no API and only lets signed-in users download, so p5assets does not fetch anything from there:
  *  a search link (in the arr naming of the folder) and a drop zone for what was downloaded in the browser.
  *  slot = a single tile (one poster, or a set that is then reviewed); slot = null: a whole series set. */
-function posterDbPanel(it, slot, draw, done) {
+function posterDbPanel(it, slot, draw, done, pick) {      // pick(img): the poster builder takes the dropped picture as a background instead of saving it
   const base = (it.arr_folders && it.arr_folders[0]) || it.folder || `${it.title}${it.year ? ` (${it.year})` : ""}`;
   const bare = s => s.replace(/\s*[\{\[][^}\]]*[\}\]]/g, "").replace(/[:"&<>|\\\/*?;]+/g, " ").replace(/\s+/g, " ").trim();   // without {tvdb-…} / [...] and characters a firewall may dislike
   const enc = s => encodeURIComponent(s).replace(/[()!'*]/g, c => "%" + c.charCodeAt(0).toString(16).toUpperCase());
@@ -1421,7 +1421,7 @@ function posterDbPanel(it, slot, draw, done) {
   // Series: once the search is open in its tab the window has done its job (the download goes in via "Set hochladen" / the tile / dragging).
   // Movies: the window stays and has its own upload button, a handy workflow for a single poster.
   const movie = it.type === "movie";
-  if (!movie) link.addEventListener("click", () => setTimeout(done, 150));
+  if (!movie && !pick) link.addEventListener("click", () => setTimeout(done, 150));
   const upd = () => { link.href = url.value = `https://theposterdb.com/search?term=${enc(term.value.trim())}&section=${section}`; };
   const copy = h("button", { class: "btn sm", onclick: async () => {
     try { await navigator.clipboard.writeText(url.value); } catch { url.select(); document.execCommand("copy"); }
@@ -1431,6 +1431,12 @@ function posterDbPanel(it, slot, draw, done) {
   const ids = h("input", { type: "checkbox", checked: lsGet("p5tpdbids") === "1", onchange: e => { lsSet("p5tpdbids", e.target.checked ? "1" : "0"); term.value = e.target.checked ? base : bare(base); upd(); } });
   const handle = files => {
     if (!files || !files.length) return;
+    if (pick) {
+      const f = files.map(x => x.file).find(x => x && /^image\//.test(x.type));
+      if (!f) { toast(T("Keine Bilder gefunden"), "bad"); return; }
+      const u = URL.createObjectURL(f); done(); pick({ url: u, preview: u, source: "ThePosterDB", name: f.name });
+      return;
+    }
     const imgs = files.filter(f => /\.(jpe?g|png|webp|gif|bmp|tiff?|avif)$/i.test(f.path));
     done();
     if (slot && files.length === 1 && imgs.length === 1) uploadSlot(it, slot, files, draw);   // one poster for this tile
@@ -1438,14 +1444,14 @@ function posterDbPanel(it, slot, draw, done) {
   };
   const zone = h("div", { class: "tpzone" }, h("b", {}, "＋"),
     h("div", {}, T("Heruntergeladenes Poster hier ablegen")),
-    h("small", {}, T("Ein einzelnes Bild ersetzt das Poster dieses Films. Ein ZIP oder mehrere Bilder öffnen den Prüfdialog.")),
+    h("small", {}, pick ? T("Das Bild wird als Hintergrund dieses Posters übernommen. Poster von ThePosterDB enthalten meist Text – als Hintergrund taugen nur textlose Varianten.") : T("Ein einzelnes Bild ersetzt das Poster dieses Films. Ein ZIP oder mehrere Bilder öffnen den Prüfdialog.")),
     h("div", { class: "row wrap", style: "justify-content:center;margin-top:10px" },
-      h("button", { class: "btn sm primary", onclick: () => pickFiles(handle, true) }, T("Hochladen"))));
-  if (movie) makeDropTarget(zone, handle);
+      h("button", { class: "btn sm primary", onclick: () => pickFiles(handle, !pick) }, T("Hochladen"))));
+  if (movie || pick) makeDropTarget(zone, handle);
   return h("div", { class: "tpdb" },
     h("ol", { class: "tpsteps" },
       h("li", {}, T("Auf ThePosterDB suchen, Sprache und Set wählen und dort (angemeldet) herunterladen.")),
-      h("li", {}, movie ? T("Die heruntergeladene Datei danach hier hochladen oder ablegen: p5assets benennt sie Kometa-konform und legt sie ab.")
+      h("li", {}, pick ? T("Das heruntergeladene Bild danach hier ablegen oder wählen: es wird als Hintergrund dieses Posters übernommen und erst mit dem fertigen Poster gespeichert.") : movie ? T("Die heruntergeladene Datei danach hier hochladen oder ablegen: p5assets benennt sie Kometa-konform und legt sie ab.")
         : slot ? T("Das Bild danach über „Ersetzen“ bzw. „Hochladen“ dieser Kachel wählen oder auf die Kachel ziehen: p5assets benennt es Kometa-konform und legt es ab.")
         : T("Das Set danach über „Set hochladen“ wählen oder einfach in die Serien-Ansicht ziehen: p5assets benennt es Kometa-konform und legt es ab."))),
     h("label", { class: "f" }, T("Suchbegriff (englischer Ordnername aus Sonarr/Radarr)")),
@@ -1454,7 +1460,7 @@ function posterDbPanel(it, slot, draw, done) {
     h("div", { class: "hint", style: "margin:2px 0 0" }, T("Falls der Button blockiert wird: Link kopieren und in einen neuen Tab einfügen.")),
     h("label", { class: "opt", style: "margin-top:8px" }, ids, h("div", {}, T("Kennung wie {tvdb-123} mitsuchen"), h("small", {}, T("Ohne Kennung (Standard) wird nur „Titel (Jahr)“ gesucht.")))),
     h("p", { class: "hint" }, T("ThePosterDB bietet Downloads nur für angemeldete Nutzer an – deshalb lädt p5assets dort nichts selbst und braucht keine Zugangsdaten.")),
-    movie ? zone : null);
+    movie || pick ? zone : null);
 }
 
 function openPosterDbSet(it, draw) {

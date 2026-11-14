@@ -6,7 +6,7 @@ const BW = 1000, BH = 1500;
 // id = file name in /static/fonts and part of the CSS family "p5-<id>"; the list must match FONTS in app/styles.py
 const BUILD_FONTS = [["montserrat", "Montserrat", 700], ["raleway", "Raleway", 700], ["oswald", "Oswald", 700], ["bebas-neue", "Bebas Neue", 400],
   ["anton", "Anton", 400], ["cinzel", "Cinzel", 700], ["playfair-display", "Playfair Display", 700], ["lato", "Lato", 700]];
-const BUILD_DEFAULT = { font: "montserrat", upper: true, mode: "logo", blend: "off", blendAmount: 0.7, blendHeight: 0.35, titleScale: 0.7, titleY: 0.82, seasonScale: 0.9, gap: 0.02, seasonPos: "below", seasonY: 0.92, tracking: 0.22, titleColor: "#ffffff" };     // same on all posters; only the colour of the season line is per poster
+const BUILD_DEFAULT = { font: "montserrat", upper: true, mode: "logo", trim: true, blend: "off", blendAmount: 0.7, blendHeight: 0.35, titleScale: 0.7, titleY: 0.82, seasonScale: 0.9, gap: 0.02, seasonPos: "below", seasonY: 0.92, tracking: 0.22, titleColor: "#ffffff" };     // same on all posters; only the colour of the season line is per poster
 
 /* ---------------------------------------------------------------- texts --- */
 const ONES = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen",
@@ -63,6 +63,33 @@ function colorChoices(auto) {
   return [base, hslHex(hu, 0.6, 0.88), hslHex(hu, 0.85, 0.5), hslHex((hu + 180) % 360, 0.7, 0.72), "#ffffff", "#141414"];
 }
 
+/** The visible part of a logo: transparent margins are cut off (alpha below ~3 % counts as empty, plus 1 % of safety margin), so size and height refer to what you see.
+ *  A picture without real transparency is returned as it is. */
+const trimCache = new Map();
+function trimTransparent(img) {
+  if (trimCache.has(img)) return trimCache.get(img);
+  let out = img;
+  try {
+    const w = img.naturalWidth, h = img.naturalHeight, sc = Math.min(1, 500 / Math.max(w, h)), sw = Math.max(1, Math.round(w * sc)), sh = Math.max(1, Math.round(h * sc));
+    const c = document.createElement("canvas"); c.width = sw; c.height = sh;
+    const x = c.getContext("2d", { willReadFrequently: true }); x.drawImage(img, 0, 0, sw, sh);
+    const d = x.getImageData(0, 0, sw, sh).data;
+    let x0 = sw, y0 = sh, x1 = -1, y1 = -1;
+    for (let yy = 0; yy < sh; yy++) for (let xx = 0; xx < sw; xx++) if (d[(yy * sw + xx) * 4 + 3] > 8) { if (xx < x0) x0 = xx; if (xx > x1) x1 = xx; if (yy < y0) y0 = yy; if (yy > y1) y1 = yy; }
+    if (x1 >= 0) {
+      const m = Math.ceil(Math.max(sw, sh) * 0.01);
+      x0 = Math.max(0, x0 - m); y0 = Math.max(0, y0 - m); x1 = Math.min(sw - 1, x1 + m); y1 = Math.min(sh - 1, y1 + m);
+      const bx = Math.floor(x0 / sc), by = Math.floor(y0 / sc), bw = Math.min(w - bx, Math.ceil((x1 - x0 + 1) / sc)), bh = Math.min(h - by, Math.ceil((y1 - y0 + 1) / sc));
+      if (bw < w * 0.98 || bh < h * 0.98) {
+        const t = document.createElement("canvas"); t.width = bw; t.height = bh;
+        t.getContext("2d").drawImage(img, bx, by, bw, bh, 0, 0, bw, bh); out = t;
+      }
+    }
+  } catch { /* cannot read the pixels: use the logo as it is */ }
+  trimCache.set(img, out);
+  return out;
+}
+
 /* -------------------------------------------------------------- drawing --- */
 /** Draws one poster. o = { bg, logo, title, line, st (merged style), color } – images are already loaded (or null). */
 function drawBuilt(canvas, o) {
@@ -84,7 +111,7 @@ function drawBuilt(canvas, o) {
   // title: logo or text lines
   let titleH = 0, drawTitle = () => {};
   if (st.mode === "logo" && o.logo) {
-    const lw = o.logo.naturalWidth, lh = o.logo.naturalHeight;
+    const lw = o.logo.naturalWidth || o.logo.width, lh = o.logo.naturalHeight || o.logo.height;
     const s = Math.min(W * 0.8 * st.titleScale / lw, H * 0.28 * st.titleScale / lh, W * 0.94 / lw), dw = lw * s, dh = lh * s;
     titleH = dh; drawTitle = top => ctx.drawImage(o.logo, (W - dw) / 2, top, dw, dh);
   } else if (o.title) {
@@ -100,10 +127,10 @@ function drawBuilt(canvas, o) {
   // The title (logo or text) sits at the same height on every poster. The season line either hangs below it ("below") or is placed freely over the whole
   // poster ("free"). In "below" room for the line is always reserved so that the clamp near the edges is the same with and without a line.
   const fsS = W * 0.05 * st.seasonScale, gapPx = st.gap * H, lineH = fsS * 1.15, free = st.seasonPos === "free";
-  const top = Math.min(Math.max(st.titleY * H - titleH / 2, H * 0.03), H * 0.97 - (free ? titleH : titleH + gapPx + lineH));
+  const top = Math.min(Math.max(st.titleY * H - titleH / 2, 0), H - titleH);     // may reach both edges of the poster (but not leave it)
   drawTitle(top);
   if (o.line) {
-    const lineTop = free ? Math.min(Math.max(st.seasonY * H - lineH / 2, H * 0.03), H * 0.97 - lineH) : top + titleH + gapPx;
+    const lineTop = free ? Math.min(Math.max(st.seasonY * H - lineH / 2, H * 0.03), H * 0.97 - lineH) : Math.min(top + titleH + gapPx, H * 0.985 - lineH);
     ctx.font = `400 ${fsS}px "p5-source-sans-3", sans-serif`; ctx.fillStyle = o.color || "#ffffff"; ctx.textBaseline = "alphabetic";
     drawTracked(ctx, upper(o.line), W / 2, lineTop + fsS * 0.86, st.tracking * fsS);
   }
@@ -133,9 +160,9 @@ function makeBuilder(opts) {
   let titleText = it.title, logo = null /* { url, preview, source } */, logoRes = null, logoNote = "", presets = {}, sel = slots[0].key, saving = false, allTitle = true;
   const newP = s => ({ bg: null, line: s.season == null ? "" : seasonLine(s.season), color: null, auto: null, ov: {} });
   const P = Object.fromEntries(slots.map(s => [s.key, newP(s)]));
-  const TITLE_OV = ["titleScale", "titleY", "mode", "logo", "blend", "blendAmount", "blendHeight"];        // what a single poster may do differently (when "for all posters" is off)
+  const TITLE_OV = ["titleScale", "titleY", "mode", "logo", "trim", "blend", "blendAmount", "blendHeight"];        // what a single poster may do differently (when "for all posters" is off)
   const val = (key, a) => a in P[key].ov ? P[key].ov[a] : a === "logo" ? logo : G[a];
-  const style = key => ({ ...G, ...Object.fromEntries(["titleScale", "titleY", "mode", "blend", "blendAmount", "blendHeight"].map(a => [a, val(key, a)])) });
+  const style = key => ({ ...G, ...Object.fromEntries(["titleScale", "titleY", "mode", "trim", "blend", "blendAmount", "blendHeight"].map(a => [a, val(key, a)])) });
   const colorOf = key => P[key].color || P[key].auto || "#f1f1ee";
   const custom = key => Object.keys(P[key].ov).length > 0;
 
@@ -147,8 +174,9 @@ function makeBuilder(opts) {
   async function paint(key, full = false, bgOnly = false) {
     const p = P[key], cv = canvases[key], lg0 = val(key, "logo"), useLogoImg = lg0 && val(key, "mode") === "logo";
     await ensureFont(G.font);
-    const [bg, lg] = await Promise.all([p.bg ? loadImage(proxied(full ? p.bg.url : p.bg.preview || p.bg.url)).catch(() => null) : null,
+    const [bg, lg0img] = await Promise.all([p.bg ? loadImage(proxied(full ? p.bg.url : p.bg.preview || p.bg.url)).catch(() => null) : null,
       useLogoImg ? loadImage(proxied(full ? lg0.url : lg0.preview || lg0.url)).catch(() => null) : null]);
+    const lg = lg0img && val(key, "trim") ? trimTransparent(lg0img) : lg0img;
     if (bg && !p.auto) p.auto = autoColorOf(bg);
     const out = full ? Object.assign(document.createElement("canvas"), { width: BW, height: BH }) : cv;
     drawBuilt(out, { bg, logo: bgOnly ? null : lg, title: bgOnly ? "" : titleText, line: bgOnly ? "" : p.line, st: style(key), color: colorOf(key) });
@@ -278,6 +306,7 @@ function makeBuilder(opts) {
   const blendOff = blendBtn("off", T("Aus")), blendDark = blendBtn("dark", T("Dunkel")), blendLight = blendBtn("light", T("Hell"));
   const setPos = v => { G.seasonPos = v; syncControls(); paintAll(); };
   const posBelow = h("button", { class: "seg", type: "button", onclick: () => setPos("below") }, T("Unter dem Titel")), posFree = h("button", { class: "seg", type: "button", onclick: () => setPos("free") }, T("Frei"));
+  const trimChk = h("input", { type: "checkbox", onchange: e => { setTitle("trim", e.target.checked); syncControls(); repaintTitle(); syncCustom(); } });
   const allChk = h("input", { type: "checkbox", checked: true, onchange: e => {
     if (e.target.checked && slots.some(s => custom(s.key)) && !confirm(T("Die abweichenden Einstellungen einzelner Poster gehen verloren. Fortfahren?"))) { e.target.checked = false; return; }
     allTitle = e.target.checked;
@@ -322,6 +351,7 @@ function makeBuilder(opts) {
     ctl.blendAmount.row.hidden = ctl.blendHeight.row.hidden = bl === "off";
     posBelow.classList.toggle("on", G.seasonPos !== "free"); posFree.classList.toggle("on", G.seasonPos === "free");
     ctl.gap.row.hidden = G.seasonPos === "free"; ctl.seasonY.row.hidden = G.seasonPos !== "free";
+    trimChk.checked = !!val(key, "trim"); trimChk.closest("label").hidden = mode !== "logo";
     allChk.checked = allTitle; allChk.closest("label").hidden = !multi;
     lineInp.value = P[key].line;
     controls.querySelector(".bseason").hidden = !seasonSlot;
@@ -407,12 +437,13 @@ function makeBuilder(opts) {
   const titleSec = h("div", { class: "bsec" }, h("h4", {}, T("Titel")),
     h("div", { class: "row wrap" }, h("div", { class: "segs" }, modeLogo, modeText), logoBtn, logoUp),
     h("div", { class: "hint" }, T("PNG oder WebP mit Transparenz, auch per Drag & Drop hier ablegen")),
+    h("label", { class: "bchk btrim" }, trimChk, T("Transparenten Rand abschneiden")),
     h("div", { class: "hint bnote" }),
     h("label", { class: "brow" }, h("span", { class: "blab" }, T("Text")), textInp),
     h("label", { class: "brow" }, h("span", { class: "blab" }, T("Titelfarbe")), titleColorInp),
     h("label", { class: "brow" }, h("span", { class: "blab" }, T("Schrift")), fontSel, h("label", { class: "bchk" }, upperChk, T("Großbuchstaben"))),
     slider(T("Titelgröße"), "titleScale", 0.4, 1.6, 0.01, pct, true),
-    slider(T("Titelhöhe"), "titleY", 0.1, 0.9, 0.005, pct, true));
+    slider(T("Titelhöhe"), "titleY", 0, 1, 0.005, pct, true));
   makeDropTarget(titleSec, logoFromFile);
   const controls = h("div", { class: "bcontrols" },
     h("div", { class: "hint bbghint" }, T("Hintergrund: über ein Poster fahren (am Handy antippen) – suchen, Datei wählen, Vorschau. Ein Poster auf ein anderes ziehen kopiert den Hintergrund.")),

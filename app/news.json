@@ -1,4 +1,5 @@
 [
+  {"id": "builder-9", "version": "0.8.8", "title": "Logo frei verschiebbar", "text": "Das Logo lässt sich jetzt von ganz oben bis ganz unten verschieben, und transparente Ränder werden abgeschnitten. In der Builder-Suche gibt es außerdem den Tab ThePosterDB."},
   {"id": "builder-8", "version": "0.8.7", "title": "Poster immer im Blick", "text": "Im Baumodus stehen die Poster der Serie jetzt in einer festen Spalte links, die beim Scrollen stehen bleibt. So siehst du jede Änderung sofort. Die Einstellungen für den Staffeltext sind immer aufgeklappt."},
   {"id": "builder-7", "version": "0.8.6", "title": "Staffelzeile frei platzieren", "text": "Im Poster-Builder lässt sich die Staffelzeile jetzt über das ganze Poster verschieben, zum Beispiel der Titel oben und die Zeile unten. „Unter dem Titel“ bleibt der Standard."},
   {"id": "builder-6", "version": "0.8.5", "title": "Logo-Sprachen und Pipette", "text": "Die Logo-Auswahl folgt deiner Sprachreihenfolge, Logos ohne Sprache stehen am Ende. Die Pipette übernimmt die Farbe jetzt beim Loslassen, auch nach dem Ziehen mit Finger oder Maus."},

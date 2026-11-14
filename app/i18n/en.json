@@ -807,5 +807,10 @@
 "Logo-Sprachen und Pipette": "Logo languages and eyedropper",
 "Die Logo-Auswahl folgt deiner Sprachreihenfolge, Logos ohne Sprache stehen am Ende. Die Pipette übernimmt die Farbe jetzt beim Loslassen, auch nach dem Ziehen mit Finger oder Maus.": "The logo picker follows your language order, logos without a language come last. The eyedropper now takes the colour when you release, also after dragging with a finger or the mouse.",
 "Poster immer im Blick": "Posters always in view",
-"Im Baumodus stehen die Poster der Serie jetzt in einer festen Spalte links, die beim Scrollen stehen bleibt. So siehst du jede Änderung sofort. Die Einstellungen für den Staffeltext sind immer aufgeklappt.": "In build mode the posters of the series now stand in a fixed column on the left that stays put while you scroll, so you see every change at once. The season text settings are always expanded."
+"Im Baumodus stehen die Poster der Serie jetzt in einer festen Spalte links, die beim Scrollen stehen bleibt. So siehst du jede Änderung sofort. Die Einstellungen für den Staffeltext sind immer aufgeklappt.": "In build mode the posters of the series now stand in a fixed column on the left that stays put while you scroll, so you see every change at once. The season text settings are always expanded.",
+"Transparenten Rand abschneiden": "Trim the transparent margin",
+"Das Bild wird als Hintergrund dieses Posters übernommen. Poster von ThePosterDB enthalten meist Text – als Hintergrund taugen nur textlose Varianten.": "The picture is used as the background of this poster. Posters from ThePosterDB usually contain text – only textless versions work as a background.",
+"Das heruntergeladene Bild danach hier ablegen oder wählen: es wird als Hintergrund dieses Posters übernommen und erst mit dem fertigen Poster gespeichert.": "Then drop or choose the downloaded picture here: it becomes the background of this poster and is only saved with the finished poster.",
+"Logo frei verschiebbar": "Logo freely movable",
+"Das Logo lässt sich jetzt von ganz oben bis ganz unten verschieben, und transparente Ränder werden abgeschnitten. In der Builder-Suche gibt es außerdem den Tab ThePosterDB.": "The logo can now be moved from the very top to the very bottom, and transparent margins are trimmed. The builder search also has a ThePosterDB tab."
 }

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.8 – 2026-11-14
+
+**New**
+- Poster builder: the logo can be moved all the way from the top to the bottom edge (“Title height” 0–100 %); the clamp that kept the whole picture inside the poster is gone
+- Transparent margins of a logo are trimmed automatically, so size and height refer to the visible logo (“Trim the transparent margin”, on by default, can be switched off per logo)
+- ThePosterDB tab in the builder search: search link and drop zone; the dropped picture becomes the background of the selected poster
+
 ## 0.8.7 – 2026-11-14
 
 **Changed**

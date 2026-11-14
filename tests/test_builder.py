@@ -9,7 +9,7 @@ from app import main, providers, scanner, styles
 def test_sanitize_keeps_only_known_values_in_range():
     out = styles.sanitize({"font": "oswald", "upper": True, "mode": "text", "titleScale": 99, "titleY": -3,
                            "color": "#ABCDEF", "evil": "x", "gap": True})
-    assert out == {"font": "oswald", "upper": True, "mode": "text", "titleScale": 2.0, "titleY": 0.05, "color": "#abcdef"}
+    assert out == {"font": "oswald", "upper": True, "mode": "text", "titleScale": 2.0, "titleY": 0.0, "color": "#abcdef"}
     assert styles.sanitize("nope") == {}
     assert styles.sanitize({"font": "comic-sans", "color": "red"}) == {}
     assert styles.sanitize({"color": None}) == {"color": None}
@@ -23,6 +23,11 @@ def test_sanitize_blend():
 def test_sanitize_season_position():
     assert styles.sanitize({"seasonPos": "free", "seasonY": 2}) == {"seasonPos": "free", "seasonY": 0.97}
     assert styles.sanitize({"seasonPos": "left"}) == {}
+
+
+def test_sanitize_trim_and_title_height_range():
+    assert styles.sanitize({"trim": False, "titleY": 1.5}) == {"trim": False, "titleY": 1.0}
+    assert styles.sanitize({"trim": "yes"}) == {}
 
 
 def test_presets_roundtrip_and_limits(tmp_path, monkeypatch):
