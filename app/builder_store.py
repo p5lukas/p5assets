@@ -23,7 +23,7 @@ STALE_DAYS = 30
 FILE_RE = re.compile(r"^[0-9a-f]{16}\.(png|jpg|webp)$")
 SLOT_RE = re.compile(r"^(poster|season-\d{1,3})$")
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
-OVERRIDES = ("titleScale", "titleY", "mode", "trim", "blend", "blendAmount", "blendHeight")
+OVERRIDES = ("titleScale", "titleY", "mode", "trim", "blend", "blendAmount", "blendHeight", "tint", "tintA", "tintB", "tintAmount")
 
 
 def _root() -> Path:
@@ -60,6 +60,14 @@ def _num(v: object, lo: float, hi: float, default: float) -> float:
     return round(min(hi, max(lo, float(v))), 4) if isinstance(v, (int, float)) and not isinstance(v, bool) else default
 
 
+def _fit(fit: dict) -> dict:
+    """Crop of a background: zoom (below 1 = smaller than the poster), position, and what fills the free area."""
+    color = fit.get("color")
+    return {"zoom": _num(fit.get("zoom"), 0.3, 4, 1), "x": _num(fit.get("x"), 0, 1, 0.5), "y": _num(fit.get("y"), 0, 1, 0.5),
+            "fill": fit.get("fill") if fit.get("fill") in ("auto", "black", "white", "color", "blur") else "auto",
+            "color": color.lower() if isinstance(color, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", color) else "#12161c"}
+
+
 def sanitize(item_id: str, p: object) -> dict | None:
     if not isinstance(p, dict):
         return None
@@ -78,7 +86,7 @@ def sanitize(item_id: str, p: object) -> dict | None:
         out["posters"][key] = {
             "bg": _ref(v.get("bg"), item_id), "line": re.sub(r"[\x00-\x1f]", "", str(v.get("line") or ""))[:40],
             "color": color.lower() if isinstance(color, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", color) else None,
-            "fit": {"zoom": _num(fit.get("zoom"), 1, 4, 1), "x": _num(fit.get("x"), 0, 1, 0.5), "y": _num(fit.get("y"), 0, 1, 0.5)}, "ov": ov}
+            "fit": _fit(fit), "ov": ov}
     return out
 
 

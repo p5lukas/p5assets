@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.1 – 2026-11-15
+
+**New**
+- Poster builder, more sources for backgrounds (the “Source” row in the search): Episode pictures (TMDb stills, per season), Season pictures (fanart.tv season thumbs, TheTVDB season backgrounds and banners), Cast (portrait photos from TMDb), Figures (cut-out characters and clear art from fanart.tv, with transparency) and Plex (alternative posters and backgrounds your Plex server holds)
+- Zoom out: the zoom goes down to 30 %, “Fit” shows the whole picture; the free area can be filled automatically from the picture's edge (default), black, white, a colour (suggestions from the picture, eyedropper, free colour) or a blurred copy of the picture. Cut-out figures get a dark colour behind them
+- Colour filter over the background (off, black and white, one-colour tone, duotone with suggestions), strength adjustable; it is a look setting like the fade: for all posters or only for one
+
+**Fixed**
+- Backdrops did not show up when the search was opened from a season (a crash while labelling the pictures); a hint now says that backdrops belong to the whole series, not to a season
+
 ## 0.9.0 – 2026-11-15
 
 **New**

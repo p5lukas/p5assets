@@ -115,6 +115,38 @@ async def tmdb_backdrops(key: str, wanted: list[str], kind: str, tmdb_id: str) -
              "score": p.get("vote_average") or 0} for p in data.get("backdrops", []) if p.get("file_path")]
 
 
+async def tmdb_stills(key: str, tmdb_id: str, seasons: list[int]) -> list[dict]:
+    """Episode pictures (stills) of the given seasons, in episode order (the season details name one still per episode)."""
+    sem = asyncio.Semaphore(5)
+
+    async def one(n: int) -> list[dict]:
+        async with sem:
+            data = await _tmdb_images(key, f"/tv/{tmdb_id}/season/{n}")
+        out = []
+        for ep in data.get("episodes", []) or []:
+            path = ep.get("still_path")
+            if path:
+                num = ep.get("episode_number") or 0
+                out.append({"source": "TMDb", "url": f"{TMDB_IMG}original{path}", "preview": f"{TMDB_IMG}w300{path}", "lang": "xx",
+                            "label": f"S{n:02d}E{num:02d} {ep.get('name') or ''}".strip(), "landscape": True, "score": -(n * 1000 + num)})
+        return out
+
+    res = await asyncio.gather(*(one(n) for n in seasons[:25]))
+    return [i for part in res for i in part]
+
+
+async def tmdb_cast(key: str, kind: str, tmdb_id: str) -> list[dict]:
+    """Photos of the cast (portrait format), in billing order."""
+    path = f"/movie/{tmdb_id}/credits" if kind == "movie" else f"/tv/{tmdb_id}/aggregate_credits"
+    data = await _tmdb_images(key, path)
+    out = []
+    for i, p in enumerate((data.get("cast") or [])[:60]):
+        if p.get("profile_path"):
+            out.append({"source": "TMDb", "url": f"{TMDB_IMG}original{p['profile_path']}", "preview": f"{TMDB_IMG}h632{p['profile_path']}", "lang": "xx",
+                        "label": p.get("name") or "", "score": -i})
+    return out
+
+
 # ------------------------------------------------------------- fanart.tv ---
 
 async def fanart_posters(key: str, kind: str, ids: dict, tmdb_id: str | None, season: int | None) -> list[dict]:
@@ -346,6 +378,84 @@ async def tvdb_backdrops(key: str, pin: str, kind: str, ids: dict) -> list[dict]
     return out
 
 
+async def fanart_extras(key: str, kind: str, ids: dict, tmdb_id: str | None, season: int | None, want: str) -> list[dict]:
+    """want "seasonart": the landscape thumbs fanart.tv files under a season; "figures": cut-out characters / clear art (transparent)."""
+    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+        if kind == "movie":
+            if want == "seasonart":
+                return []
+            mid = tmdb_id or ids.get("imdb")
+            if not mid:
+                return []
+            r = await c.get(f"https://webservice.fanart.tv/v3/movies/{mid}", params={"api_key": key})
+            fields = ("hdmovieclearart", "movieart")
+        else:
+            if not ids.get("tvdb"):
+                return []
+            r = await c.get(f"https://webservice.fanart.tv/v3/tv/{ids['tvdb']}", params={"api_key": key})
+            fields = ("seasonthumb",) if want == "seasonart" else ("characterart", "hdclearart", "clearart")
+        if r.status_code == 404:
+            return []
+        r.raise_for_status()
+        data = r.json()
+    out = []
+    for field in fields:
+        for p in data.get(field, []) or []:
+            url = p.get("url", "")
+            if not url:
+                continue
+            n = p.get("season")
+            if want == "seasonart" and season is not None and str(n) != str(season):
+                continue
+            label = (f"S{int(n):02d}" if str(n).isdigit() else "") if want == "seasonart" else field
+            out.append({"source": "fanart.tv", "url": url, "preview": url.replace("/fanart/", "/preview/"), "lang": langs.norm_fanart(p.get("lang")),
+                        "label": label, "landscape": want == "seasonart", "transparent": want == "figures",
+                        "score": int(p.get("likes") or 0) * 0.5})
+    return out
+
+
+async def tvdb_seasonart(key: str, pin: str, ids: dict, seasons: list[int]) -> list[dict]:
+    """Backgrounds and banners that TheTVDB files under a season (artwork types 8 and 6)."""
+    sid = ids.get("tvdb")
+    if not sid:
+        return []
+    token = await _tvdb_login(key, pin)
+    out: list[dict] = []
+    async with httpx.AsyncClient(timeout=TIMEOUT, headers={"Authorization": f"Bearer {token}"}) as c:
+        r = await c.get(f"https://api4.thetvdb.com/v4/series/{sid}/extended")
+        if r.status_code == 404:
+            return []
+        r.raise_for_status()
+        by_number = {s.get("number"): s.get("id") for s in r.json()["data"].get("seasons") or [] if (s.get("type") or {}).get("type") in (None, "official")}
+        sem = asyncio.Semaphore(4)
+
+        async def one(n: int) -> list[dict]:
+            season_id = by_number.get(n)
+            if not season_id:
+                return []
+            async with sem:
+                rr = await c.get(f"https://api4.thetvdb.com/v4/seasons/{season_id}/extended")
+            if rr.status_code == 404:
+                return []
+            rr.raise_for_status()
+            res = []
+            for a in rr.json()["data"].get("artwork") or []:
+                if a.get("type") not in (6, 8) or not a.get("image"):
+                    continue
+                img = a["image"]
+                img = "https://artworks.thetvdb.com" + img if img.startswith("/") else img
+                thumb = a.get("thumbnail") or img
+                thumb = "https://artworks.thetvdb.com" + thumb if thumb.startswith("/") else thumb
+                res.append({"source": "TVDB", "url": img, "preview": thumb, "lang": langs.norm_tvdb(a.get("language")),
+                            "label": f"S{n:02d}" if n else "Specials", "landscape": True, "width": a.get("width"), "height": a.get("height"),
+                            "score": (a.get("score") or 0) / 100000})
+            return res
+
+        for part in await asyncio.gather(*(one(n) for n in seasons[:25])):
+            out.extend(part)
+    return out
+
+
 # ------------------------------------------------------------ aggregate ---
 
 def _collect(status: dict, tasks: dict, results: list, order: list[str]) -> list[dict]:
@@ -399,6 +509,53 @@ async def search_backdrops(apis: dict, kind: str, ids: dict, title: str, year: i
     """Backdrops (landscape pictures) of a title for the poster builder."""
     return await _search_extra(apis, kind, ids, title, year, order,
                                lambda *a: tmdb_backdrops(*a), lambda *a: fanart_backdrops(*a), lambda *a: tvdb_backdrops(*a))
+
+
+SOURCE_KINDS = ("backdrop", "stills", "seasonart", "cast", "figures")
+
+
+async def search_source(kind: str, apis: dict, item_type: str, ids: dict, title: str, year: int | None,
+                        season: int | None, season_numbers: list[int], order: list[str] | None = None) -> dict:
+    """The extra picture sources of the poster builder: backdrops, episode pictures (stills), season pictures, cast photos, cut-out figures.
+    Same shape as ``search`` (images, providers, languages); ``flat`` = no language groups (the pictures carry a label instead)."""
+    if kind == "backdrop":
+        return await search_backdrops(apis, item_type, ids, title, year, order)
+    order = order or langs.DEFAULT_ORDER
+    wanted = [season] if season is not None else sorted(set(season_numbers))
+    status: dict[str, dict] = {}
+    tasks: dict[str, object] = {}
+
+    def want(name: str) -> bool:
+        status[name] = {"name": name, "state": "nokey", "count": 0, "error": None}
+        return True
+
+    tmdb_id = ids.get("tmdb")
+    if kind in ("stills", "cast") and want("TMDb") and apis.get("tmdb"):
+        try:
+            tmdb_id = await tmdb_find_id(apis["tmdb"], ids, item_type, title, year)
+        except Exception as e:  # noqa: BLE001
+            status["TMDb"].update(state="error", error=short(e))
+        if tmdb_id:
+            tasks["TMDb"] = tmdb_stills(apis["tmdb"], tmdb_id, wanted) if kind == "stills" else tmdb_cast(apis["tmdb"], item_type, tmdb_id)
+        elif status["TMDb"]["state"] == "nokey":
+            status["TMDb"].update(state="ok")
+    if kind in ("seasonart", "figures"):
+        if want("fanart.tv") and apis.get("fanart"):
+            if not tmdb_id and apis.get("tmdb") and item_type == "movie":
+                try:
+                    tmdb_id = await tmdb_find_id(apis["tmdb"], ids, item_type, title, year)
+                except Exception:  # noqa: BLE001
+                    tmdb_id = None
+            tasks["fanart.tv"] = fanart_extras(apis["fanart"], item_type, ids, tmdb_id, season, "seasonart" if kind == "seasonart" else "figures")
+        if kind == "seasonart" and want("TVDB") and apis.get("tvdb"):
+            tasks["TVDB"] = tvdb_seasonart(apis["tvdb"], apis.get("tvdb_pin", ""), ids, wanted)
+    results = await asyncio.gather(*tasks.values(), return_exceptions=True)
+    images = _collect(status, tasks, results, order)
+    images.sort(key=lambda i: -i.get("score", 0))
+    catalogue = {l["code"]: l for l in langs.catalogue()}
+    return {"images": images, "providers": list(status.values()), "flat": kind in ("stills", "cast"),
+            "languages": [{**catalogue.get(c, {"code": c, "name": c, "native": ""}), "rank": i} for i, c in enumerate(order)],
+            "errors": {n: s["error"] for n, s in status.items() if s["error"]}}
 
 
 async def search(apis: dict, kind: str, ids: dict, title: str, year: int | None, season: int | None,

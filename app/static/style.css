@@ -702,3 +702,10 @@ body.glitching #app,body.glitching #foot{text-shadow:0 0 9px var(--glow);transit
 .cmpcell canvas,.cmpph{width:100%;aspect-ratio:2/3;border-radius:var(--r);border:1px solid var(--line);background:var(--panel);display:flex;align-items:center;justify-content:center}
 .cmpcell:hover canvas{border-color:var(--accent);box-shadow:0 0 18px var(--dim)}.cmpcell:hover{color:var(--accent)}
 .ballchk{padding:9px 12px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel)}
+/* poster builder 0.9.1: more sources, free area, colour filter */
+.tintpreset{width:46px;height:24px;border-radius:12px;border:2px solid var(--line);padding:0;cursor:pointer}
+.tintpreset:hover{border-color:var(--accent);box-shadow:0 0 8px var(--glow)}
+.bfillrows{display:flex;flex-direction:column;gap:10px}
+.kindhint{margin:0 0 14px}
+.pick.checker img{object-fit:contain;padding:8px;background:repeating-conic-gradient(#1b2a21 0 25%,#12201a 0 50%) 0 0/16px 16px}
+.tabs[hidden]{display:none}

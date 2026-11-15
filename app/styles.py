@@ -9,7 +9,7 @@ import threading
 from . import config
 
 FONTS = ("montserrat", "raleway", "oswald", "bebas-neue", "anton", "cinzel", "playfair-display", "lato")
-NUMBERS = {"seasonY": (0.03, 0.97), "blendAmount": (0.1, 1.0), "blendHeight": (0.1, 0.8), "titleScale": (0.3, 2.0), "titleY": (0.0, 1.0), "seasonScale": (0.3, 3.0), "gap": (0.0, 0.12), "tracking": (0.0, 0.5)}
+NUMBERS = {"tintAmount": (0.1, 1.0), "seasonY": (0.03, 0.97), "blendAmount": (0.1, 1.0), "blendHeight": (0.1, 0.8), "titleScale": (0.3, 2.0), "titleY": (0.0, 1.0), "seasonScale": (0.3, 3.0), "gap": (0.0, 0.12), "tracking": (0.0, 0.5)}
 MAX_PRESETS = 50
 _lock = threading.Lock()
 
@@ -31,6 +31,12 @@ def sanitize(style: object) -> dict:
         out["upper"] = style["upper"]
     if style.get("seasonPos") in ("below", "free"):
         out["seasonPos"] = style["seasonPos"]
+    if style.get("tint") in ("off", "mono", "tint", "duotone"):
+        out["tint"] = style["tint"]
+    for key in ("tintA", "tintB"):
+        v = style.get(key)
+        if isinstance(v, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", v):
+            out[key] = v.lower()
     if style.get("blend") in ("off", "dark", "light"):
         out["blend"] = style["blend"]
     if style.get("mode") in ("logo", "text"):

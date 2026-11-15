@@ -1352,25 +1352,37 @@ async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img):
       });
       return { images, providers, languages: first.languages };
     }
-    let r = merge(), tab = "*", kind = "poster", bdRes = null;      // kind "backdrop" (poster builder only): landscape pictures of the title as backgrounds
+    // The poster builder has more sources for backgrounds than posters: backdrops, episode pictures, season pictures, cast photos, cut-out figures, Plex
+    let r = merge(), tab = "*", kind = "poster";
+    const kindRes = {}, kindLoading = new Set(), EMPTY = { images: [], providers: [], languages: [], flat: true };
+    const KINDS = !opts.pick ? [] : [["poster", T("Poster")], ["backdrop", T("Backdrops")],
+      ...(it.type === "show" ? [["stills", T("Episodenbilder")], ["seasonart", T("Staffelbilder")]] : []), ["cast", T("Darsteller")], ["figures", T("Figuren")], ["plex", T("Plex")]];
+    const HINTS = { backdrop: T("Backdrops gehören zur ganzen Serie bzw. zum ganzen Film, nicht zu einer Staffel. Du wählst danach den Bildausschnitt."),
+      stills: T("Bilder aus den Folgen. Bei einer Staffel nur ihre Folgen, beim Serienposter alle Staffeln."),
+      seasonart: T("Bilder, die fanart.tv und TheTVDB einer Staffel zuordnen."),
+      cast: T("Fotos der Darsteller im Hochformat."),
+      figures: T("Freigestellte Figuren und Motive mit Transparenz. Sie brauchen eine Fläche dahinter: Wähle danach unter „Bildausschnitt“ die Füllung."),
+      plex: T("Bilder aus Plex: alternative Poster und Hintergründe dieses Titels.") };
     const kindBar = opts.pick ? h("div", { class: "tabs scopes" }) : null;
     async function setKind(k) {
       kind = k; tab = "*";
-      if (k === "backdrop" && !bdRes) {
-        render();
-        try { bdRes = await api(`/items/${it.id}/backdrops`); } catch (e) { toast(e.message, "bad"); bdRes = { images: [], providers: [], languages: [] }; }
+      if (k !== "poster" && !kindRes[k]) {
+        kindLoading.add(k); render();
+        try { kindRes[k] = await api(`/items/${it.id}/sources/${k}?slot=${encodeURIComponent(slot)}`); } catch (e) { toast(e.message, "bad"); }
+        kindLoading.delete(k);
       }
       render();
     }
+    const src = u => u.startsWith("http") ? "/api/proxy?url=" + encodeURIComponent(u) : u;
     const scopeBar = h("div", { class: "tabs scopes" }), tabs = h("div", { class: "tabs" }), content = h("div");
     const pick = img => {
-      const p = h("div", { class: "pick", title: T("Übernehmen"), onclick: async () => {
+      const p = h("div", { class: "pick" + (img.transparent ? " checker" : ""), title: T("Übernehmen"), onclick: async () => {
         if (opts.pick) { opts.pick(img); m.close(); return; }
         p.classList.add("busy");
         try { const res = await api(`/items/${it.id}/${slot}/url`, { json: { url: img.url } }); undoToast(T("Übernommen ✓"), res, draw); m.close(); S.rain.add(it.id + "|" + slot); draw(res.item); }
         catch (e) { p.classList.remove("busy"); toast(e.message, "bad"); }
-      } }, h("img", { loading: "lazy", src: "/api/proxy?url=" + encodeURIComponent(img.preview || img.url) }),
-        h("span", {}, img.source + (chosen.size > 1 ? " · " + short(img.scope) : ""), img.width ? h("b", {}, `${img.width}×${img.height}`) : ""));
+      } }, h("img", { loading: "lazy", src: src(img.preview || img.url) }),
+        h("span", {}, kind === "poster" ? img.source + (chosen.size > 1 ? " · " + short(img.scope) : "") : img.label || img.source, img.width ? h("b", {}, `${img.width}×${img.height}`) : ""));
       return p;
     };
     async function toggleScope(keys) {
@@ -1380,11 +1392,9 @@ async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img):
       await Promise.all(keys.map(loadSafe)); render();
     }
     function render() {
-      r = kind === "backdrop" ? (bdRes || { images: [], providers: [], languages: [] }) : merge();
+      r = kind === "poster" ? merge() : kindRes[kind] || EMPTY;
       if (kindBar) fill(kindBar, h("span", { class: "hint", style: "margin:0 4px 0 0;align-self:center" }, T("Quelle")),
-        h("button", { class: "tab" + (kind === "poster" ? " on" : ""), type: "button", onclick: () => setKind("poster") }, T("Poster")),
-        h("button", { class: "tab" + (kind === "backdrop" ? " on" : ""), type: "button", title: T("Querformat-Bilder der Serie bzw. des Films; du wählst danach den Bildausschnitt"), onclick: () => setKind("backdrop") }, T("Backdrops"),
-          kind === "backdrop" && !bdRes ? h("span", { class: "spin" }) : null));
+        KINDS.map(([k, label]) => h("button", { class: "tab" + (kind === k ? " on" : ""), type: "button", onclick: () => setKind(k) }, label, kindLoading.has(k) ? h("span", { class: "spin" }) : null)));
       if (scopes && kind === "poster") {
         const loading = k => chosen.has(k) && !done[k];
         const allOn = scopes.every(x => chosen.has(x.key));
@@ -1394,7 +1404,7 @@ async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img):
           h("button", { class: "tab" + (allOn ? " on" : ""), type: "button", onclick: () => toggleScope(allOn ? [slot, ...(scopes.some(x => x.key === "poster") && slot !== "poster" ? ["poster"] : [])] : scopes.map(x => x.key)) }, T("Alle")));
       } else if (scopes) fill(scopeBar);
       scopeBar.hidden = !(scopes && kind === "poster");
-      fill(tabs, [{ name: "*", label: T("Alle"), state: "ok", count: r.images.length }, ...r.providers, { name: "ThePosterDB", state: "ok", tpdb: true }].map(pv => h("button", {
+      fill(tabs, [{ name: "*", label: T("Alle"), state: "ok", count: r.images.length }, ...r.providers, ...(kind === "poster" ? [{ name: "ThePosterDB", state: "ok", tpdb: true }] : [])].map(pv => h("button", {
         class: "tab" + (tab === pv.name ? " on" : "") + (pv.state !== "ok" ? " off" : ""), disabled: pv.state === "nokey",
         title: pv.state === "nokey" ? T("Kein API-Key hinterlegt (Einstellungen → Quellen)") : pv.state === "error" ? pv.error : "",
         onclick: () => { tab = pv.name; render(); } },
@@ -1407,13 +1417,22 @@ async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img):
       list.filter(i => !r.languages.some(l => l.code === i.lang)).forEach(i => (others[i.lang] ||= []).push(i));
       Object.keys(others).sort((a, b) => others[b].length - others[a].length).forEach(code => groups.push({ code, imgs: others[code], other: true }));
       if (opts.pick) groups.sort((a, b) => (b.code === "xx") - (a.code === "xx"));      // building: textless first, whatever the language preferences say
+      const wide = ["backdrop", "stills", "seasonart"].includes(kind);
+      let shown;
+      if (r.group === "label") {                                      // e.g. Plex: posters and backgrounds apart
+        const labels = [...new Set(list.map(i => i.label))];
+        shown = labels.map(l => { const imgs = list.filter(i => i.label === l); return h("div", { class: "langgroup" }, h("h4", {}, l, h("small", {}, ` ${imgs.length}`)),
+          h("div", { class: "picks" + (imgs[0].landscape ? " wide" : "") }, imgs.map(pick))); });
+      } else if (r.flat) shown = list.length ? h("div", { class: "picks" + (wide ? " wide" : "") }, list.map(pick)) : null;
+      else shown = groups.filter(g => g.imgs.length).map((g, n) => h("div", { class: "langgroup" },
+        h("h4", {}, g.other ? T("Weitere Sprache · ") : `${n + 1}. `, langTitle(g.code), h("small", {}, ` ${g.imgs.length}`)),
+        h("div", { class: "picks" + (wide ? " wide" : "") }, g.imgs.map(pick))));
       fill(content,
+        kind !== "poster" && HINTS[kind] ? h("div", { class: "hint kindhint" }, HINTS[kind]) : null,
         prov && prov.state === "error" ? h("div", { class: "status bad" }, `[ !! ] ${prov.name}: ${prov.error}`) : null,
         tab === "*" ? r.providers.filter(p => p.state === "error").map(p => h("div", { class: "status bad" }, `[ !! ] ${p.name}: ${p.error}`)) : null,
-        groups.filter(g => g.imgs.length).map((g, n) => h("div", { class: "langgroup" },
-          h("h4", {}, g.other ? T("Weitere Sprache · ") : `${n + 1}. `, langTitle(g.code), h("small", {}, ` ${g.imgs.length}`)),
-          h("div", { class: "picks" + (kind === "backdrop" ? " wide" : "") }, g.imgs.map(pick)))),
-        list.length ? null : h("div", { class: "empty" }, T("Keine Poster gefunden.")));
+        shown,
+        list.length || kindLoading.has(kind) ? null : h("div", { class: "empty" }, kind === "poster" ? T("Keine Poster gefunden.") : T("Keine Bilder gefunden.")));
     }
     fill(body, kindBar, scopes ? scopeBar : null, tabs, content); render();
   } catch (e) { fill(body, h("div", { class: "status bad" }, e.message), [h("h4", { style: "margin:18px 0 0;color:var(--accent)" }, T("ThePosterDB")), posterDbPanel(it, slot, draw, () => m.close(), opts.pick)]); }

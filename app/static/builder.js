@@ -6,8 +6,8 @@ const BW = 1000, BH = 1500;
 // id = file name in /static/fonts and part of the CSS family "p5-<id>"; the list must match FONTS in app/styles.py
 const BUILD_FONTS = [["montserrat", "Montserrat", 700], ["raleway", "Raleway", 700], ["oswald", "Oswald", 700], ["bebas-neue", "Bebas Neue", 400],
   ["anton", "Anton", 400], ["cinzel", "Cinzel", 700], ["playfair-display", "Playfair Display", 700], ["lato", "Lato", 700]];
-const BUILD_FIT = { zoom: 1, x: 0.5, y: 0.5 };
-const BUILD_DEFAULT = { font: "montserrat", upper: true, mode: "logo", trim: true, blend: "off", blendAmount: 0.7, blendHeight: 0.35, titleScale: 0.7, titleY: 0.82, seasonScale: 0.9, gap: 0.02, seasonPos: "below", seasonY: 0.92, tracking: 0.22, titleColor: "#ffffff" };     // same on all posters; only the colour of the season line is per poster
+const BUILD_FIT = { zoom: 1, x: 0.5, y: 0.5, fill: "auto", color: "#12161c" };
+const BUILD_DEFAULT = { font: "montserrat", upper: true, mode: "logo", trim: true, tint: "off", tintA: "#101a2e", tintB: "#ffd9a0", tintAmount: 1, blend: "off", blendAmount: 0.7, blendHeight: 0.35, titleScale: 0.7, titleY: 0.82, seasonScale: 0.9, gap: 0.02, seasonPos: "below", seasonY: 0.92, tracking: 0.22, titleColor: "#ffffff" };     // same on all posters; only the colour of the season line is per poster
 
 /* ---------------------------------------------------------------- texts --- */
 const ONES = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen",
@@ -98,6 +98,74 @@ function trimTransparent(img) {
   return out;
 }
 
+/* ------------------------------------------------------ background helpers --- */
+const infoCache = new WeakMap();
+/** A tiny copy of a picture: its average colour, the colour of each edge and whether it has transparency (all read from ~32 px). */
+function imageInfo(img) {
+  if (infoCache.has(img)) return infoCache.get(img);
+  const info = { avg: "#f1f1ee", edges: {}, transparent: false, tiny: null };
+  try {
+    const w = 32, h = Math.max(4, Math.round(32 * img.naturalHeight / img.naturalWidth)), c = document.createElement("canvas"); c.width = w; c.height = h;
+    const x = c.getContext("2d", { willReadFrequently: true }); x.drawImage(img, 0, 0, w, h);
+    const d = x.getImageData(0, 0, w, h).data, mean = (x0, y0, x1, y1) => {
+      let r = 0, g = 0, b = 0, a = 0;
+      for (let yy = y0; yy < y1; yy++) for (let xx = x0; xx < x1; xx++) { const i = (yy * w + xx) * 4, al = d[i + 3] / 255; r += d[i] * al; g += d[i + 1] * al; b += d[i + 2] * al; a += al; }
+      return a > 0.5 ? [r / a, g / a, b / a] : null;
+    };
+    const k = Math.max(1, Math.round(w / 16)), kh = Math.max(1, Math.round(h / 16));
+    info.edges = { l: mean(0, 0, k, h), r: mean(w - k, 0, w, h), t: mean(0, 0, w, kh), b: mean(0, h - kh, w, h) };
+    const all = mean(0, 0, w, h);
+    if (all) info.avg = "#" + all.map(v => Math.round(v).toString(16).padStart(2, "0")).join("");
+    for (let i = 3; i < d.length; i += 4) if (d[i] < 250) { info.transparent = true; break; }
+    info.tiny = c;
+  } catch { /* unreadable: neutral values */ }
+  infoCache.set(img, info);
+  return info;
+}
+const rgbCss = (c, k = 1) => `rgb(${Math.round(c[0] * k)},${Math.round(c[1] * k)},${Math.round(c[2] * k)})`;
+const hexRgb = hex => [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
+/** What is behind a picture that does not cover the poster (zoomed out, or with transparency). */
+function fillFree(ctx, img, f, W, H, dx, dy, dw, dh) {
+  const info = imageInfo(img), dark = "#0b1a12";
+  if (f.fill === "black") { ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H); return; }
+  if (f.fill === "white") { ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, W, H); return; }
+  if (f.fill === "color") { ctx.fillStyle = f.color || BUILD_FIT.color; ctx.fillRect(0, 0, W, H); return; }
+  if (f.fill === "blur" && info.tiny) {                           // a soft, enlarged copy of the picture behind itself
+    const t = info.tiny, mid = document.createElement("canvas"); mid.width = 96; mid.height = Math.max(8, Math.round(96 * t.height / t.width));
+    const m = mid.getContext("2d"); m.imageSmoothingQuality = "high"; m.drawImage(t, 0, 0, mid.width, mid.height);
+    const s = Math.max(W / mid.width, H / mid.height);
+    ctx.save(); ctx.imageSmoothingQuality = "high"; ctx.drawImage(mid, (W - mid.width * s) / 2, (H - mid.height * s) / 2, mid.width * s, mid.height * s); ctx.restore();
+    ctx.fillStyle = "rgba(0,0,0,0.25)"; ctx.fillRect(0, 0, W, H);
+    return;
+  }
+  // auto: the colour of the picture's edge continues into the free area, a little darker towards the poster edge
+  const e = info.edges, have = Object.values(e).filter(Boolean);
+  const base = have.length ? have.reduce((a, c) => [a[0] + c[0] / have.length, a[1] + c[1] / have.length, a[2] + c[2] / have.length], [0, 0, 0]) : null;
+  ctx.fillStyle = base ? rgbCss(base, 0.8) : dark; ctx.fillRect(0, 0, W, H);
+  const side = (c, x0, y0, x1, y1, gx0, gy0, gx1, gy1) => {
+    if (!c) return;
+    const g = ctx.createLinearGradient(gx0, gy0, gx1, gy1); g.addColorStop(0, rgbCss(c)); g.addColorStop(1, rgbCss(c, 0.55));
+    ctx.fillStyle = g; ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+  };
+  if (dx > 0.5) side(e.l, 0, 0, dx, H, dx, 0, 0, 0);
+  if (dx + dw < W - 0.5) side(e.r, dx + dw, 0, W, H, dx + dw, 0, W, 0);
+  if (dy > 0.5) side(e.t, 0, 0, W, dy, 0, dy, 0, 0);
+  if (dy + dh < H - 0.5) side(e.b, 0, dy + dh, W, H, 0, dy + dh, 0, H);
+}
+/** Colour filter over everything drawn so far: black & white, a one-colour tone, or a duotone (shadows → highlights). */
+function applyTint(ctx, W, H, st) {
+  const a = st.tintAmount ?? 1, img = ctx.getImageData(0, 0, W, H), d = img.data;
+  let c1 = null, c2 = null;
+  if (st.tint === "duotone") { c1 = hexRgb(st.tintA); c2 = hexRgb(st.tintB); }
+  else if (st.tint === "tint") { const c = hexRgb(st.tintB); c1 = c.map(v => v * 0.12); c2 = c.map(v => v + (255 - v) * 0.55); }
+  const lut = c1 ? Array.from({ length: 256 }, (_, l) => c1.map((v, k) => v + (c2[k] - v) * l / 255)) : null;
+  for (let i = 0; i < d.length; i += 4) {
+    const l = Math.round(0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]), t = lut ? lut[l] : [l, l, l];
+    d[i] += (t[0] - d[i]) * a; d[i + 1] += (t[1] - d[i + 1]) * a; d[i + 2] += (t[2] - d[i + 2]) * a;
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
 /* -------------------------------------------------------------- drawing --- */
 /** Draws one poster. o = { bg, logo, title, line, st (merged style), color } – images are already loaded (or null). */
 function drawBuilt(canvas, o) {
@@ -105,11 +173,14 @@ function drawBuilt(canvas, o) {
   const def = BUILD_FONTS.find(f => f[0] === st.font) || BUILD_FONTS[0], fam = `"p5-${def[0]}", sans-serif`;
   ctx.clearRect(0, 0, W, H);
   if (o.bg) {                                                      // cover fit
-    const f = o.fit || BUILD_FIT, s = Math.max(W / o.bg.naturalWidth, H / o.bg.naturalHeight) * f.zoom, dw = o.bg.naturalWidth * s, dh = o.bg.naturalHeight * s;
-    ctx.drawImage(o.bg, (W - dw) * f.x, (H - dh) * f.y, dw, dh);               // cover fit, then zoomed and shifted (x, y: 0 = left / top edge, 1 = right / bottom edge)
+    const f = o.fit || BUILD_FIT, nw = o.bg.naturalWidth, nh = o.bg.naturalHeight, s = Math.max(W / nw, H / nh) * f.zoom, dw = nw * s, dh = nh * s;
+    const dx = (W - dw) * f.x, dy = (H - dh) * f.y;                              // cover fit, then zoomed and shifted (x, y: 0 = left / top edge, 1 = right / bottom edge)
+    if (dw < W - 0.5 || dh < H - 0.5 || imageInfo(o.bg).transparent) fillFree(ctx, o.bg, f, W, H, dx, dy, dw, dh);       // zoomed out (or cut-out): something has to be behind
+    ctx.drawImage(o.bg, dx, dy, dw, dh);
   } else {
     const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#0b1a12"); g.addColorStop(1, "#03100a"); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
+  if (st.tint && st.tint !== "off") applyTint(ctx, W, H, st);
   if (st.blend === "dark" || st.blend === "light") {               // a soft fade from the bottom edge for busy pictures
     const hgt = H * st.blendHeight, g = ctx.createLinearGradient(0, H, 0, H - hgt), rgb = st.blend === "dark" ? "0,0,0" : "255,255,255";
     [[0, 1], [0.3, 0.78], [0.6, 0.38], [0.85, 0.1], [1, 0]].forEach(([t, k]) => g.addColorStop(t, `rgba(${rgb},${(k * st.blendAmount).toFixed(3)})`));
@@ -168,9 +239,9 @@ function makeBuilder(opts) {
   let titleText = it.title, logo = null /* { url, preview, source } */, logoRes = null, logoNote = "", presets = {}, sel = slots[0].key, saving = false, allTitle = true;
   const newP = s => ({ bg: null, line: s.season == null ? "" : seasonLine(s.season), color: null, auto: null, autoSig: "", fit: { ...BUILD_FIT }, ov: {} });
   const P = Object.fromEntries(slots.map(s => [s.key, newP(s)]));
-  const TITLE_OV = ["titleScale", "titleY", "mode", "logo", "trim", "blend", "blendAmount", "blendHeight"];        // what a single poster may do differently (when "for all posters" is off)
+  const TITLE_OV = ["titleScale", "titleY", "mode", "logo", "trim", "blend", "blendAmount", "blendHeight", "tint", "tintA", "tintB", "tintAmount"];        // what a single poster may do differently (when "for all posters" is off)
   const val = (key, a) => a in P[key].ov ? P[key].ov[a] : a === "logo" ? logo : G[a];
-  const style = key => ({ ...G, ...Object.fromEntries(["titleScale", "titleY", "mode", "trim", "blend", "blendAmount", "blendHeight"].map(a => [a, val(key, a)])) });
+  const style = key => ({ ...G, ...Object.fromEntries(TITLE_OV.filter(a => a !== "logo").map(a => [a, val(key, a)])) });
   const colorOf = key => P[key].color || P[key].auto || "#f1f1ee";
   const custom = key => Object.keys(P[key].ov).length > 0;
 
@@ -186,6 +257,7 @@ function makeBuilder(opts) {
     const [bg, lg0img] = await Promise.all([p.bg ? loadImage(proxied(orig ? p.bg.url : p.bg.preview || p.bg.url)).catch(() => null) : null,
       useLogoImg ? loadImage(proxied(orig ? lg0.url : lg0.preview || lg0.url)).catch(() => null) : null]);
     const lg = lg0img && val(key, "trim") ? trimTransparent(lg0img) : lg0img, st = style(key);
+    if (bg) { const info = imageInfo(bg); p.avg = info.avg; p.transp = info.transparent; p.nat = [bg.naturalWidth, bg.naturalHeight]; }
     if (bg) {                                                       // the automatic colour follows the picture where the line stands
       const yc = st.seasonPos === "free" ? st.seasonY : Math.min(st.titleY + 0.07, 0.97);
       const sig = [p.bg.url, p.fit.zoom, p.fit.x, p.fit.y, st.blend, st.blendAmount, st.blendHeight, yc].join("|");
@@ -205,7 +277,7 @@ function makeBuilder(opts) {
     if (!f) { toast(T("Keine Bilder gefunden"), "bad"); return; }
     const u = URL.createObjectURL(f); setBg(key, { url: u, preview: u, name: f.name, file: f });
   };
-  const bgOnline = key => searchOnline(it, key, null, { pick: img => setBg(key, { url: img.url, preview: img.preview || img.url, name: img.source }), title: T("Hintergrund wählen"), scopes: slots.map(x => ({ key: x.key, label: x.label })) });
+  const bgOnline = key => searchOnline(it, key, null, { pick: img => setBg(key, { url: img.url, preview: img.preview || img.url, name: img.label ? `${img.source} · ${img.label}` : img.source }, img.transparent ? { ...BUILD_FIT, fill: "color" } : undefined), title: T("Hintergrund wählen"), scopes: slots.map(x => ({ key: x.key, label: x.label })) });
   const copyBg = (from, to) => { if (from !== to && P[from].bg) setBg(to, { ...P[from].bg }, P[from].fit); };
   function bgForAll(from) {
     const src = P[from].bg; if (!src) return;
@@ -338,8 +410,42 @@ function makeBuilder(opts) {
     return h("div", { class: "brow srow" }, h("span", { class: "blab" }, label), inp, out, reset);
   }
   const pctOf = v => Math.round(v * 100) + " %";
+  const setFit = patch => { P[sel].fit = { ...P[sel].fit, ...patch }; syncControls(); paint(sel); };
+  const fillBtns = [["auto", T("Auto")], ["black", T("Schwarz")], ["white", T("Weiß")], ["color", T("Farbe")], ["blur", T("Unscharf")]].map(([v, l]) => {
+    const b = h("button", { class: "seg", type: "button", onclick: () => setFit({ fill: v }) }, l); b.dataset.v = v; return b;
+  });
+  const fillSwatches = h("div", { class: "swatches" });
+  const fillColorInp = h("input", { type: "color", title: T("Eigene Farbe"), oninput: e => setFit({ fill: "color", color: e.target.value }) });
+  const fillPipette = h("button", { class: "btn sm", type: "button", title: T("Farbe aus dem Poster aufnehmen"), onclick: async () => {
+    const key = sel, cv = await paint(key, true, true);
+    pickFromPoster(cv, hex => { sel = key; setFit({ fill: "color", color: hex }); });
+  } }, icon("eye", 14), T("Pipette"));
+  const fitAll = h("button", { class: "btn sm", type: "button", title: T("Das ganze Bild sichtbar machen"), onclick: () => {
+    const nat = P[sel].nat; if (!nat) return;
+    const r = Math.min(BW / nat[0], BH / nat[1]) / Math.max(BW / nat[0], BH / nat[1]);
+    setFit({ zoom: Math.min(1, Math.max(0.3, r)), x: 0.5, y: 0.5 });
+  } }, T("Einpassen"));
+  const fillRows = h("div", { class: "bfillrows" },
+    h("div", { class: "brow" }, h("span", { class: "blab" }, T("Freier Bereich")), h("div", { class: "segs" }, fillBtns)),
+    h("div", { class: "brow bfillcolor" }, h("span", { class: "blab" }, T("Farbe")), fillSwatches, fillPipette, fillColorInp));
   const fitSec = h("div", { class: "bsec bfit" }, h("h4", {}, T("Bildausschnitt")),
-    fitSlider(T("Zoom"), "zoom", 1, 3, 0.01, pctOf), fitSlider(T("Links / rechts"), "x", 0, 1, 0.005, pctOf), fitSlider(T("Oben / unten"), "y", 0, 1, 0.005, pctOf));
+    fitSlider(T("Zoom"), "zoom", 0.3, 3, 0.01, pctOf), fitSlider(T("Links / rechts"), "x", 0, 1, 0.005, pctOf), fitSlider(T("Oben / unten"), "y", 0, 1, 0.005, pctOf),
+    h("div", { class: "row wrap" }, fitAll), fillRows);
+  /* --- colour filter (a look setting like the fade: for all posters, or for one) --- */
+  const tintChange = () => { syncControls(); repaintTitle(); syncCustom(); };
+  const tintBtns = [["off", T("Aus")], ["mono", T("Schwarzweiß")], ["tint", T("Tönung")], ["duotone", T("Duoton")]].map(([v, l]) => {
+    const b = h("button", { class: "seg", type: "button", onclick: () => { setTitle("tint", v); tintChange(); } }, l); b.dataset.v = v; return b;
+  });
+  const tintAInp = h("input", { type: "color", oninput: e => { setTitle("tintA", e.target.value); repaintTitle(); syncCustom(); } });
+  const tintBInp = h("input", { type: "color", oninput: e => { setTitle("tintB", e.target.value); repaintTitle(); syncCustom(); } });
+  const tintLabelB = h("span", { class: "blab" }, T("Licht"));
+  const tintPresets = [["#101a2e", "#ffd9a0"], ["#1a0f2e", "#ff9ec4"], ["#0b2a2a", "#b8ffe0"], ["#2a0f0f", "#ffe3b0"], ["#0a1a3a", "#ffffff"]].map(([a, b]) =>
+    h("button", { class: "tintpreset", type: "button", title: `${a} → ${b}`, "aria-label": `${a} → ${b}`, style: `background:linear-gradient(90deg,${a},${b})`,
+      onclick: () => { setTitle("tint", "duotone"); setTitle("tintA", a); setTitle("tintB", b); tintChange(); } }));
+  const tintRowA = h("div", { class: "brow" }, h("span", { class: "blab" }, T("Schatten")), tintAInp), tintRowB = h("div", { class: "brow" }, tintLabelB, tintBInp);
+  const tintRowP = h("div", { class: "brow" }, h("span", { class: "blab" }, T("Vorschläge")), h("div", { class: "swatches" }, tintPresets));
+  const tintSec = h("div", { class: "bsec" }, h("h4", {}, T("Farbfilter")), h("div", { class: "row wrap" }, h("div", { class: "segs" }, tintBtns)),
+    tintRowP, tintRowA, tintRowB, slider(T("Stärke"), "tintAmount", 0.1, 1, 0.01, pct, true));
   function resetAll() {
     if (!confirm(T("Alle Einstellungen auf Standard zurücksetzen? Hintergründe und Logo bleiben."))) return;
     for (const k of Object.keys(G)) delete G[k];
@@ -418,6 +524,11 @@ function makeBuilder(opts) {
     logoBtn.textContent = val(key, "logo") ? T("Anderes Logo …") : T("Logo wählen …");
     textInp.closest(".brow").hidden = mode === "logo"; titleColorInp.closest(".brow").hidden = mode === "logo";
     titleColorInp.value = G.titleColor || "#ffffff"; colorInp.value = colorOf(key);
+    const tn = val(key, "tint");
+    tintBtns.forEach(b => b.classList.toggle("on", b.dataset.v === tn));
+    tintRowP.hidden = tn === "off" || tn === "mono"; tintRowA.hidden = tn !== "duotone"; tintRowB.hidden = tn === "off" || tn === "mono";
+    ctl.tintAmount.row.hidden = tn === "off"; tintLabelB.textContent = tn === "duotone" ? T("Licht") : T("Farbe");
+    tintAInp.value = val(key, "tintA"); tintBInp.value = val(key, "tintB");
     const bl = val(key, "blend");
     blendOff.classList.toggle("on", bl === "off"); blendDark.classList.toggle("on", bl === "dark"); blendLight.classList.toggle("on", bl === "light");
     ctl.blendAmount.row.hidden = ctl.blendHeight.row.hidden = bl === "off";
@@ -429,6 +540,13 @@ function makeBuilder(opts) {
     controls.querySelector(".bseason").hidden = !seasonSlot;
     for (const k of Object.keys(ctl)) ctl[k]();
     fitSec.hidden = !P[key].bg; for (const k of Object.keys(fitCtl)) fitCtl[k]();
+    {
+      const f = P[key].fit, needs = f.zoom < 0.999 || P[key].transp;
+      fillRows.hidden = !needs; fillBtns.forEach(b => b.classList.toggle("on", b.dataset.v === f.fill));
+      fillRows.querySelector(".bfillcolor").hidden = f.fill !== "color"; fillColorInp.value = f.color;
+      fill(fillSwatches, colorChoices(P[key].avg || "#808080").map(c => h("button", { type: "button", class: "swatch" + (f.fill === "color" && f.color.toLowerCase() === c.toLowerCase() ? " on" : ""),
+        style: `background:${c}`, title: c, "aria-label": c, onclick: () => setFit({ fill: "color", color: c }) })));
+    }
     colorAuto.classList.toggle("on", P[key].color == null);
     fill(swatches, colorChoices(P[key].auto).map(c => h("button", { type: "button", class: "swatch" + (P[key].color && P[key].color.toLowerCase() === c.toLowerCase() ? " on" : ""),
       style: `background:${c}`, title: c, "aria-label": c, onclick: () => setColor(c) })));
@@ -531,6 +649,7 @@ function makeBuilder(opts) {
     h("div", { class: "bsec" }, h("h4", {}, T("Überblendung")),
       h("div", { class: "row wrap" }, h("div", { class: "segs" }, blendOff, blendDark, blendLight)),
       slider(T("Stärke"), "blendAmount", 0.1, 1, 0.01, pct, true), slider(T("Höhe"), "blendHeight", 0.1, 0.8, 0.01, pct, true)),
+    tintSec,
     h("div", { class: "bsec bseason" }, h("h4", {}, T("Staffeltext")),
       h("label", { class: "brow" }, h("span", { class: "blab" }, T("Text")), lineInp),
       h("div", { class: "brow" }, h("span", { class: "blab" }, T("Farbe")), swatches, pipette, colorInp, colorAuto),
