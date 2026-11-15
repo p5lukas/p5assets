@@ -74,7 +74,7 @@ p5assets reads the title, year and season from file and folder names, shows you 
 - **Download** in original quality: single posters, or a selection as a ZIP. On iPhone/iPad the original opens in p5assets; long-press the image and choose “Add to Photos”.
 
 ### Poster builder
-No suitable poster? Build one. Pick a textless background on the poster tile (online search or your own file), then a clear logo from TMDb, fanart.tv or TheTVDB, or the title as text if there is none. Series get a season line (“Season One”, “Specials”) under it, with a colour picked from the background that you can change. Movies: **Build** in the hover menu. Series: the build button in the detail view opens build mode, where every poster is previewed and the one being edited has a Matrix frame. Posters are rendered at 1000×1500 JPG, saved with the usual naming, trash and undo, and looks can be saved as presets. Eight bundled open-licence fonts (OFL).
+No suitable poster? Build one. Pick a textless background on the poster tile (online search or your own file), then a clear logo from TMDb, fanart.tv or TheTVDB, or the title as text if there is none. Series get a season line (“Season One”, “Specials”) under it, with a colour picked from the background that you can change. Movies: **Build** in the hover menu. Series: the build button in the detail view opens build mode, where every poster is previewed and the one being edited has a Matrix frame. Posters are rendered at 1000×1500 JPG, saved with the usual naming, trash and undo, and looks can be saved as presets. Eight bundled open-licence fonts (OFL). Backdrops can be used as backgrounds with an adjustable crop, and p5assets remembers the look of each series (including the chosen backgrounds), so a later visit can swap only the logo on all posters or build a new season to match.
 
 <img src="docs/images/poster-builder.png" alt="Poster builder for a series: all posters in one look" width="640">
 
@@ -187,6 +187,8 @@ Images are built by a GitHub Action (`.github/workflows/docker.yml`) on every pu
 | `auth.json` | login (username and password hash) | small |
 | `cache/thumbs-v3` | thumbnails for fast lists | up to 600 MB, cleaned up automatically |
 | `trash` | trash for undo | up to 2 GB, 30 days |
+| `builder` | poster builder: look of each series, pictures from your computer | a few MB per series, cleaned up 30 days after a title is gone |
+| `styles.json` | poster builder presets | small |
 | `cache/dims.json`, `history.json`, `logs` | image sizes, coverage history, logs | small |
 
 ## Login and password reset

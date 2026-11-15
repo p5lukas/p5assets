@@ -6,6 +6,7 @@ const BW = 1000, BH = 1500;
 // id = file name in /static/fonts and part of the CSS family "p5-<id>"; the list must match FONTS in app/styles.py
 const BUILD_FONTS = [["montserrat", "Montserrat", 700], ["raleway", "Raleway", 700], ["oswald", "Oswald", 700], ["bebas-neue", "Bebas Neue", 400],
   ["anton", "Anton", 400], ["cinzel", "Cinzel", 700], ["playfair-display", "Playfair Display", 700], ["lato", "Lato", 700]];
+const BUILD_FIT = { zoom: 1, x: 0.5, y: 0.5 };
 const BUILD_DEFAULT = { font: "montserrat", upper: true, mode: "logo", trim: true, blend: "off", blendAmount: 0.7, blendHeight: 0.35, titleScale: 0.7, titleY: 0.82, seasonScale: 0.9, gap: 0.02, seasonPos: "below", seasonY: 0.92, tracking: 0.22, titleColor: "#ffffff" };     // same on all posters; only the colour of the season line is per poster
 
 /* ---------------------------------------------------------------- texts --- */
@@ -29,21 +30,28 @@ function loadImage(src) {
 }
 const proxied = url => url && url.startsWith("http") ? "/api/proxy?url=" + encodeURIComponent(url) : url;
 
-/** A colour that fits the picture: the dominant hue of the saturated pixels, light enough to read on a dark poster. */
-function autoColorOf(img) {
-  const w = 24, hgt = 36, c = document.createElement("canvas"); c.width = w; c.height = hgt;
-  const x = c.getContext("2d", { willReadFrequently: true }); x.drawImage(img, 0, 0, w, hgt);
-  const d = x.getImageData(0, 0, w, hgt).data;
-  let sx = 0, sy = 0, wsum = 0;
+/** A colour for the season line that fits the picture where the line stands: the dominant hue of the saturated pixels of that strip, light on a dark
+ *  strip and dark on a light one. data = RGBA pixels of the strip. */
+function autoColorFrom(d) {
+  let sx = 0, sy = 0, wsum = 0, lum = 0, n = 0;
   for (let i = 0; i < d.length; i += 4) {
     const r = d[i] / 255, g = d[i + 1] / 255, b = d[i + 2] / 255, mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, ch = mx - mn;
+    lum += 0.2126 * r + 0.7152 * g + 0.0722 * b; n++;
     if (ch < 0.04) continue;
     const hue = mx === r ? ((g - b) / ch) % 6 : mx === g ? (b - r) / ch + 2 : (r - g) / ch + 4;
     const wt = ch * (1 - Math.abs(2 * l - 1)) + 0.001;
     sx += Math.cos(hue * Math.PI / 3) * wt; sy += Math.sin(hue * Math.PI / 3) * wt; wsum += wt;
   }
-  if (wsum < w * hgt * 0.03) return "#f1f1ee";
-  return hslHex(((Math.atan2(sy, sx) * 180 / Math.PI) + 360) % 360, 0.82, 0.74);
+  const dark = lum / Math.max(1, n) < 0.5;
+  if (wsum < n * 0.03) return dark ? "#f1f1ee" : "#1a1a1a";
+  return hslHex(((Math.atan2(sy, sx) * 180 / Math.PI) + 360) % 360, dark ? 0.82 : 0.75, dark ? 0.76 : 0.26);
+}
+/** The automatic colour for one poster: the background as it is drawn (crop, fade) is sampled in the strip around the season line. */
+function autoColorAt(bg, st, fit, yc) {
+  const w = 100, h = 150, c = document.createElement("canvas"); c.width = w; c.height = h;
+  drawBuilt(c, { bg, logo: null, title: "", line: "", st: { ...st, mode: "text" }, color: null, fit });
+  const y0 = Math.max(0, Math.round((yc - 0.06) * h)), y1 = Math.min(h, Math.round((yc + 0.06) * h));
+  return autoColorFrom(c.getContext("2d", { willReadFrequently: true }).getImageData(0, y0, w, Math.max(1, y1 - y0)).data);
 }
 function hslHex(hue, s, l) {
   const a = s * Math.min(l, 1 - l), f = n => { const k = (n + hue / 30) % 12; return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)))); };
@@ -97,8 +105,8 @@ function drawBuilt(canvas, o) {
   const def = BUILD_FONTS.find(f => f[0] === st.font) || BUILD_FONTS[0], fam = `"p5-${def[0]}", sans-serif`;
   ctx.clearRect(0, 0, W, H);
   if (o.bg) {                                                      // cover fit
-    const s = Math.max(W / o.bg.naturalWidth, H / o.bg.naturalHeight), dw = o.bg.naturalWidth * s, dh = o.bg.naturalHeight * s;
-    ctx.drawImage(o.bg, (W - dw) / 2, (H - dh) / 2, dw, dh);
+    const f = o.fit || BUILD_FIT, s = Math.max(W / o.bg.naturalWidth, H / o.bg.naturalHeight) * f.zoom, dw = o.bg.naturalWidth * s, dh = o.bg.naturalHeight * s;
+    ctx.drawImage(o.bg, (W - dw) * f.x, (H - dh) * f.y, dw, dh);               // cover fit, then zoomed and shifted (x, y: 0 = left / top edge, 1 = right / bottom edge)
   } else {
     const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#0b1a12"); g.addColorStop(1, "#03100a"); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
@@ -158,7 +166,7 @@ function makeBuilder(opts) {
   const it = opts.item, multi = !!opts.multi, slots = opts.slots;
   const G = { ...BUILD_DEFAULT };                                   // the look shared by all posters
   let titleText = it.title, logo = null /* { url, preview, source } */, logoRes = null, logoNote = "", presets = {}, sel = slots[0].key, saving = false, allTitle = true;
-  const newP = s => ({ bg: null, line: s.season == null ? "" : seasonLine(s.season), color: null, auto: null, ov: {} });
+  const newP = s => ({ bg: null, line: s.season == null ? "" : seasonLine(s.season), color: null, auto: null, autoSig: "", fit: { ...BUILD_FIT }, ov: {} });
   const P = Object.fromEntries(slots.map(s => [s.key, newP(s)]));
   const TITLE_OV = ["titleScale", "titleY", "mode", "logo", "trim", "blend", "blendAmount", "blendHeight"];        // what a single poster may do differently (when "for all posters" is off)
   const val = (key, a) => a in P[key].ov ? P[key].ov[a] : a === "logo" ? logo : G[a];
@@ -171,44 +179,48 @@ function makeBuilder(opts) {
   const status = h("div", { class: "hint bstatus", "aria-live": "polite" });
 
   /* --- drawing ---------------------------------------------------------- */
-  async function paint(key, full = false, bgOnly = false) {
-    const p = P[key], cv = canvases[key], lg0 = val(key, "logo"), useLogoImg = lg0 && val(key, "mode") === "logo";
+  /** Draws poster `key` on its tile; full = a new 1000 × 1500 canvas with the original pictures; size = a new canvas of that width (preview pictures, for the comparison). */
+  async function paint(key, full = false, bgOnly = false, size = 0) {
+    const p = P[key], cv = canvases[key], lg0 = val(key, "logo"), useLogoImg = lg0 && val(key, "mode") === "logo", orig = full && !size;
     await ensureFont(G.font);
-    const [bg, lg0img] = await Promise.all([p.bg ? loadImage(proxied(full ? p.bg.url : p.bg.preview || p.bg.url)).catch(() => null) : null,
-      useLogoImg ? loadImage(proxied(full ? lg0.url : lg0.preview || lg0.url)).catch(() => null) : null]);
-    const lg = lg0img && val(key, "trim") ? trimTransparent(lg0img) : lg0img;
-    if (bg && !p.auto) p.auto = autoColorOf(bg);
-    const out = full ? Object.assign(document.createElement("canvas"), { width: BW, height: BH }) : cv;
-    drawBuilt(out, { bg, logo: bgOnly ? null : lg, title: bgOnly ? "" : titleText, line: bgOnly ? "" : p.line, st: style(key), color: colorOf(key) });
+    const [bg, lg0img] = await Promise.all([p.bg ? loadImage(proxied(orig ? p.bg.url : p.bg.preview || p.bg.url)).catch(() => null) : null,
+      useLogoImg ? loadImage(proxied(orig ? lg0.url : lg0.preview || lg0.url)).catch(() => null) : null]);
+    const lg = lg0img && val(key, "trim") ? trimTransparent(lg0img) : lg0img, st = style(key);
+    if (bg) {                                                       // the automatic colour follows the picture where the line stands
+      const yc = st.seasonPos === "free" ? st.seasonY : Math.min(st.titleY + 0.07, 0.97);
+      const sig = [p.bg.url, p.fit.zoom, p.fit.x, p.fit.y, st.blend, st.blendAmount, st.blendHeight, yc].join("|");
+      if (p.autoSig !== sig) { p.auto = autoColorAt(bg, st, p.fit, yc); p.autoSig = sig; }
+    }
+    const out = full || size ? Object.assign(document.createElement("canvas"), size ? { width: size, height: Math.round(size * 1.5) } : { width: BW, height: BH }) : cv;
+    drawBuilt(out, { bg, logo: bgOnly ? null : lg, title: bgOnly ? "" : titleText, line: bgOnly ? "" : p.line, st, color: colorOf(key), fit: p.fit });
     return out;
   }
   const paintAll = () => slots.forEach(s => paint(s.key));
   const repaintTitle = () => allTitle ? paintAll() : paint(sel);
 
   /* --- backgrounds (chosen on the tiles) -------------------------------- */
-  async function setBg(key, bg) { P[key].bg = bg; P[key].auto = null; cards[key].draggable = !!bg; await paint(key); syncControls(); }
+  async function setBg(key, bg, fit) { P[key].bg = bg; P[key].auto = null; P[key].autoSig = ""; P[key].fit = { ...(fit || BUILD_FIT) }; cards[key].draggable = !!bg; await paint(key); syncControls(); }
   const bgFromFile = (key, files) => {
     const f = (files || []).map(x => x.file).find(x => x && /^image\//.test(x.type));
     if (!f) { toast(T("Keine Bilder gefunden"), "bad"); return; }
-    const u = URL.createObjectURL(f); setBg(key, { url: u, preview: u, name: f.name });
+    const u = URL.createObjectURL(f); setBg(key, { url: u, preview: u, name: f.name, file: f });
   };
   const bgOnline = key => searchOnline(it, key, null, { pick: img => setBg(key, { url: img.url, preview: img.preview || img.url, name: img.source }), title: T("Hintergrund wählen"), scopes: slots.map(x => ({ key: x.key, label: x.label })) });
-  const copyBg = (from, to) => { if (from !== to && P[from].bg) setBg(to, { ...P[from].bg }); };
+  const copyBg = (from, to) => { if (from !== to && P[from].bg) setBg(to, { ...P[from].bg }, P[from].fit); };
   function bgForAll(from) {
     const src = P[from].bg; if (!src) return;
     const others = slots.filter(s => s.key !== from), filled = others.filter(s => P[s.key].bg);
     const replace = filled.length ? confirm(TP(filled.length, "Ein Poster hat schon einen Hintergrund. Auch dieses ersetzen? (Abbrechen = nur leere Poster füllen)",
       "{0} Poster haben schon einen Hintergrund. Auch diese ersetzen? (Abbrechen = nur leere Poster füllen)")) : false;
-    others.filter(s => replace || !P[s.key].bg).forEach(s => setBg(s.key, { ...src }));
+    others.filter(s => replace || !P[s.key].bg).forEach(s => setBg(s.key, { ...src }, P[from].fit));
   }
 
   /* --- title: logo / text, size, height (for all posters, or for one) ---- */
   function setTitle(attr, v) {
-    if (allTitle) { G[attr] = v; slots.forEach(s => delete P[s.key].ov[attr]); } else P[sel].ov[attr] = v;
+    if (allTitle) { if (attr === "logo") logo = v; else G[attr] = v; slots.forEach(s => delete P[s.key].ov[attr]); } else P[sel].ov[attr] = v;   // the shared logo lives in `logo`, not in G
   }
   function setLogoMode(mode, l) {
     if (l) setTitle("logo", l);
-    if (allTitle && l) logo = l;                                    // the shared logo lives in `logo`, not in G
     setTitle("mode", mode);
     syncControls(); repaintTitle();
   }
@@ -226,7 +238,7 @@ function makeBuilder(opts) {
     const f = (files || []).map(x => x.file).find(Boolean);
     if (!f) return;
     if (!/\.(png|webp)$/i.test(f.name) && !/^image\/(png|webp)$/.test(f.type)) { toast(T("Nur PNG oder WebP mit Transparenz – ein JPG hat keinen transparenten Hintergrund"), "bad"); return; }
-    const u = URL.createObjectURL(f); useLogo({ url: u, preview: u, source: f.name });
+    const u = URL.createObjectURL(f); useLogo({ url: u, preview: u, source: f.name, file: f });
   }
   function pickLogoFile() {
     const i = h("input", { type: "file", accept: "image/png,image/webp,.png,.webp", onchange: () => { if (i.files[0]) logoFromFile([{ file: i.files[0], path: i.files[0].name }]); } });
@@ -314,6 +326,66 @@ function makeBuilder(opts) {
     syncControls(); paintAll();
   } });
   const presetSel = h("select", { onchange: e => { const p = presets[e.target.value]; if (!p) return; applyPreset(p); e.target.value = ""; } });
+  const fitCtl = {};
+  /** Slider for the crop of the selected poster's background (zoom, shift): per poster, with its own "Default" button. */
+  function fitSlider(label, prop, min, max, step, fmt) {
+    const def = BUILD_FIT[prop], out = h("span", { class: "bval" });
+    const show = v => { out.textContent = fmt(v); reset.classList.toggle("dim", Math.abs(v - def) < step / 2); };
+    const put = v => { P[sel].fit[prop] = v; show(v); paint(sel); };
+    const inp = h("input", { type: "range", min, max, step, oninput: () => put(+inp.value) });
+    const reset = h("button", { class: "btn sm breset", type: "button", title: T("Auf Standard zurücksetzen"), onclick: () => { inp.value = def; put(def); } }, T("Standard"));
+    fitCtl[prop] = () => { const v = P[sel].fit[prop]; inp.value = v; show(v); };
+    return h("div", { class: "brow srow" }, h("span", { class: "blab" }, label), inp, out, reset);
+  }
+  const pctOf = v => Math.round(v * 100) + " %";
+  const fitSec = h("div", { class: "bsec bfit" }, h("h4", {}, T("Bildausschnitt")),
+    fitSlider(T("Zoom"), "zoom", 1, 3, 0.01, pctOf), fitSlider(T("Links / rechts"), "x", 0, 1, 0.005, pctOf), fitSlider(T("Oben / unten"), "y", 0, 1, 0.005, pctOf));
+  function resetAll() {
+    if (!confirm(T("Alle Einstellungen auf Standard zurücksetzen? Hintergründe und Logo bleiben."))) return;
+    for (const k of Object.keys(G)) delete G[k];
+    Object.assign(G, BUILD_DEFAULT); if (!logo) G.mode = "text";
+    allTitle = true; slots.forEach(s => { P[s.key].ov = {}; P[s.key].color = null; P[s.key].autoSig = ""; });
+    syncControls(); paintAll();
+  }
+  /* --- the look of this title is kept between visits -------------------- */
+  const blobCache = new Map();
+  /** A picture reference that can be kept: online pictures stay links, pictures from this computer are stored on the server once. */
+  async function stored(r) {
+    if (!r) return null;
+    const keep = { name: r.name, source: r.source };
+    if (!r.url.startsWith("blob:") || !r.file) return r.url.startsWith("blob:") ? null : { url: r.url, preview: r.preview || r.url, ...keep };
+    if (!blobCache.has(r.url)) blobCache.set(r.url, (async () => {
+      const fd = new FormData();                                    // (the file itself: the page may not fetch blob: addresses)
+      fd.append("file", r.file);
+      return (await api(`/items/${it.id}/builder/file`, { method: "POST", body: fd })).url;
+    })());
+    const url = await blobCache.get(r.url);
+    return { url, preview: url, ...keep };
+  }
+  async function saveProject() {
+    const posters = {};
+    for (const s of slots) {
+      const p = P[s.key], ov = { ...p.ov };
+      if (ov.logo) ov.logo = await stored(ov.logo);
+      posters[s.key] = { bg: await stored(p.bg), line: p.line, color: p.color, fit: p.fit, ov };
+    }
+    await api(`/items/${it.id}/builder`, { method: "PUT", json: { look: G, allTitle, titleText, logo: await stored(logo), posters } });
+  }
+  function applyProject(pr) {
+    Object.assign(G, BUILD_DEFAULT, pr.look); delete G.color;
+    allTitle = pr.allTitle; titleText = pr.titleText || it.title; logo = pr.logo || null;
+    for (const [k, v] of Object.entries(pr.posters || {})) {
+      const p = P[k]; if (!p) continue;
+      p.bg = v.bg; if (v.line) p.line = v.line;
+      p.color = v.color; p.fit = { ...BUILD_FIT, ...v.fit }; p.ov = v.ov || {}; p.autoSig = "";
+      cards[k].draggable = !!v.bg;
+    }
+  }
+  const lookNote = h("div", { class: "blook", hidden: true }, h("span", {}, T("Gespeicherter Look dieser Serie geladen")),
+    h("button", { class: "btn sm ghost", type: "button", onclick: async () => {
+      if (!confirm(T("Den gespeicherten Look dieser Serie löschen? Die fertigen Poster bleiben unverändert."))) return;
+      try { await api(`/items/${it.id}/builder`, { method: "DELETE" }); lookNote.hidden = true; toast(T("Gespeicherter Look gelöscht"), "ok"); } catch (e) { toast(e.message, "bad"); }
+    } }, T("Look löschen")));
   function applyPreset(p) {
     Object.assign(G, BUILD_DEFAULT, p); delete G.color; if (!logo) G.mode = "text"; slots.forEach(s => { P[s.key].ov = {}; });
     syncControls(); paintAll();
@@ -356,6 +428,7 @@ function makeBuilder(opts) {
     lineInp.value = P[key].line;
     controls.querySelector(".bseason").hidden = !seasonSlot;
     for (const k of Object.keys(ctl)) ctl[k]();
+    fitSec.hidden = !P[key].bg; for (const k of Object.keys(fitCtl)) fitCtl[k]();
     colorAuto.classList.toggle("on", P[key].color == null);
     fill(swatches, colorChoices(P[key].auto).map(c => h("button", { type: "button", class: "swatch" + (P[key].color && P[key].color.toLowerCase() === c.toLowerCase() ? " on" : ""),
       style: `background:${c}`, title: c, "aria-label": c, onclick: () => setColor(c) })));
@@ -373,7 +446,8 @@ function makeBuilder(opts) {
     syncControls();
   }
   const SLOT_DRAG = "application/x-p5slot";
-  const zoom = key => openZoom(slots, key, k => paint(k, true));
+  const currentUrl = key => { const sl = it.slots[key]; return !sl ? null : sl.exists ? `/api/asset/${it.id}/${key}?v=${sl.mtime}` : sl.plex_thumb ? `/api/season-thumb/${it.id}/${key}` : null; };
+  const zoom = key => openZoom(slots, key, k => paint(k, true), currentUrl);
   function makeCard(s) {
     const cv = h("canvas", { width: 300, height: 450 }); canvases[s.key] = cv;
     const ov = (name, label, fn) => h("button", { class: "ov-btn bov", type: "button", title: label, "aria-label": label, onclick: e => { e.stopPropagation(); box.classList.remove("show"); selectSlot(s.key); fn(); } }, icon(name, 16), h("span", {}, label));
@@ -427,6 +501,7 @@ function makeBuilder(opts) {
         } finally { busyTile(it.id + "|" + key, false); }
       }
       try { await api("/styles/last", { method: "PUT", json: { style: G } }); } catch { /* optional */ }
+      try { await saveProject(); } catch (e) { toast(T("Der Look konnte nicht gespeichert werden: {0}", e.message), "bad"); }
       toast(TP(done, "Poster gespeichert ✓", "{0} Poster gespeichert ✓"), "ok", trash && done === 1 ? { label: T("Rückgängig"), fn: async () => { try { await api(`/trash/${trash}/restore`, { method: "POST" }); loadItems().then(renderGrid); } catch (e) { toast(e.message, "bad"); } } } : null);
       if (opts.onSaved) opts.onSaved(last, keys, trash);
     } catch (e) { toast(e.message, "bad"); }
@@ -445,9 +520,12 @@ function makeBuilder(opts) {
     slider(T("Titelgröße"), "titleScale", 0.4, 1.6, 0.01, pct, true),
     slider(T("Titelhöhe"), "titleY", 0, 1, 0.005, pct, true));
   makeDropTarget(titleSec, logoFromFile);
+  const compareBtn = multi && slots.length > 1 ? h("button", { class: "btn sm", type: "button", title: T("Alle Poster nebeneinander ansehen"), onclick: () => openCompare(slots, k => paint(k, true, false, 360), k => { selectSlot(k); zoom(k); }) }, icon("eye", 14), T("Vergleichen")) : null;
   const controls = h("div", { class: "bcontrols" },
+    h("div", { class: "bhead" }, h("span", { class: "hint", style: "margin:0" }, T("Bearbeitet:")), h("b", { class: "bedit" }), h("span", { class: "spacer" }), compareBtn),
+    lookNote,
     h("div", { class: "hint bbghint" }, T("Hintergrund: über ein Poster fahren (am Handy antippen) – suchen, Datei wählen, Vorschau. Ein Poster auf ein anderes ziehen kopiert den Hintergrund.")),
-    h("div", { class: "bhead" }, h("span", { class: "hint", style: "margin:0" }, T("Bearbeitet:")), h("b", { class: "bedit" })),
+    fitSec,
     h("label", { class: "bchk ballchk" }, allChk, T("Einstellungen für alle Poster")),
     titleSec,
     h("div", { class: "bsec" }, h("h4", {}, T("Überblendung")),
@@ -460,12 +538,14 @@ function makeBuilder(opts) {
       slider(T("Abstand zum Titel"), "gap", 0, 0.1, 0.002, pct), slider(T("Texthöhe"), "seasonY", 0.03, 0.97, 0.005, pct),
       slider(T("Textgröße"), "seasonScale", 0.5, 2.4, 0.01, pct), slider(T("Laufweite"), "tracking", 0, 0.4, 0.005, pct)),
     h("div", { class: "bsec" }, h("h4", {}, T("Vorlagen")),
-      h("div", { class: "row wrap" }, presetSel, h("button", { class: "btn sm", type: "button", onclick: savePreset }, T("Als Vorlage speichern …")), h("button", { class: "btn sm ghost", type: "button", onclick: deletePreset }, T("Vorlage löschen …")))),
+      h("div", { class: "row wrap" }, presetSel, h("button", { class: "btn sm", type: "button", onclick: savePreset }, T("Als Vorlage speichern …")), h("button", { class: "btn sm ghost", type: "button", onclick: deletePreset }, T("Vorlage löschen …")),
+        h("span", { class: "spacer" }), h("button", { class: "btn sm ghost", type: "button", title: T("Alle Einstellungen auf Standard, Hintergründe und Logo bleiben"), onclick: resetAll }, T("Alles zurücksetzen")))),
     h("div", { class: "row wrap bfoot" }, saveBtn, opts.onCancel ? h("button", { class: "btn", type: "button", onclick: opts.onCancel }, T("Abbrechen")) : null, status));
   root.append(grid, controls);
 
   (async () => {
     try { const st = await api("/styles"); presets = st.presets || {}; if (st.last) { Object.assign(G, st.last); delete G.color; } } catch { /* optional */ }
+    try { const pr = (await api(`/items/${it.id}/builder`)).project; if (pr) { applyProject(pr); lookNote.hidden = false; } } catch { /* optional */ }
     drawPresets(); syncControls(); paintAll(); loadLogos();
   })();
   return root;
@@ -504,24 +584,33 @@ function pickFromPoster(canvas, onPick) {
   tip.hidden = true; document.body.append(wrap);
 }
 
-/** Large view of one poster in full resolution (what will be saved), with arrows / arrow keys to flip through the series. */
-function openZoom(slots, startKey, render) {
-  let i = Math.max(0, slots.findIndex(s => s.key === startKey)), token = 0;
+/** Large view of one poster in full resolution (what will be saved), with arrows / arrow keys to flip through the series.
+ *  current(key) = address of the poster that exists now (or null): then a switch shows the draft or the existing poster. */
+function openZoom(slots, startKey, render, current) {
+  let i = Math.max(0, slots.findIndex(s => s.key === startKey)), token = 0, showCurrent = false;
   const holder = h("div", { class: "zoomcv" }), title = h("div", { class: "zoomtitle" });
   const prev = h("button", { class: "btn zoomnav zoomprev", type: "button", "aria-label": T("Vorheriges Poster"), onclick: () => go(-1) }, "‹");
   const next = h("button", { class: "btn zoomnav zoomnext", type: "button", "aria-label": T("Nächstes Poster"), onclick: () => go(1) }, "›");
+  const segDraft = h("button", { class: "seg on", type: "button", onclick: () => setView(false) }, T("Entwurf")), segNow = h("button", { class: "seg", type: "button", onclick: () => setView(true) }, T("Vorhanden"));
+  const toggle = current ? h("div", { class: "segs zoomtoggle" }, segDraft, segNow) : null;
   const wrap = h("div", { class: "zoomwrap", onclick: e => { if (e.target === wrap || e.target === holder) close(); } },
-    h("button", { class: "btn zoomclose", type: "button", "aria-label": T("Schließen"), onclick: () => close() }, "✕"), prev, holder, next, title);
+    h("button", { class: "btn zoomclose", type: "button", "aria-label": T("Schließen"), onclick: () => close() }, "✕"), prev, holder, next, toggle, title);
   function onKey(e) {
     if (!["Escape", "ArrowLeft", "ArrowRight"].includes(e.key)) return;
     e.stopImmediatePropagation(); e.preventDefault();
     if (e.key === "Escape") close(); else go(e.key === "ArrowLeft" ? -1 : 1);
   }
   function close() { wrap.remove(); document.removeEventListener("keydown", onKey, true); }
+  function setView(now) { showCurrent = now; segDraft.classList.toggle("on", !now); segNow.classList.toggle("on", now); show(); }
   async function show() {
     const my = ++token;
     prev.hidden = next.hidden = slots.length < 2;
     title.textContent = slots[i].label + (slots.length > 1 ? `  ·  ${i + 1} / ${slots.length}` : "");
+    if (showCurrent) {
+      const u = current(slots[i].key);
+      fill(holder, u ? h("img", { src: u, alt: "" }) : h("div", { class: "empty" }, T("Für dieses Poster gibt es noch kein vorhandenes Poster.")));
+      return;
+    }
     fill(holder, h("div", { class: "empty" }, h("span", { class: "spin" }), T(" Poster wird gezeichnet …")));
     const cv = await render(slots[i].key);
     if (my === token) fill(holder, cv);
@@ -529,6 +618,24 @@ function openZoom(slots, startKey, render) {
   function go(d) { i = (i + d + slots.length) % slots.length; show(); }
   document.addEventListener("keydown", onKey, true);
   document.body.append(wrap); show();
+}
+
+/** All posters of the series in one row, to check that they belong together; a click opens the large view of that poster. */
+function openCompare(slots, render, onPick) {
+  const row = h("div", { class: "cmprow" });
+  const wrap = h("div", { class: "zoomwrap cmpwrap", onclick: e => { if (e.target === wrap || e.target === row) close(); } },
+    h("button", { class: "btn zoomclose", type: "button", "aria-label": T("Schließen"), onclick: () => close() }, "✕"), row,
+    h("div", { class: "zoomtitle" }, T("Alle Poster nebeneinander – anklicken zum Vergrößern")));
+  function onKey(e) { if (e.key !== "Escape") return; e.stopImmediatePropagation(); e.preventDefault(); close(); }
+  function close() { wrap.remove(); document.removeEventListener("keydown", onKey, true); }
+  for (const s of slots) {
+    const cell = h("button", { class: "cmpcell", type: "button", onclick: () => { close(); onPick(s.key); } },
+      h("div", { class: "cmpph" }, h("span", { class: "spin" })), h("span", { class: "cmplabel" }, s.label));
+    row.append(cell);
+    render(s.key).then(cv => cell.querySelector(".cmpph").replaceWith(cv));
+  }
+  document.addEventListener("keydown", onKey, true);
+  document.body.append(wrap);
 }
 
 /* ---------------------------------------------------------- entry points --- */

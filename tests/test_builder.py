@@ -114,3 +114,103 @@ def test_poster_count_is_series_poster_plus_every_season():
     seasons = [{"number": n, "title": "", "rating_key": None, "thumb": ""} for n in (0, 1, 2)]
     assert main._public_item({**base, "seasons": seasons})["poster_count"] == 4
     assert main._public_item({**base, "seasons": []})["poster_count"] == 1
+
+
+# ----------------------------------------------------------- builder memory ---
+import io
+
+from PIL import Image
+
+from app import builder_store
+
+
+def _png(color=(255, 0, 0, 255), size=(20, 10)) -> bytes:
+    b = io.BytesIO()
+    Image.new("RGBA", size, color).save(b, "PNG")
+    return b.getvalue()
+
+
+@pytest.fixture()
+def store(tmp_path, monkeypatch):
+    monkeypatch.setattr(builder_store.config, "CONFIG_DIR", tmp_path)
+    return tmp_path
+
+
+def test_project_is_sanitized_and_roundtrips(store):
+    name = builder_store.put_file("hd-abc", _png())
+    assert name and name.endswith(".png")
+    url = builder_store.file_url("hd-abc", name)
+    raw = {"look": {"font": "oswald", "evil": 1}, "allTitle": False, "titleText": "T" * 500,
+           "logo": {"url": url, "preview": url, "source": "x"},
+           "posters": {"poster": {"bg": {"url": "https://image.tmdb.org/t/p/original/a.jpg", "name": "n"}, "line": "Season One", "color": "#ABCDEF",
+                                  "fit": {"zoom": 9, "x": -1}, "ov": {"titleY": 5, "logo": {"url": "javascript:alert(1)"}, "bad": 1}},
+                       "../evil": {"bg": None}, "season-2": "nope"}}
+    p = builder_store.save("hd-abc", raw)
+    assert p["look"] == {"font": "oswald"} and p["allTitle"] is False and len(p["titleText"]) == 120
+    assert list(p["posters"]) == ["poster"]
+    poster = p["posters"]["poster"]
+    assert poster["color"] == "#abcdef" and poster["fit"] == {"zoom": 4.0, "x": 0.0, "y": 0.5}
+    assert poster["ov"] == {"titleY": 1.0} and poster["bg"]["url"].startswith("https://")
+    assert builder_store.load("hd-abc") == p
+    assert builder_store.file_path("hd-abc", name) is not None
+
+
+def test_unused_files_are_removed_and_urls_of_other_titles_rejected(store):
+    keep = builder_store.put_file("hd-abc", _png())
+    drop = builder_store.put_file("hd-abc", _png((0, 255, 0, 255)))
+    other = builder_store.file_url("hd-zzz", keep)
+    p = builder_store.save("hd-abc", {"logo": {"url": builder_store.file_url("hd-abc", keep)}, "posters": {"poster": {"bg": {"url": other}}}})
+    assert p["posters"]["poster"]["bg"] is None
+    assert builder_store.file_path("hd-abc", keep) and not builder_store.file_path("hd-abc", drop)
+
+
+def test_put_file_rejects_non_images_and_bad_names(store):
+    assert builder_store.put_file("hd-abc", b"not an image") is None
+    assert builder_store.file_path("hd-abc", "../../config.json") is None
+    with pytest.raises(ValueError):
+        builder_store.load("../x")
+
+
+def test_prune_keeps_recent_and_present_titles(store):
+    for i in ("hd-old", "hd-new", "hd-here"):
+        builder_store.save(i, {"posters": {}})
+    import os
+    import time
+    old = time.time() - 40 * 86400
+    for i in ("hd-old", "hd-here"):
+        os.utime(store / "builder" / i, (old, old))
+    assert builder_store.prune({"hd-here"}) == 1
+    assert builder_store.load("hd-old") is None and builder_store.load("hd-new") and builder_store.load("hd-here")
+
+
+def test_builder_endpoints(store, monkeypatch):
+    monkeypatch.setitem(scanner.STATE, "items", [{"id": "hd-abc", "world": "hd", "title": "A", "year": 2020, "type": "show", "ids": {}}])
+    c = TestClient(main.app)
+    assert c.get("/api/items/hd-abc/builder").json() == {"project": None}
+    up = c.post("/api/items/hd-abc/builder/file", files={"file": ("l.png", _png(), "image/png")})
+    assert up.status_code == 200
+    assert c.post("/api/items/hd-abc/builder/file", files={"file": ("l.png", b"nope", "image/png")}).status_code == 400
+    assert c.get(up.json()["url"]).status_code == 200
+    assert c.put("/api/items/hd-abc/builder", json={"posters": {"season-1": {"line": "Season One"}}}).json()["project"]["posters"]["season-1"]["line"] == "Season One"
+    assert c.get("/api/items/hd-abc/builder").json()["project"]["v"] == 1
+    assert c.delete("/api/items/hd-abc/builder").json() == {"ok": True}
+    assert c.get("/api/items/hd-abc/builder").json() == {"project": None}
+    assert c.get("/api/items/nope/builder").status_code == 404
+
+
+def test_tmdb_404_is_no_error(monkeypatch):
+    import httpx
+
+    async def fake_get(key, path, **params):
+        raise httpx.HTTPStatusError("x", request=httpx.Request("GET", "https://x"), response=httpx.Response(404))
+
+    monkeypatch.setattr(providers, "tmdb_get", fake_get)
+    assert asyncio.run(providers.tmdb_posters("k", ["de"], "show", "1", 0)) == []
+    assert asyncio.run(providers.tmdb_logos("k", ["de"], "show", "1")) == []
+
+    async def boom(key, path, **params):
+        raise httpx.HTTPStatusError("x", request=httpx.Request("GET", "https://x"), response=httpx.Response(401))
+
+    monkeypatch.setattr(providers, "tmdb_get", boom)
+    with pytest.raises(httpx.HTTPStatusError):
+        asyncio.run(providers.tmdb_posters("k", ["de"], "show", "1", 0))

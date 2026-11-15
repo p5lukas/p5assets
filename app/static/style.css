@@ -689,3 +689,16 @@ body.glitching #app,body.glitching #foot{text-shadow:0 0 9px var(--glow);transit
   .drawer .builder .bgrid{flex:0 0 170px;grid-template-columns:1fr;position:sticky;top:100px;max-height:calc(100vh - 116px);overflow-y:auto;overflow-x:hidden;padding:6px 6px 6px 2px;margin:-6px 0}
   .drawer .builder .bcontrols{flex:1;min-width:0}
 }
+/* poster builder 0.9: crop, look note, comparison, backdrops */
+.picks.wide{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
+.picks.wide .pick img{aspect-ratio:16/9}
+.blook{display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap;padding:8px 12px;border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:var(--r);font-size:13px;color:var(--muted)}
+.blook[hidden]{display:none}
+.zoomtoggle{position:absolute;top:14px;left:50%;transform:translateX(-50%)}
+.zoomcv img{max-width:100%;max-height:calc(100vh - 110px);border-radius:var(--r);box-shadow:0 0 40px var(--dim)}
+.cmpwrap{padding:64px 28px 48px}
+.cmprow{display:flex;gap:14px;justify-content:center;align-items:flex-start;max-width:100%;max-height:100%;overflow:auto;padding:8px}
+.cmpcell{flex:1 1 0;min-width:110px;max-width:240px;display:flex;flex-direction:column;gap:8px;background:none;border:0;padding:0;color:var(--muted);cursor:pointer;text-align:center;font-size:12.5px}
+.cmpcell canvas,.cmpph{width:100%;aspect-ratio:2/3;border-radius:var(--r);border:1px solid var(--line);background:var(--panel);display:flex;align-items:center;justify-content:center}
+.cmpcell:hover canvas{border-color:var(--accent);box-shadow:0 0 18px var(--dim)}.cmpcell:hover{color:var(--accent)}
+.ballchk{padding:9px 12px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel)}

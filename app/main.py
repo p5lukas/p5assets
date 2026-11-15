@@ -28,6 +28,7 @@ from pydantic import BaseModel
 from . import arr as arrmod
 from . import (
     auth,
+    builder_store,
     config,
     history,
     i18n,
@@ -846,7 +847,7 @@ async def search_posters(item_id: str, slot: str):
              ", ".join(f"{p['name']}: {p['count'] if p['state'] == 'ok' else p['state']}" for p in res["providers"]))
     for p in res["providers"]:
         if p["state"] == "error":
-            log.warning("Online search %s: %s", p["name"], p["error"])
+            log.warning("Online search %s (%s / %s): %s", p["name"], it["title"], slot, p["error"])
     return res
 
 
@@ -862,6 +863,68 @@ async def search_item_logos(item_id: str):
     log.info("Logo search %s: %d logos (%s)", it["title"], len(res["images"]),
              ", ".join(f"{p['name']}: {p['count'] if p['state'] == 'ok' else p['state']}" for p in res["providers"]))
     return res
+
+
+@app.get("/api/items/{item_id}/backdrops")
+async def search_item_backdrops(item_id: str):
+    """Backdrops (landscape pictures) of a title as backgrounds for the poster builder: TMDb, fanart.tv and TheTVDB."""
+    it = _item(item_id)
+    apis = config.get()["apis"]
+    if not (apis["tmdb"] or apis["tvdb"] or apis["fanart"]):
+        raise HTTPException(400, tr("Keine API-Keys hinterlegt (Einstellungen → Quellen)"))
+    world = next((w for w in config.get()["worlds"] if w["id"] == it["world"]), None)
+    res = await providers.search_backdrops(apis, it["type"], it["ids"], it["title"], it["year"], (world or {}).get("languages"))
+    for p in res["providers"]:
+        if p["state"] == "error":
+            log.warning("Backdrop search %s (%s): %s", p["name"], it["title"], p["error"])
+    return res
+
+
+@app.get("/api/items/{item_id}/builder")
+async def get_builder_project(item_id: str):
+    """What the poster builder remembers about this title (None = nothing yet)."""
+    _item(item_id)
+    return {"project": await asyncio.to_thread(builder_store.load, item_id)}
+
+
+@app.put("/api/items/{item_id}/builder")
+async def put_builder_project(item_id: str, request: Request):
+    _item(item_id)
+    try:
+        body = await request.json()
+    except ValueError:
+        raise HTTPException(400, tr("Ungültige Daten")) from None
+    project = await asyncio.to_thread(builder_store.save, item_id, body)
+    if project is None:
+        raise HTTPException(400, tr("Ungültige Daten"))
+    return {"project": project}
+
+
+@app.delete("/api/items/{item_id}/builder")
+async def delete_builder_project(item_id: str):
+    _item(item_id)
+    await asyncio.to_thread(builder_store.delete, item_id)
+    return {"ok": True}
+
+
+@app.post("/api/items/{item_id}/builder/file")
+async def put_builder_file(item_id: str, file: Annotated[UploadFile, File()]):
+    """Keep a picture from the user's computer (background or logo) for later visits of the builder."""
+    _item(item_id)
+    data = await file.read()
+    name = await asyncio.to_thread(builder_store.put_file, item_id, data)
+    if not name:
+        raise HTTPException(400, tr("Kein gültiges Bild (PNG, JPG oder WebP bis 15 MB)"))
+    return {"name": name, "url": builder_store.file_url(item_id, name)}
+
+
+@app.get("/api/items/{item_id}/builder/file/{name}")
+async def get_builder_file(item_id: str, name: str):
+    _item(item_id)
+    path = builder_store.file_path(item_id, name)
+    if not path:
+        raise HTTPException(404, tr("Datei nicht gefunden"))
+    return FileResponse(path, headers={"Cache-Control": "private, max-age=31536000, immutable"})
 
 
 @app.get("/api/styles")

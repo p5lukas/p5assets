@@ -1352,7 +1352,16 @@ async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img):
       });
       return { images, providers, languages: first.languages };
     }
-    let r = merge(), tab = "*";
+    let r = merge(), tab = "*", kind = "poster", bdRes = null;      // kind "backdrop" (poster builder only): landscape pictures of the title as backgrounds
+    const kindBar = opts.pick ? h("div", { class: "tabs scopes" }) : null;
+    async function setKind(k) {
+      kind = k; tab = "*";
+      if (k === "backdrop" && !bdRes) {
+        render();
+        try { bdRes = await api(`/items/${it.id}/backdrops`); } catch (e) { toast(e.message, "bad"); bdRes = { images: [], providers: [], languages: [] }; }
+      }
+      render();
+    }
     const scopeBar = h("div", { class: "tabs scopes" }), tabs = h("div", { class: "tabs" }), content = h("div");
     const pick = img => {
       const p = h("div", { class: "pick", title: T("Übernehmen"), onclick: async () => {
@@ -1371,15 +1380,20 @@ async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img):
       await Promise.all(keys.map(loadSafe)); render();
     }
     function render() {
-      r = merge();
-      if (scopes) {
+      r = kind === "backdrop" ? (bdRes || { images: [], providers: [], languages: [] }) : merge();
+      if (kindBar) fill(kindBar, h("span", { class: "hint", style: "margin:0 4px 0 0;align-self:center" }, T("Quelle")),
+        h("button", { class: "tab" + (kind === "poster" ? " on" : ""), type: "button", onclick: () => setKind("poster") }, T("Poster")),
+        h("button", { class: "tab" + (kind === "backdrop" ? " on" : ""), type: "button", title: T("Querformat-Bilder der Serie bzw. des Films; du wählst danach den Bildausschnitt"), onclick: () => setKind("backdrop") }, T("Backdrops"),
+          kind === "backdrop" && !bdRes ? h("span", { class: "spin" }) : null));
+      if (scopes && kind === "poster") {
         const loading = k => chosen.has(k) && !done[k];
         const allOn = scopes.every(x => chosen.has(x.key));
         fill(scopeBar, h("span", { class: "hint", style: "margin:0 4px 0 0;align-self:center" }, T("Suchen in")),
           scopes.map(x => h("button", { class: "tab" + (chosen.has(x.key) ? " on" : ""), type: "button", onclick: () => { const n = new Set(chosen); n.has(x.key) ? n.delete(x.key) : n.add(x.key); toggleScope([...n]); } },
             x.label, loading(x.key) ? h("span", { class: "spin" }) : null)),
           h("button", { class: "tab" + (allOn ? " on" : ""), type: "button", onclick: () => toggleScope(allOn ? [slot, ...(scopes.some(x => x.key === "poster") && slot !== "poster" ? ["poster"] : [])] : scopes.map(x => x.key)) }, T("Alle")));
-      }
+      } else if (scopes) fill(scopeBar);
+      scopeBar.hidden = !(scopes && kind === "poster");
       fill(tabs, [{ name: "*", label: T("Alle"), state: "ok", count: r.images.length }, ...r.providers, { name: "ThePosterDB", state: "ok", tpdb: true }].map(pv => h("button", {
         class: "tab" + (tab === pv.name ? " on" : "") + (pv.state !== "ok" ? " off" : ""), disabled: pv.state === "nokey",
         title: pv.state === "nokey" ? T("Kein API-Key hinterlegt (Einstellungen → Quellen)") : pv.state === "error" ? pv.error : "",
@@ -1398,10 +1412,10 @@ async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img):
         tab === "*" ? r.providers.filter(p => p.state === "error").map(p => h("div", { class: "status bad" }, `[ !! ] ${p.name}: ${p.error}`)) : null,
         groups.filter(g => g.imgs.length).map((g, n) => h("div", { class: "langgroup" },
           h("h4", {}, g.other ? T("Weitere Sprache · ") : `${n + 1}. `, langTitle(g.code), h("small", {}, ` ${g.imgs.length}`)),
-          h("div", { class: "picks" }, g.imgs.map(pick)))),
+          h("div", { class: "picks" + (kind === "backdrop" ? " wide" : "") }, g.imgs.map(pick)))),
         list.length ? null : h("div", { class: "empty" }, T("Keine Poster gefunden.")));
     }
-    fill(body, scopes ? scopeBar : null, tabs, content); render();
+    fill(body, kindBar, scopes ? scopeBar : null, tabs, content); render();
   } catch (e) { fill(body, h("div", { class: "status bad" }, e.message), [h("h4", { style: "margin:18px 0 0;color:var(--accent)" }, T("ThePosterDB")), posterDbPanel(it, slot, draw, () => m.close(), opts.pick)]); }
 }
 

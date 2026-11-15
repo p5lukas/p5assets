@@ -71,7 +71,7 @@ und welche vorhandenen Bilder ersetzt würden.
 - **Herunterladen** in Originalqualität: einzelne Poster oder eine Auswahl als ZIP (auf iPhone und iPad öffnet sich das Original in p5assets: Bild lange drücken → „Zu Fotos hinzufügen“)
 
 ### Poster-Builder
-Kein passendes Poster gefunden? Dann baust du eins. Du wählst einen textlosen Hintergrund direkt auf der Kachel (Online-Suche oder eigene Datei), dazu ein Clear-Logo von TMDb, fanart.tv oder TheTVDB – oder, falls es keins gibt, den Titel als Text. Serien bekommen darunter eine Staffelzeile („Season One“, „Specials“) in einer zum Hintergrund passenden, frei änderbaren Farbe. Filme: **Bauen** im Hover-Menü. Serien: der Bauen-Knopf in der Detailansicht öffnet den Baumodus mit Vorschau aller Poster; das gerade bearbeitete hat einen Matrix-Rahmen. Gespeichert wird als 1000×1500-JPG mit der üblichen Benennung, Papierkorb und Rückgängig; Looks lassen sich als Vorlagen speichern. Acht mitgelieferte Schriften (OFL).
+Kein passendes Poster gefunden? Dann baust du eins. Du wählst einen textlosen Hintergrund direkt auf der Kachel (Online-Suche oder eigene Datei), dazu ein Clear-Logo von TMDb, fanart.tv oder TheTVDB – oder, falls es keins gibt, den Titel als Text. Serien bekommen darunter eine Staffelzeile („Season One“, „Specials“) in einer zum Hintergrund passenden, frei änderbaren Farbe. Filme: **Bauen** im Hover-Menü. Serien: der Bauen-Knopf in der Detailansicht öffnet den Baumodus mit Vorschau aller Poster; das gerade bearbeitete hat einen Matrix-Rahmen. Gespeichert wird als 1000×1500-JPG mit der üblichen Benennung, Papierkorb und Rückgängig; Looks lassen sich als Vorlagen speichern. Acht mitgelieferte Schriften (OFL). Backdrops lassen sich mit einstellbarem Bildausschnitt als Hintergrund nutzen, und p5assets merkt sich den Look jeder Serie (samt gewählten Hintergründen): Später tauschst du zum Beispiel nur das Logo für alle Poster oder baust eine neue Staffel passend nach.
 
 <img src="docs/images/poster-builder.png" alt="Poster-Builder für eine Serie" width="640">
 
@@ -195,6 +195,8 @@ Updates: Container in Unraid per *Force Update* aktualisieren.
 | `config.json` | Einstellungen, Zugangsdaten (Token/API-Keys, nie im Log) | klein |
 | `cache/thumbs-v3` | Vorschaubilder für schnelle Listen | höchstens 600 MB, wird automatisch bereinigt |
 | `trash` | Papierkorb mit Rückgängig-Funktion | höchstens 2 GB, 30 Tage |
+| `builder` | Poster-Builder: Look jeder Serie, Bilder vom eigenen Rechner | einige MB pro Serie, 30 Tage nach Wegfall des Titels aufgeräumt |
+| `styles.json` | Vorlagen des Poster-Builders | klein |
 | `cache/dims.json`, `history.json`, `logs` | Bildgrößen, Abdeckungsverlauf, Log | klein |
 
 ## Anmeldung & Passwort zurücksetzen

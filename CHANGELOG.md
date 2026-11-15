@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.9.0 – 2026-11-15
+
+**New**
+- Poster builder: the look of a series is remembered. Saving also keeps the settings, colours, texts, logo and the chosen backgrounds (pictures from your computer are copied to `/config/builder`); the next visit continues where you stopped, so you can e.g. swap only the logo on all posters, or build one new season in the same look. “Delete look” in the builder removes it; titles that are gone for good are cleaned up after 30 days
+- Backdrops as backgrounds: a “Backdrops” source in the builder search (TMDb, fanart.tv, TheTVDB), with “Crop” sliders for zoom and position, per poster
+- “Compare”: all posters of the series side by side; a click opens the large view
+- The large view can switch between the draft and the existing poster
+- “Reset all” puts the look back to the defaults (backgrounds and logo stay)
+- The automatic colour of the season line is taken from the picture around the line (light on dark, dark on light), not from the whole poster
+
+**Fixed**
+- TMDb answering 404 for a season or title it has no pictures for (Specials, announced seasons) is “nothing found” and no longer a warning; real errors now name the title and the poster in the log
+
 ## 0.8.8 – 2026-11-14
 
 **New**
