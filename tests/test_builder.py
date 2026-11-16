@@ -305,3 +305,46 @@ def test_tmdb_id_endpoint(monkeypatch):
     assert c.get("/api/items/hd-2/tmdb-id").json() == {"id": "84773"}
     monkeypatch.setattr(main.config, "get", lambda: {"apis": {"tmdb": "", "tvdb": "", "fanart": ""}, "worlds": []})
     assert c.get("/api/items/hd-2/tmdb-id").json() == {"id": None}
+
+
+# ------------------------------------------------------------- collections ---
+def _film(i, title, year, collections, poster=True):
+    return {"id": f"hd-{i}", "world": "hd", "title": title, "year": year, "type": "movie", "folder": f"{title} ({year})", "library_title": "Filme",
+            "sources": ["Plex"], "letter": title[0], "_nt": title.lower(), "_fl": title.lower(), "updated": 0, "dupes": [], "seasons": [], "ids": {},
+            "missing": 0 if poster else 1, "missing_plex": 0, "in_plex": True, "coming_soon": False, "collections": collections,
+            "slots": {"poster": {"exists": poster, "mtime": 5 if poster else 0}}}
+
+
+def test_collection_key_projects_and_counts(store, monkeypatch):
+    col = [{"id": "1:77", "title": "Odyssey Saga"}]
+    films = [_film(1, "Part One", 2001, col), _film(2, "Part Two", 2003, col, poster=False), _film(3, "Alone", 2010, [])]
+    monkeypatch.setitem(scanner.STATE, "items", films)
+    monkeypatch.setattr(main, "_world", lambda w=None: {"id": "hd", "name": "HD", "assets_path": "/nonexistent"})
+    monkeypatch.setattr(main, "_hidden_collections", lambda: frozenset())
+    c = TestClient(main.app)
+    detail = c.get("/api/collection", params={"id": "1:77"}).json()
+    key = detail["builder_key"]
+    assert key == builder_store.collection_key("1:77") and key.startswith("col-") and [m["id"] for m in detail["members"]] == ["hd-1", "hd-2"]
+    # the look of a collection is kept under that key; its posters are keyed by film id
+    body = {"posters": {"hd-1": {"title": "Part One", "ov": {"mode": "text"}}, "hd-2": {"title": "T" * 500}}}
+    saved = c.put(f"/api/items/{key}/builder", json=body).json()["project"]
+    assert saved["posters"]["hd-1"]["title"] == "Part One" and saved["posters"]["hd-1"]["ov"] == {"mode": "text"} and len(saved["posters"]["hd-2"]["title"]) == 120
+    assert c.get(f"/api/items/{key}/builder").json()["project"]["v"] == 1
+    assert c.put("/api/items/col-nothex/builder", json=body).status_code == 404          # not a collection key and no title
+    up = c.post(f"/api/items/{key}/builder/file", files={"file": ("l.png", _png(), "image/png")})
+    assert up.status_code == 200 and c.get(up.json()["url"]).status_code == 200
+    assert c.delete(f"/api/items/{key}/builder").json() == {"ok": True}
+    # the overview: members carry the poster state; the stats count the collection
+    over = c.get("/api/collections", params={"world": "hd"}).json()["collections"]
+    assert over[0]["total"] == 2 and over[0]["with_poster"] == 1 and over[0]["members"][0]["v"] == 5
+    assert c.get("/api/items", params={"world": "hd"}).json()["stats"]["counts"]["collections"] == 1
+
+
+def test_prune_keeps_collection_looks(store):
+    key = builder_store.collection_key("1:77")
+    builder_store.save(key, {"posters": {}})
+    import os
+    import time
+    old = time.time() - 40 * 86400
+    os.utime(store / "builder" / key, (old, old))
+    assert builder_store.prune({key}) == 0 and builder_store.prune({"hd-x"}) == 1

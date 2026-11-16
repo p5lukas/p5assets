@@ -514,7 +514,8 @@ def _scope_stats(items: list[dict], weak_w: int = 0, weak_r: bool = False) -> di
         c["plexmissing"] += 1 if i.get("missing_plex") else 0
     return {"items": c["items"], "slots": c["slots"], "missing": c["missing_slots"], "complete_items": c["complete"],
             "counts": {"all": c["items"], "missing": c["missing"],
-                       "comingsoon": c["comingsoon"], "plexmissing": c["plexmissing"], "weak": c["weak"]},
+                       "comingsoon": c["comingsoon"], "plexmissing": c["plexmissing"], "weak": c["weak"],
+                       "collections": sum(1 for g in collection_overview([i for i in items if i["type"] == "movie"], "", _hidden_collections()) if not g["hidden"])},
             "dims": {"known": c["dims_known"], "total": c["dims_total"]}}
 
 
@@ -569,7 +570,8 @@ def collection_overview(items: list[dict], q: str = "", hidden: set | frozenset 
     for it in items:
         for c in it.get("collections") or []:
             g = groups.setdefault(c["id"], {"id": c["id"], "title": c["title"], "members": []})
-            g["members"].append({"id": it["id"], "title": it["title"], "year": it["year"], "has_poster": bool(it["slots"].get("poster", {}).get("exists"))})
+            sl = it["slots"].get("poster", {})
+            g["members"].append({"id": it["id"], "title": it["title"], "year": it["year"], "has_poster": bool(sl.get("exists")), "v": sl.get("mtime") or 0})
     nq = kometa.normalize(q) if q else ""
     out = []
     for g in groups.values():
@@ -592,7 +594,8 @@ async def collection_detail(id: str):
         raise HTTPException(404, tr("Collection nicht gefunden – bitte neu scannen"))
     title = next(c["title"] for c in films[0]["collections"] if c["id"] == id)
     films.sort(key=lambda i: (i["year"] or 0, i["title"].casefold()))
-    return {"id": id, "title": title, "hidden": id in _hidden_collections(), "members": [_public_item(i, True) for i in films]}
+    return {"id": id, "title": title, "hidden": id in _hidden_collections(), "builder_key": builder_store.collection_key(id),
+            "members": [_public_item(i, True) for i in films]}
 
 
 @app.get("/api/collections")
@@ -914,16 +917,22 @@ async def item_tmdb_id(item_id: str):
     return {"id": str(tid) if tid else None}
 
 
+def _builder_owner(item_id: str) -> None:
+    """The poster builder keeps its look per title, and per Plex collection (key "col-…")."""
+    if not builder_store.COLLECTION_KEY_RE.match(item_id):
+        _item(item_id)
+
+
 @app.get("/api/items/{item_id}/builder")
 async def get_builder_project(item_id: str):
     """What the poster builder remembers about this title (None = nothing yet)."""
-    _item(item_id)
+    _builder_owner(item_id)
     return {"project": await asyncio.to_thread(builder_store.load, item_id)}
 
 
 @app.put("/api/items/{item_id}/builder")
 async def put_builder_project(item_id: str, request: Request):
-    _item(item_id)
+    _builder_owner(item_id)
     try:
         body = await request.json()
     except ValueError:
@@ -936,7 +945,7 @@ async def put_builder_project(item_id: str, request: Request):
 
 @app.delete("/api/items/{item_id}/builder")
 async def delete_builder_project(item_id: str):
-    _item(item_id)
+    _builder_owner(item_id)
     await asyncio.to_thread(builder_store.delete, item_id)
     return {"ok": True}
 
@@ -944,7 +953,7 @@ async def delete_builder_project(item_id: str):
 @app.post("/api/items/{item_id}/builder/file")
 async def put_builder_file(item_id: str, file: Annotated[UploadFile, File()]):
     """Keep a picture from the user's computer (background or logo) for later visits of the builder."""
-    _item(item_id)
+    _builder_owner(item_id)
     data = await file.read()
     name = await asyncio.to_thread(builder_store.put_file, item_id, data)
     if not name:
@@ -954,7 +963,7 @@ async def put_builder_file(item_id: str, file: Annotated[UploadFile, File()]):
 
 @app.get("/api/items/{item_id}/builder/file/{name}")
 async def get_builder_file(item_id: str, name: str):
-    _item(item_id)
+    _builder_owner(item_id)
     path = builder_store.file_path(item_id, name)
     if not path:
         raise HTTPException(404, tr("Datei nicht gefunden"))

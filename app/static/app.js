@@ -249,6 +249,12 @@ async function loadItemsInner(append, id, q, sig) {
   const scope = { type: S.lib.startsWith("type:") ? S.lib.slice(5) : "", library: S.lib.startsWith("lib:") ? S.lib.slice(4) : "", source: S.lib.startsWith("src:") ? S.lib.slice(4) : "" };
   const query = (letter, limit, offset) => new URLSearchParams({ world: S.world, q: S.q, filter: effFilter(), letter, ...scope,
     ...(effFilter() === "comingsoon" && S.nopost ? { nopost: "1" } : {}), ...weakParams(), offset, limit });
+  if (S.filter === "collections") {                // the tab of the Plex collections: its own list, the search filters by name
+    const [r0, cr] = await Promise.all([api("/items?" + new URLSearchParams({ world: S.world, filter: "all", limit: 1, ...scope }), sig), api("/collections?" + new URLSearchParams({ world: S.world, q: S.q }), sig)]);
+    if (id !== S.req) return;
+    S.stats = r0.stats; S.items = []; S.total = 0; S.collections = cr.collections.filter(g => !g.hidden);
+    return;
+  }
   const total = letters => Object.values(letters || {}).reduce((a, b) => a + b, 0);
   const useLetters = S.filter === "all" && !q;   // only the tab "Alle" is split by letter
   let letter = useLetters ? (S.letter ?? "") : "";
@@ -809,7 +815,7 @@ function renderChips() {
   const el = $("#chips"); if (!el) return;
   const c = cfg(), cnt = (S.stats && S.stats.counts) || {};
   const hasExtra = c.arr.some(a => a.world === S.world);
-  const chip = (label, key, n, title) => h("button", { class: "chip" + (effFilter() === key ? " on" : ""), title, onclick: async () => { S.filter = key; S.q = ""; const q = $("#q"); if (q) { q.value = ""; q.parentElement.querySelector(".sclear")?.setAttribute("hidden", ""); } renderChips(); await loadItems(); renderGrid(); } },
+  const chip = (label, key, n, title) => h("button", { class: "chip" + ((S.filter === "collections" ? "collections" : effFilter()) === key ? " on" : ""), title, onclick: async () => { S.filter = key; S.q = ""; const q = $("#q"); if (q) { q.value = ""; q.parentElement.querySelector(".sclear")?.setAttribute("hidden", ""); } renderChips(); await loadItems(); renderGrid(); } },
     label, n != null ? h("small", {}, n) : null);
   fill(el,
     chip(T("In Plex, Poster fehlt"), "plexmissing", cnt.plexmissing, T("In Plex vorhanden, aber bei Kometa fehlt ein Poster oder eine Staffel – das, was in Plex ohne Bild erscheint")),
@@ -817,6 +823,7 @@ function renderChips() {
     chip(T("Alle"), "all", cnt.all),
     chip(T("Alle fehlenden"), "missing", cnt.missing, T("Alles, was ein Poster oder eine Staffel braucht – auch Titel, die nur Sonarr/Radarr kennen und in Plex noch nicht sind")),
     chip(T("Schwache Poster"), "weak", cnt.weak, T("Bilder, die zu schmal sind oder nicht das Seitenverhältnis 2:3 haben (Schwellwerte wählst du selbst)")),
+    cnt.collections > 0 || S.filter === "collections" ? chip(T("Collections"), "collections", cnt.collections, T("Alle Plex-Collections (Filmreihen) dieser Welt: ansehen, bearbeiten und alle Filme in einem Look bauen")) : null,
     S.filter === "weak" ? weakOptions() : null,
     S.filter === "comingsoon" ? h("label", { class: "chip" + (S.nopost ? " on" : ""), style: "display:inline-flex;gap:8px;align-items:center;cursor:pointer" },
       h("input", { type: "checkbox", checked: S.nopost, style: "accent-color:var(--accent)", onchange: async e => { S.nopost = e.target.checked; renderChips(); await loadItems(); renderGrid(); } }), T("nur ohne Poster")) : null,
@@ -847,6 +854,12 @@ function renderGrid() {
   updateHero();                                // statistic and tab counters belong to the chosen source
   renderAz();
   const g = $("#grid"); if (!g) return;
+  if (S.filter === "collections") {
+    S.cards = new Map();
+    fill(g, (S.collections || []).length ? h("div", { class: "colsgrid" }, S.collections.map(collectionTile))
+      : h("div", { class: "empty" }, h("h2", {}, T("Keine Collections gefunden.")), T("Es erscheinen nur Plex-Collections mit mindestens zwei Filmen. Ausgeblendete findest du unter Einstellungen → Bibliotheken.")));
+    return;
+  }
   // cards of unchanged titles are reused (no flicker, no reloading of pictures); only the pictures of dropped cards are cancelled
   const old = S.cards || new Map(), fresh = new Map();
   const els = S.items.map(it => { const sig = JSON.stringify(it), c = old.get(it.id); const el = c && c.sig === sig ? c.el : card(it); fresh.set(it.id, { sig, el }); return el; });
@@ -1193,22 +1206,43 @@ function openPreview(it, key, draw) {
   document.body.append(wrap);
 }
 
+/** A Plex collection as a fan of overlapping posters (missing ones as dashed cards), with its name and state; a click opens the collection, "Bauen" its builder. */
+function collectionTile(g) {
+  const shown = g.members.slice(0, 5), mid = (shown.length - 1) / 2;
+  const fan = h("div", { class: "colfan" }, shown.map((m, i) => h("div", { class: "colp" + (m.has_poster ? "" : " empty"), style: `--o:${(i - mid).toFixed(2)};--z:${Math.round(10 - Math.abs(i - mid) * 2)}`, title: m.title },
+    m.has_poster ? h("img", { loading: "lazy", alt: "", src: `/api/thumb/${m.id}/poster?v=${m.v}` }) : h("span", {}, "＋"))),
+    g.total > shown.length ? h("span", { class: "colmore" }, "+" + (g.total - shown.length)) : null);
+  const open = () => openCollection(g.id);
+  return h("div", { class: "colcard", tabindex: "0", role: "button", "aria-label": g.title, onclick: open, onkeydown: e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } } },
+    fan,
+    h("div", { class: "colinfo" }, h("div", { class: "colname" }, g.title),
+      h("div", { class: "colmeta" }, pl(g.total, "Film", "Filme"), " · ",
+        h("span", { class: "pill " + (g.with_poster === g.total ? "ok" : "warn") }, g.with_poster === g.total ? T("vollständig ({0})", g.total) : T("{0} von {1} Postern", g.with_poster, g.total))),
+      h("button", { class: "btn sm", type: "button", title: T("Alle Filme dieser Collection in einem Look bauen"), onclick: e => { e.stopPropagation(); openCollection(g.id, { build: true }); } }, icon("build", 14), T("Bauen"))));
+}
+
 /** In the preview of a film: its Plex collections; a click opens the detail view of the collection (all its posters). */
+/** The (visible) Plex collections a film belongs to, with the state of their posters. */
+async function collectionsOf(it) {
+  if (!(it.collections || []).length) return [];
+  const r = await api(`/collections?world=${it.world}`);
+  return r.collections.filter(g => !g.hidden && g.members.some(m => m.id === it.id));
+}
 function collectionBoxes(it, close) {
   const box = h("div", { class: "colboxes" });
-  if (!(it.collections || []).length) return box;
-  api(`/collections?world=${it.world}`).then(r => {
-    const mine = r.collections.filter(g => !g.hidden && g.members.some(m => m.id === it.id));
-    fill(box, mine.map(g => h("button", { class: "colbox", title: T("Alle Poster dieser Collection ansehen und bearbeiten"), onclick: () => { close(); openCollection(g.id); } },
-      h("b", {}, T("Collection: ") + g.title),
-      h("span", { class: "pill " + (g.with_poster === g.total ? "ok" : "warn") }, g.with_poster === g.total ? T("vollständig ({0})", g.total) : T("{0} von {1} Postern", g.with_poster, g.total)),
-      h("span", { class: "chev", "aria-hidden": "true" }, "›"))));
+  collectionsOf(it).then(mine => {
+    fill(box, mine.map(g => h("div", { class: "colbox" },
+      h("button", { class: "colmain", title: T("Alle Poster dieser Collection ansehen und bearbeiten"), onclick: () => { close(); openCollection(g.id); } },
+        h("b", {}, T("Collection: ") + g.title),
+        h("span", { class: "pill " + (g.with_poster === g.total ? "ok" : "warn") }, g.with_poster === g.total ? T("vollständig ({0})", g.total) : T("{0} von {1} Postern", g.with_poster, g.total)),
+        h("span", { class: "chev", "aria-hidden": "true" }, "›")),
+      h("button", { class: "btn sm", title: T("Alle Filme dieser Collection in einem Look bauen"), onclick: () => { close(); openCollection(g.id, { build: true, start: it.id }); } }, icon("build", 14), T("Bauen")))));
   }).catch(() => {});
   return box;
 }
 
 /** Detail view of a Plex collection, like the one of a series: one tile per film (replace, upload, delete, preview), upload of a whole set. */
-async function openCollection(cid) {
+async function openCollection(cid, opts = {}) {
   let data;
   try { data = await api("/collection?id=" + encodeURIComponent(cid)); } catch (e) { toast(e.message, "bad"); return; }
   const scrim = h("div", { class: "scrim", onclick: e => { if (e.target === scrim) close(); } });
@@ -1223,6 +1257,7 @@ async function openCollection(cid) {
     loadItems().then(renderGrid);
   }
   const reload = async () => { try { data = await api("/collection?id=" + encodeURIComponent(cid)); draw(); } catch { close(); } };
+  const startBuilder = start => openCollectionBuilder({ data, drawer, close, start, back: () => matrixSwap(reload) });
   const pill = h("span", {});
   const refreshPill = () => {
     const have = data.members.filter(m => m.slots.poster && m.slots.poster.exists).length, total = data.members.length;
@@ -1239,11 +1274,13 @@ async function openCollection(cid) {
         h("p", { class: "hint", style: "margin-top:0" }, T("Poster auf eine Kachel ziehen oder anklicken, um es zu ersetzen. Mehrere Dateien, Ordner oder eine ZIP lassen sich über „Poster hochladen“ den Filmen zuordnen.")),
         h("div", { class: "row wrap", style: "margin-bottom:16px" },
           h("button", { class: "btn sm primary", onclick: () => pickFiles(f => importFiles(f, null, reload), true) }, icon("upload", 14), T("Poster hochladen")),
+          h("button", { class: "btn sm", title: T("Alle Filme dieser Collection in einem Look bauen"), onclick: () => startBuilder() }, icon("build", 14), T("Bauen")),
           h("button", { class: "btn sm", title: T("Diese Collection nicht mehr anzeigen (z. B. eine Sammel-Collection, die keine Filmreihe ist). Wieder einblenden: Einstellungen → Bibliotheken"),
             onclick: async () => { try { await api("/collections/hidden", { json: { id: cid, hidden: true, title: data.title, count: total } }); S.st.config.hidden_collections = [...(S.st.config.hidden_collections || []), { id: cid, title: data.title, count: total }]; toast(T("Collection ausgeblendet"), "ok"); close(); } catch (e) { toast(e.message, "bad"); } } }, T("Ausblenden"))),
         h("div", { class: "grid colgrid" }, data.members.map(m => card(m, onChange)))));
   }
   draw();
+  if (opts.build) startBuilder(opts.start);
 }
 
 /** Use one existing asset for many tiles of the title at once (e.g. poster -> Season00 … Season50), named Kometa-conform. */

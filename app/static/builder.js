@@ -294,15 +294,20 @@ function numField(min, max, onSet) {
  *  the colour of the season line is always per poster; font and the fine tuning of the season line are the same everywhere. */
 function makeBuilder(opts) {
   const it = opts.item, multi = !!opts.multi, slots = opts.slots;
+  // collection builder: every poster is another film (slot.item); each has its own logo and title, everything else is one look
+  const col = !!opts.collection, projId = opts.builderKey || it.id;
+  const itemOf = key => (slots.find(s => s.key === key) || {}).item || it, apiSlot = key => col ? "poster" : key;
   const G = { ...BUILD_DEFAULT };                                   // the look shared by all posters
   let titleText = it.title, logo = null /* { url, preview, source } */, logoRes = null, logoNote = "", presets = {}, sel = opts.start && slots.some(s => s.key === opts.start) ? opts.start : slots[0].key, saving = false, allTitle = true;
-  const newP = s => ({ bg: null, line: s.season == null ? "" : seasonLine(s.season), color: null, auto: null, palette: [], autoSig: "", fit: { ...BUILD_FIT }, ov: {} });
+  const newP = s => ({ title: s.item ? s.item.title : "", bg: null, line: s.season == null ? "" : seasonLine(s.season), color: null, auto: null, palette: [], autoSig: "", fit: { ...BUILD_FIT }, ov: {} });
   const P = Object.fromEntries(slots.map(s => [s.key, newP(s)]));
   const TITLE_OV = ["titleScale", "titleY", "mode", "logo", "trim", "blend", "blendAmount", "blendHeight", "tint", "tintA", "tintB", "tintAmount", "logoColorMode", "logoColor", "edgeCut"];        // what a single poster may do differently (when "for all posters" is off)
   const val = (key, a) => a in P[key].ov ? P[key].ov[a] : a === "logo" ? logo : G[a];
   const style = key => ({ ...G, ...Object.fromEntries(TITLE_OV.filter(a => a !== "logo").map(a => [a, val(key, a)])) });
   const colorOf = key => P[key].color || P[key].auto || "#f1f1ee";
-  const custom = key => Object.keys(P[key].ov).length > 0;
+  const titleOf = key => col ? P[key].title : titleText;
+  const custom = key => Object.keys(P[key].ov).filter(k => !(col && (k === "logo" || k === "mode"))).length > 0;
+  const clearOv = s => { const o = P[s.key].ov; P[s.key].ov = col ? Object.fromEntries(["logo", "mode"].filter(k => k in o).map(k => [k, o[k]])) : {}; };
 
   const root = h("div", { class: "builder" });
   const cards = {}, canvases = {};
@@ -323,7 +328,7 @@ function makeBuilder(opts) {
       if (p.autoSig !== sig) { Object.assign(p, autoColorAt(bg, st, p.fit, yc)); p.autoSig = sig; }
     }
     const out = full || size ? Object.assign(document.createElement("canvas"), size ? { width: size, height: Math.round(size * 1.5) } : { width: BW, height: BH }) : cv;
-    drawBuilt(out, { bg, logo: bgOnly ? null : lg, title: bgOnly ? "" : titleText, line: bgOnly ? "" : p.line, st, color: colorOf(key), fit: p.fit });
+    drawBuilt(out, { bg, logo: bgOnly ? null : lg, title: bgOnly ? "" : titleOf(key), line: bgOnly ? "" : p.line, st, color: colorOf(key), fit: p.fit });
     return out;
   }
   const paintAll = () => slots.forEach(s => paint(s.key));
@@ -336,7 +341,7 @@ function makeBuilder(opts) {
     if (!f) { toast(T("Keine Bilder gefunden"), "bad"); return; }
     const u = URL.createObjectURL(f); setBg(key, { url: u, preview: u, name: f.name, file: f });
   };
-  const bgOnline = key => searchOnline(it, key, null, { pick: img => setBg(key, { url: img.url, preview: img.preview || img.url, name: img.label ? `${img.source} · ${img.label}` : img.source, ...(img.file ? { file: img.file } : {}) }), title: T("Hintergrund wählen"), scopes: slots.map(x => ({ key: x.key, label: x.label })) });
+  const bgOnline = key => searchOnline(itemOf(key), apiSlot(key), null, { pick: img => setBg(key, { url: img.url, preview: img.preview || img.url, name: img.label ? `${img.source} · ${img.label}` : img.source, ...(img.file ? { file: img.file } : {}) }), title: T("Hintergrund wählen"), scopes: col ? null : slots.map(x => ({ key: x.key, label: x.label })) });
   const copyBg = (from, to) => { if (from !== to && P[from].bg) setBg(to, { ...P[from].bg }, P[from].fit); };
   function bgForAll(from) {
     const src = P[from].bg; if (!src) return;
@@ -348,14 +353,29 @@ function makeBuilder(opts) {
 
   /* --- title: logo / text, size, height (for all posters, or for one) ---- */
   function setTitle(attr, v) {
+    if (col && (attr === "logo" || attr === "mode")) { P[sel].ov[attr] = v; return; }          // every film has its own logo (or title as text)
     if (allTitle) { if (attr === "logo") logo = v; else G[attr] = v; slots.forEach(s => delete P[s.key].ov[attr]); } else P[sel].ov[attr] = v;   // the shared logo lives in `logo`, not in G
   }
   function setLogoMode(mode, l) {
     if (l) setTitle("logo", l);
     setTitle("mode", mode);
-    syncControls(); repaintTitle();
+    syncControls(); col ? paint(sel) : repaintTitle();
   }
+  const logoResBy = {}, logoNoteBy = {};
+  const resFor = key => col ? logoResBy[key] : logoRes, noteFor = key => col ? logoNoteBy[key] || "" : logoNote;
   async function loadLogos() {
+    if (col) {                                                      // one logo search per film, in parallel
+      await Promise.all(slots.map(async s => {
+        try {
+          const r = logoResBy[s.key] = await api(`/items/${s.item.id}/logos`);
+          const first = r.images.find(i => i.lang !== "xx") || r.images[0];
+          if ("mode" in P[s.key].ov) return;                         // a kept look decides
+          if (first) { P[s.key].ov.logo = { url: first.url, preview: first.preview, source: first.source }; P[s.key].ov.mode = "logo"; }
+          else { P[s.key].ov.mode = "text"; logoNoteBy[s.key] = T("Kein Logo gefunden – der Titel wird als Text gesetzt"); }
+        } catch (e) { logoResBy[s.key] = { images: [], providers: [], languages: [] }; logoNoteBy[s.key] = e.message; if (!("mode" in P[s.key].ov)) P[s.key].ov.mode = "text"; }
+      }));
+      syncControls(); paintAll(); return;
+    }
     try {
       logoRes = await api(`/items/${it.id}/logos`);
       const first = logoRes.images.find(i => i.lang !== "xx") || logoRes.images[0];     // preferred language first, a logo without language only as a fallback
@@ -377,7 +397,7 @@ function makeBuilder(opts) {
   }
   /** Same layout as the poster search: sources as tabs on top, the logos below grouped by language. */
   function pickLogo() {
-    const r = { images: [], providers: [], languages: [], ...(logoRes || {}) };
+    const r = { images: [], providers: [], languages: [], ...(resFor(sel) || {}) };
     const body = h("div", {}), tabs = h("div", { class: "tabs" }), content = h("div");
     const byCode = Object.fromEntries(S.langs.map(l => [l.code, l]));
     const langTitle = code => { const l = byCode[code]; if (code === "xx") return T("Ohne Sprache"); const name = !l ? code : l.native && l.native !== l.name ? `${l.name} (${l.native})` : l.name; return `${code} • ${name}`; };
@@ -406,7 +426,7 @@ function makeBuilder(opts) {
         groups.filter(g => g.imgs.length).map((g, n) => h("div", { class: "langgroup" },
           h("h4", {}, g.other ? T("Weitere Sprache · ") : `${n + 1}. `, langTitle(g.code), h("small", {}, ` ${g.imgs.length}`)),
           h("div", { class: "picks logos" }, g.imgs.map(pick)))),
-        list.length ? null : h("div", { class: "empty" }, logoNote || T("Keine Logos gefunden.")));
+        list.length ? null : h("div", { class: "empty" }, noteFor(sel) || T("Keine Logos gefunden.")));
     }
     fill(body, tabs, content); render();
   }
@@ -431,7 +451,7 @@ function makeBuilder(opts) {
   const pct = v => Math.round(v * 100) + " %";
   const fontSel = h("select", { onchange: async e => { G.font = e.target.value; await ensureFont(G.font); paintAll(); } }, BUILD_FONTS.map(f => h("option", { value: f[0] }, f[1])));
   const upperChk = h("input", { type: "checkbox", onchange: e => { G.upper = e.target.checked; paintAll(); } });
-  const textInp = h("input", { type: "text", maxlength: 120, oninput: e => { titleText = e.target.value; paintAll(); } });
+  const textInp = h("input", { type: "text", maxlength: 120, oninput: e => { if (col) { P[sel].title = e.target.value; paint(sel); } else { titleText = e.target.value; paintAll(); } } });
   const lineInp = h("input", { type: "text", maxlength: 40, oninput: e => { P[sel].line = e.target.value; paint(sel); } });
   const setColor = c => { P[sel].color = c; syncControls(); paint(sel); };
   const colorInp = h("input", { type: "color", title: T("Eigene Farbe"), oninput: e => setColor(e.target.value) });
@@ -454,7 +474,7 @@ function makeBuilder(opts) {
   const allChk = h("input", { type: "checkbox", checked: true, onchange: e => {
     if (e.target.checked && slots.some(s => custom(s.key)) && !confirm(T("Die abweichenden Einstellungen einzelner Poster gehen verloren. Fortfahren?"))) { e.target.checked = false; return; }
     allTitle = e.target.checked;
-    if (allTitle) slots.forEach(s => { P[s.key].ov = {}; });
+    if (allTitle) slots.forEach(clearOv);
     syncControls(); paintAll();
   } });
   const presetSel = h("select", { onchange: e => { const p = presets[e.target.value]; if (!p) return; applyPreset(p); e.target.value = ""; } });
@@ -524,7 +544,7 @@ function makeBuilder(opts) {
     if (!confirm(T("Alle Einstellungen auf Standard zurücksetzen? Hintergründe und Logo bleiben."))) return;
     for (const k of Object.keys(G)) delete G[k];
     Object.assign(G, BUILD_DEFAULT); if (!logo) G.mode = "text";
-    allTitle = true; slots.forEach(s => { P[s.key].ov = {}; P[s.key].color = null; P[s.key].autoSig = ""; });
+    allTitle = true; slots.forEach(s => { clearOv(s); P[s.key].color = null; P[s.key].autoSig = ""; });
     syncControls(); paintAll();
   }
   /* --- the look of this title is kept between visits -------------------- */
@@ -537,7 +557,7 @@ function makeBuilder(opts) {
     if (!blobCache.has(r.url)) blobCache.set(r.url, (async () => {
       const fd = new FormData();                                    // (the file itself: the page may not fetch blob: addresses)
       fd.append("file", r.file);
-      return (await api(`/items/${it.id}/builder/file`, { method: "POST", body: fd })).url;
+      return (await api(`/items/${projId}/builder/file`, { method: "POST", body: fd })).url;
     })());
     const url = await blobCache.get(r.url);
     return { url, preview: url, ...keep };
@@ -547,16 +567,16 @@ function makeBuilder(opts) {
     for (const s of slots) {
       const p = P[s.key], ov = { ...p.ov };
       if (ov.logo) ov.logo = await stored(ov.logo);
-      posters[s.key] = { bg: await stored(p.bg), line: p.line, color: p.color, fit: p.fit, ov };
+      posters[s.key] = { bg: await stored(p.bg), line: p.line, title: col ? p.title : "", color: p.color, fit: p.fit, ov };
     }
-    await api(`/items/${it.id}/builder`, { method: "PUT", json: { look: G, allTitle, titleText, logo: await stored(logo), posters } });
+    await api(`/items/${projId}/builder`, { method: "PUT", json: { look: G, allTitle, titleText: col ? "" : titleText, logo: await stored(logo), posters } });
   }
   function applyProject(pr) {
     Object.assign(G, BUILD_DEFAULT, pr.look); delete G.color;
     allTitle = pr.allTitle; titleText = pr.titleText || it.title; logo = pr.logo || null;
     for (const [k, v] of Object.entries(pr.posters || {})) {
       const p = P[k]; if (!p) continue;
-      p.bg = v.bg; if (v.line) p.line = v.line;
+      p.bg = v.bg; if (v.line) p.line = v.line; if (col && v.title) p.title = v.title;
       p.color = v.color; p.fit = { ...BUILD_FIT, ...v.fit }; p.ov = v.ov || {}; p.autoSig = "";
       cards[k].draggable = !!v.bg; cards[k].classList.toggle("nobg", !v.bg);
     }
@@ -564,10 +584,10 @@ function makeBuilder(opts) {
   const lookNote = h("div", { class: "blook", hidden: true }, h("span", {}, T("Gespeicherter Look dieser Serie geladen")),
     h("button", { class: "btn sm ghost", type: "button", onclick: async () => {
       if (!confirm(T("Den gespeicherten Look dieser Serie löschen? Die fertigen Poster bleiben unverändert."))) return;
-      try { await api(`/items/${it.id}/builder`, { method: "DELETE" }); lookNote.hidden = true; toast(T("Gespeicherter Look gelöscht"), "ok"); } catch (e) { toast(e.message, "bad"); }
+      try { await api(`/items/${projId}/builder`, { method: "DELETE" }); lookNote.hidden = true; toast(T("Gespeicherter Look gelöscht"), "ok"); } catch (e) { toast(e.message, "bad"); }
     } }, T("Look löschen")));
   function applyPreset(p) {
-    Object.assign(G, BUILD_DEFAULT, p); delete G.color; if (!logo) G.mode = "text"; slots.forEach(s => { P[s.key].ov = {}; });
+    Object.assign(G, BUILD_DEFAULT, p); delete G.color; if (!logo) G.mode = "text"; slots.forEach(clearOv);
     syncControls(); paintAll();
   }
   function drawPresets() {
@@ -593,7 +613,7 @@ function makeBuilder(opts) {
     const key = sel, seasonSlot = P[key].line !== "" || slots.find(s => s.key === key).season != null, mode = val(key, "mode");
     root.querySelectorAll(".bcard").forEach(c => c.classList.toggle("editing", c.dataset.key === key));
     syncCustom();
-    fontSel.value = G.font; upperChk.checked = !!G.upper; textInp.value = titleText;
+    fontSel.value = G.font; upperChk.checked = !!G.upper; textInp.value = titleOf(key);
     modeLogo.classList.toggle("on", mode === "logo"); modeText.classList.toggle("on", mode === "text");
     logoBtn.textContent = val(key, "logo") ? T("Anderes Logo …") : T("Logo wählen …");
     textInp.closest(".brow").hidden = mode === "logo"; titleColorInp.closest(".brow").hidden = mode === "logo";
@@ -630,7 +650,7 @@ function makeBuilder(opts) {
     fill(swatches, [...(P[key].palette || []), "#ffffff", "#141414"].map(c => h("button", { type: "button", class: "swatch" + (P[key].color && P[key].color.toLowerCase() === c.toLowerCase() ? " on" : ""),
       style: `background:${c}`, title: c, "aria-label": c, onclick: () => setColor(c) })));
     root.querySelector(".bedit").textContent = slots.find(s => s.key === key).label;
-    root.querySelector(".bnote").textContent = logoNote;
+    root.querySelector(".bnote").textContent = noteFor(key);
     const n = slots.filter(s => P[s.key].bg).length;
     saveBtn.disabled = saving || !n; saveBtn.textContent = TP(n, "Ein Poster speichern", "{0} Poster speichern");
   }
@@ -643,12 +663,15 @@ function makeBuilder(opts) {
     syncControls();
   }
   const SLOT_DRAG = "application/x-p5slot";
-  const currentUrl = key => { const sl = it.slots[key]; return !sl ? null : sl.exists ? `/api/asset/${it.id}/${key}?v=${sl.mtime}` : sl.plex_thumb ? `/api/season-thumb/${it.id}/${key}` : null; };
+  const currentUrl = key => {
+    const item = itemOf(key), k = apiSlot(key), sl = item.slots[k];
+    return !sl ? null : sl.exists ? `/api/asset/${item.id}/${k}?v=${sl.mtime}` : sl.plex_thumb ? `/api/season-thumb/${item.id}/${k}` : null;
+  };
   const zoom = key => openZoom(slots, key, k => paint(k, true), currentUrl);
   function makeCard(s) {
     const cv = h("canvas", { width: 300, height: 450 }); canvases[s.key] = cv;
     const ov = (name, label, fn) => h("button", { class: "ov-btn bov", type: "button", title: label, "aria-label": label, onclick: e => { e.stopPropagation(); box.classList.remove("show"); selectSlot(s.key); fn(); } }, icon(name, 16), h("span", {}, label));
-    const box = h("div", { class: "poster bposter", "data-key": it.id + "|" + s.key }, cv,
+    const box = h("div", { class: "poster bposter", "data-key": itemOf(s.key).id + "|" + apiSlot(s.key) }, cv,
       h("div", { class: "hover" }, h("div", { class: "ovbtns" },
         ov("search", T("Online suchen"), () => bgOnline(s.key)),
         ov("upload", T("Datei wählen"), () => pickFiles(files => bgFromFile(s.key, files), false)),
@@ -682,22 +705,23 @@ function makeBuilder(opts) {
   async function save() {
     const keys = slots.filter(s => P[s.key].bg).map(s => s.key);
     if (!keys.length || saving) return;
-    const overwritten = keys.filter(k => it.slots[k] && it.slots[k].exists);
+    const overwritten = keys.filter(k => { const sl = itemOf(k).slots[apiSlot(k)]; return sl && sl.exists; });
     if (overwritten.length && !confirm(TP(overwritten.length, "Ein vorhandenes Poster wird ersetzt (das alte liegt 30 Tage im Papierkorb). Fortfahren?", "{0} vorhandene Poster werden ersetzt (die alten liegen 30 Tage im Papierkorb). Fortfahren?"))) return;
     saving = true; syncControls();
     let last = null, trash = null, done = 0;
     try {
       for (const key of keys) {
-        busyTile(it.id + "|" + key, true);
+        const tileKey = itemOf(key).id + "|" + apiSlot(key);
+        busyTile(tileKey, true);
         status.textContent = T("Speichere … {0} von {1}", done + 1, keys.length);
         try {
           const cv = await paint(key, true);
           const blob = await new Promise(res => cv.toBlob(res, "image/jpeg", 0.92));
           const fd = new FormData(); fd.append("file", new File([blob], "poster.jpg", { type: "image/jpeg" }));
-          const r = await api(`/items/${it.id}/${key}/upload`, { method: "POST", body: fd });
-          last = r.item; trash = r.trash; done++; S.rain.add(it.id + "|" + key);
+          const r = await api(`/items/${itemOf(key).id}/${apiSlot(key)}/upload`, { method: "POST", body: fd });
+          last = r.item; trash = r.trash; done++; S.rain.add(tileKey);
           if (r.warning) toast(T("Plex: ") + r.warning, "bad");
-        } finally { busyTile(it.id + "|" + key, false); }
+        } finally { busyTile(tileKey, false); }
       }
       try { await saveProject(); } catch (e) { toast(T("Der Look konnte nicht gespeichert werden: {0}", e.message), "bad"); }
       toast(TP(done, "Poster gespeichert ✓", "{0} Poster gespeichert ✓"), "ok", trash && done === 1 ? { label: T("Rückgängig"), fn: async () => { try { await api(`/trash/${trash}/restore`, { method: "POST" }); loadItems().then(renderGrid); } catch (e) { toast(e.message, "bad"); } } } : null);
@@ -708,6 +732,7 @@ function makeBuilder(opts) {
 
   /* --- layout ----------------------------------------------------------- */
   const titleSec = h("div", { class: "bsec" }, h("h4", {}, T("Titel")),
+    col ? h("div", { class: "hint", style: "margin:0" }, T("Logo und Titeltext gelten für den gewählten Film, alles andere für alle Poster.")) : null,
     h("div", { class: "row wrap" }, h("div", { class: "segs" }, modeLogo, modeText), logoBtn, logoUp),
     h("div", { class: "hint" }, T("PNG oder WebP mit Transparenz, auch per Drag & Drop hier ablegen")),
     h("label", { class: "bchk btrim" }, trimChk, T("Transparenten Rand abschneiden")),
@@ -745,7 +770,7 @@ function makeBuilder(opts) {
 
   (async () => {
     try { presets = (await api("/styles")).presets || {}; } catch { /* optional */ }
-    try { const pr = (await api(`/items/${it.id}/builder`)).project; if (pr) { applyProject(pr); lookNote.hidden = false; } } catch { /* optional */ }
+    try { const pr = (await api(`/items/${projId}/builder`)).project; if (pr) { applyProject(pr); lookNote.hidden = false; } } catch { /* optional */ }
     drawPresets(); syncControls(); paintAll(); loadLogos();
     if (cards[sel]) cards[sel].scrollIntoView({ block: "nearest" });
   })();
@@ -852,8 +877,24 @@ function buildSlotsFor(it) {
 function openMovieBuilder(it, draw) {
   const m = modal(T("Poster bauen – {0}", it.title), h("div", {}));
   const b = makeBuilder({ item: it, multi: false, slots: buildSlotsFor(it), onSaved: item => { m.close(); if (draw) draw(item); }, onCancel: () => m.close() });
+  const notes = h("div", { class: "bnotes" });
   m.el.querySelector(".modal").classList.add("wide");
-  m.el.querySelector(".body").replaceChildren(b);
+  m.el.querySelector(".body").replaceChildren(notes, b);
+  // a film of a Plex collection: offer the collection builder (all films in one look), this film preselected
+  collectionsOf(it).then(list => fill(notes, list.map(g => h("div", { class: "blook" }, h("span", {}, T("Teil der Collection „{0}“ ({1} Filme)", g.title, g.total)),
+    h("button", { class: "btn sm primary", type: "button", onclick: () => { m.close(); openCollection(g.id, { build: true, start: it.id }); } }, icon("build", 14), T("Collection bauen")))))).catch(() => {});
+}
+/** Collections: the detail view of the collection turns into the build mode, one poster per film (data = the answer of /collection). */
+function openCollectionBuilder({ data, drawer, close, back, start }) {
+  matrixSwap(() => {
+    const slots = data.members.map(m => ({ key: m.id, season: null, label: m.year ? `${m.title} (${m.year})` : m.title, item: m }));
+    const pseudo = { id: data.builder_key, title: data.title, type: "collection", slots: {} };
+    const b = makeBuilder({ item: pseudo, builderKey: data.builder_key, collection: true, multi: true, start, slots, onSaved: () => back(), onCancel: () => back() });
+    fill(drawer, h("header", {}, h("button", { class: "btn ghost", "aria-label": T("Schließen"), onclick: close }, "✕"),
+      h("div", { class: "grow" }, h("h2", {}, T("Poster bauen – {0}", data.title)), h("div", { class: "hint", style: "margin:2px 0" }, T("Alle Filme der Collection in einem Look: Hintergrund, Logo oder Titel")))),
+      h("div", { class: "body" }, b));
+    drawer.scrollTop = 0;
+  });
 }
 /** Series: the detail view turns into the build mode (same window); the letters scramble on the way in and out. */
 function openSeriesBuilder({ it, drawer, close, back, start }) {

@@ -296,7 +296,7 @@ async def scan() -> None:
             log.info("Scan finished: %d titles in %.1f s", len(all_items), time.time() - t0)
             await asyncio.to_thread(thumbs.prune)
             await asyncio.to_thread(trash.purge)
-            await asyncio.to_thread(builder_store.prune, {i["id"] for i in all_items})
+            await asyncio.to_thread(builder_store.prune, {i["id"] for i in all_items} | {builder_store.collection_key(c["id"]) for i in all_items for c in i.get("collections") or []})
             asyncio.create_task(_measure_later(all_items))
             await notify.after_scan(all_items, cfg["worlds"], STATE["failed"], None)
         except Exception as e:

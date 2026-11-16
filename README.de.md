@@ -59,7 +59,7 @@ und welche vorhandenen Bilder ersetzt würden.
 
 - Kacheln für das Poster und **Season00 – Season50**, auch für Staffeln, die es noch nicht gibt
 - Poster per Drag & Drop auf eine andere Kachel **kopieren** oder mit **„Auf alle …“** auf mehrere Kacheln übertragen
-- **Plex-Collections:** Filme zeigen in der Vorschau ihre Collection; ein Klick öffnet deren Detailansicht mit allen Postern (ersetzen, hochladen, Set-Upload). Beim Import gruppiert p5assets die Filme nach Plex-Collection und sagt dir, welche Filme der Collection danach noch kein Poster haben. Dateien wie „… Collection“ ordnet der Import nicht automatisch einem Film zu. Große Sammel-Collections, die keine Filmreihen sind, kannst du ausblenden (unter Einstellungen → Bibliotheken siehst du sie und holst sie zurück)
+- **Plex-Collections:** Der Reiter **Collections** zeigt jede Collection als Fächer ihrer Poster (fehlende als gestrichelte Karten). Filme zeigen in der Vorschau ihre Collection; ein Klick öffnet deren Detailansicht mit allen Postern (ersetzen, hochladen, Set-Upload). Beim Import gruppiert p5assets die Filme nach Plex-Collection und sagt dir, welche Filme der Collection danach noch kein Poster haben. Dateien wie „… Collection“ ordnet der Import nicht automatisch einem Film zu. Große Sammel-Collections, die keine Filmreihen sind, kannst du ausblenden (unter Einstellungen → Bibliotheken siehst du sie und holst sie zurück)
 
 <table>
 <tr>
@@ -78,7 +78,7 @@ Kein passendes Poster? Dann baust du eins direkt in p5assets. Es wird wie jedes 
 - **Serien:** ein Look für alle Poster, mit Staffelzeile („Season One“, „Specials“) in einer Farbe aus dem Bild. Einstellungen gelten für alle Poster, mit Ausnahmen pro Poster.
 - **Prüfen:** alle Poster nebeneinander vergleichen, jedes groß ansehen, zwischen Entwurf und vorhandenem Poster umschalten.
 - **Gemerkt:** der Look jeder Serie bleibt erhalten. Später tauschst du zum Beispiel nur das Logo für alle Poster oder baust eine neue Staffel passend nach. Looks lassen sich auch als Vorlagen speichern.
-- **Wo:** Filme: **Bauen** im Hover-Menü. Serien: **Bauen** in der Detailansicht. Oder **Selbst bauen** in der Online-Suche.
+- **Wo:** Filme: **Bauen** im Hover-Menü. Serien: **Bauen** in der Detailansicht. Collections: **Bauen** baut alle Filme einer Collection in einem Look. Oder **Selbst bauen** in der Online-Suche.
 
 <img src="docs/images/poster-builder.png" alt="Poster-Builder für eine Serie" width="640">
 

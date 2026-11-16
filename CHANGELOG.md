@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.6 – 2026-11-17
+
+**New**
+- Tab “Collections” on the main page: every Plex collection (movie series with at least two films, hidden ones excluded) as a fan of overlapping posters, missing posters as dashed cards, with its name and state; the search filters by name; a click opens the collection, “Build” its builder
+- Collection builder: all films of a collection in one look, in the same layout as the series builder. Every film has its own background, logo (found per film, otherwise the title as text) and title text; size, height, fade, filter, logo colour and the rest are one look for all posters. Each poster is saved as the poster of its film; the look of the collection is remembered
+- Entries: “Build” in the collection view, “Build” on the collection box in a movie's preview, and in the movie builder a note “Part of the collection …” with “Build collection” (that film preselected)
+
+**Changed**
+- The collection box in the movie preview has its own “Build” button
+
 ## 0.9.5 – 2026-11-16
 
 **New**

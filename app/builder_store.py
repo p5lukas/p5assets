@@ -21,13 +21,21 @@ MAX_FILE = 15 * 1024 * 1024
 MAX_JSON = 96 * 1024
 STALE_DAYS = 30
 FILE_RE = re.compile(r"^[0-9a-f]{16}\.(png|jpg|webp)$")
-SLOT_RE = re.compile(r"^(poster|season-\d{1,3})$")
+SLOT_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")        # "poster", "season-2", or the id of a film (collection builder)
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 OVERRIDES = ("titleScale", "titleY", "mode", "trim", "blend", "blendAmount", "blendHeight", "tint", "tintA", "tintB", "tintAmount", "logoColorMode", "logoColor", "edgeCut")
 
 
 def _root() -> Path:
     return config.CONFIG_DIR / "builder"
+
+
+COLLECTION_KEY_RE = re.compile(r"^col-[0-9a-f]{16}$")
+
+
+def collection_key(collection_id: str) -> str:
+    """The key under which the look of a Plex collection is kept (its Plex id is not a safe folder name)."""
+    return "col-" + hashlib.sha1(collection_id.encode(), usedforsecurity=False).hexdigest()[:16]
 
 
 def _dir(item_id: str) -> Path:
@@ -85,6 +93,7 @@ def sanitize(item_id: str, p: object) -> dict | None:
         color = v.get("color")
         out["posters"][key] = {
             "bg": _ref(v.get("bg"), item_id), "line": re.sub(r"[\x00-\x1f]", "", str(v.get("line") or ""))[:40],
+            "title": re.sub(r"[\x00-\x1f]", "", str(v.get("title") or ""))[:120],
             "color": color.lower() if isinstance(color, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", color) else None,
             "fit": _fit(fit), "ov": ov}
     return out

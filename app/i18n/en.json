@@ -882,5 +882,16 @@
 "Um 1 % erhöhen": "Increase by 1 %",
 "Rand abschneiden": "Trim edges",
 "MediUX, Rand abschneiden und Zahlenfelder": "MediUX, trim edges and number fields",
-"Neben ThePosterDB gibt es jetzt MediUX: ein Knopf öffnet die Seite des Titels. Im Builder schneidet „Rand abschneiden“ Rahmen am Bildrand weg, und jeder Regler hat ein Zahlenfeld mit −/+ für 1-%-Schritte. Der Builder startet außerdem immer mit den Standardwerten.": "Next to ThePosterDB there is now MediUX: a button opens the page of the title. In the builder “Trim edges” cuts off frames at the picture's edge, and every slider has a number field with −/+ for steps of 1 %. The builder also always starts with the default settings."
+"Neben ThePosterDB gibt es jetzt MediUX: ein Knopf öffnet die Seite des Titels. Im Builder schneidet „Rand abschneiden“ Rahmen am Bildrand weg, und jeder Regler hat ein Zahlenfeld mit −/+ für 1-%-Schritte. Der Builder startet außerdem immer mit den Standardwerten.": "Next to ThePosterDB there is now MediUX: a button opens the page of the title. In the builder “Trim edges” cuts off frames at the picture's edge, and every slider has a number field with −/+ for steps of 1 %. The builder also always starts with the default settings.",
+"Collections": "Collections",
+"Alle Plex-Collections (Filmreihen) dieser Welt: ansehen, bearbeiten und alle Filme in einem Look bauen": "All Plex collections (movie series) of this world: view, edit and build all films in one look",
+"Keine Collections gefunden.": "No collections found.",
+"Es erscheinen nur Plex-Collections mit mindestens zwei Filmen. Ausgeblendete findest du unter Einstellungen → Bibliotheken.": "Only Plex collections with at least two movies appear. Hidden ones are listed under Settings → Libraries.",
+"Alle Filme dieser Collection in einem Look bauen": "Build all films of this collection in one look",
+"Teil der Collection „{0}“ ({1} Filme)": "Part of the collection “{0}” ({1} movies)",
+"Collection bauen": "Build collection",
+"Alle Filme der Collection in einem Look: Hintergrund, Logo oder Titel": "All films of the collection in one look: background, logo or title",
+"Logo und Titeltext gelten für den gewählten Film, alles andere für alle Poster.": "Logo and title text apply to the selected film, everything else to all posters.",
+"Collections: Reiter und Builder": "Collections: tab and builder",
+"Alle Plex-Collections stehen jetzt in einem eigenen Reiter als Poster-Fächer. Mit „Bauen“ baust du alle Filme einer Collection in einem Look; auch aus dem Film-Builder und der Filmvorschau erreichst du den Collection-Builder.": "All Plex collections now have their own tab, shown as fans of posters. With “Build” you build all films of a collection in one look; the collection builder is also reachable from the movie builder and the movie preview."
 }

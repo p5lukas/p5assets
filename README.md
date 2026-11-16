@@ -62,7 +62,7 @@ p5assets reads the title, year and season from file and folder names, shows you 
 
 - Tiles for the poster and **Season00 to Season50**, including seasons that do not exist yet.
 - **Copy** a poster to another tile by dragging it there, or to several tiles at once with “Apply to all …”.
-- **Plex collections:** The movie preview lists the movie's collections. One click opens the collection's detail view with all its posters (replace, upload, upload a set). On import, movies are grouped by Plex collection, and p5assets tells you which movies in the collection will still have no poster. Files named “… Collection” are never matched to a movie automatically. Large catch-all collections that are not movie series can be hidden; “Settings → Libraries” lists them and lets you show them again.
+- **Plex collections:** The tab **Collections** shows every collection as a fan of its posters (missing ones as dashed cards). The movie preview lists the movie's collections. One click opens the collection's detail view with all its posters (replace, upload, upload a set). On import, movies are grouped by Plex collection, and p5assets tells you which movies in the collection will still have no poster. Files named “… Collection” are never matched to a movie automatically. Large catch-all collections that are not movie series can be hidden; “Settings → Libraries” lists them and lets you show them again.
 
 <table>
 <tr>
@@ -81,7 +81,7 @@ No suitable poster? Build one right in p5assets. It is saved like any other post
 - **Series:** one look for all posters, with a season line (“Season One”, “Specials”) in a colour taken from the picture. Settings apply to all posters, with exceptions per poster.
 - **Check:** compare all posters side by side, view each one large, switch between draft and existing poster.
 - **Remembered:** the look of each series is kept, so later you can swap only the logo on all posters or add a season in the same style. Looks can also be saved as presets.
-- **Where:** movies: “Build” in the hover menu. Series: “Build” in the detail view. Or “Build it myself” in the online search.
+- **Where:** movies: “Build” in the hover menu. Series: “Build” in the detail view. Collections: “Build” builds all films of a collection in one look. Or “Build it myself” in the online search.
 
 <img src="docs/images/poster-builder.png" alt="Poster builder for a series: all posters in one look" width="640">
 
