@@ -86,7 +86,7 @@ Kein passendes Poster? Dann baust du eins direkt in p5assets. Es wird wie jedes 
 
 ### Online-Suche
 Poster von TMDb, TVDB und fanart.tv, gruppiert nach deiner **Sprach-Priorität pro Welt** (z. B. Textless → Deutsch → Englisch),
-übernimmst du mit einem Klick. Für ThePosterDB öffnet ein Link die Suche mit dem passenden Namen; das Poster oder Set,
+übernimmst du mit einem Klick. Für ThePosterDB öffnet ein Link die Suche mit dem passenden Namen, für MediUX die Seite des Titels; das Poster oder Set,
 das du dort herunterlädst, legst du einfach in p5assets ab (kein Login, kein Auslesen der Seite).
 
 <img src="docs/images/online-search.png" alt="Online-Suche" width="560">

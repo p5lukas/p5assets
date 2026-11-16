@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.5 – 2026-11-16
+
+**New**
+- MediUX tab next to ThePosterDB (in the online search, in the builder search, and a “MediUX” button in the series view): a button opens the title's MediUX page by its TMDb number (movies `/movies/<id>`, series `/shows/<id>`), then drop the downloaded poster or set like with ThePosterDB. The TMDb number is looked up when it is not known yet
+- Poster builder: “Trim edges” cuts the same share (0–15 %) off every side of the background, e.g. to remove a frame; it is a look setting for all posters (the “Settings for all posters” box now sits above “Crop”)
+- Poster builder: every slider has a number field to type a value and − / + buttons for steps of 1 % (hold to repeat, Shift + arrow keys for 10)
+
+**Changed**
+- The poster builder always starts with the default settings; the last used look is no longer carried over to other titles (a series with a saved look still continues with it, presets stay)
+
 ## 0.9.4 – 2026-11-16
 
 **Changed**

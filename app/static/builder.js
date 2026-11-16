@@ -7,7 +7,7 @@ const BW = 1000, BH = 1500;
 const BUILD_FONTS = [["montserrat", "Montserrat", 700], ["raleway", "Raleway", 700], ["oswald", "Oswald", 700], ["bebas-neue", "Bebas Neue", 400],
   ["anton", "Anton", 400], ["cinzel", "Cinzel", 700], ["playfair-display", "Playfair Display", 700], ["lato", "Lato", 700]];
 const BUILD_FIT = { zoom: 1, x: 0.5, y: 0.5, fill: "auto", color: "#12161c" };
-const BUILD_DEFAULT = { font: "montserrat", upper: true, mode: "logo", trim: true, logoColorMode: "off", logoColor: "#ffffff", tint: "off", tintA: "#101a2e", tintB: "#ffd9a0", tintAmount: 1, blend: "off", blendAmount: 0.7, blendHeight: 0.35, titleScale: 0.7, titleY: 0.82, seasonScale: 0.9, gap: 0.02, seasonPos: "below", seasonY: 0.92, tracking: 0.22, titleColor: "#ffffff" };     // same on all posters; only the colour of the season line is per poster
+const BUILD_DEFAULT = { edgeCut: 0, font: "montserrat", upper: true, mode: "logo", trim: true, logoColorMode: "off", logoColor: "#ffffff", tint: "off", tintA: "#101a2e", tintB: "#ffd9a0", tintAmount: 1, blend: "off", blendAmount: 0.7, blendHeight: 0.35, titleScale: 0.7, titleY: 0.82, seasonScale: 0.9, gap: 0.02, seasonPos: "below", seasonY: 0.92, tracking: 0.22, titleColor: "#ffffff" };     // same on all posters; only the colour of the season line is per poster
 
 /* ---------------------------------------------------------------- texts --- */
 const ONES = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen",
@@ -205,10 +205,11 @@ function drawBuilt(canvas, o) {
   const def = BUILD_FONTS.find(f => f[0] === st.font) || BUILD_FONTS[0], fam = `"p5-${def[0]}", sans-serif`;
   ctx.clearRect(0, 0, W, H);
   if (o.bg) {                                                      // cover fit
-    const f = o.fit || BUILD_FIT, nw = o.bg.naturalWidth, nh = o.bg.naturalHeight, s = Math.max(W / nw, H / nh) * f.zoom, dw = nw * s, dh = nh * s;
+    const f = o.fit || BUILD_FIT, ec = st.edgeCut || 0, fw = o.bg.naturalWidth, fh = o.bg.naturalHeight;          // edgeCut: the same share cut off every side (a frame in the picture)
+    const sx = fw * ec, sy = fh * ec, nw = fw - 2 * sx, nh = fh - 2 * sy, s = Math.max(W / nw, H / nh) * f.zoom, dw = nw * s, dh = nh * s;
     const dx = (W - dw) * f.x, dy = (H - dh) * f.y;                              // cover fit, then zoomed and shifted (x, y: 0 = left / top edge, 1 = right / bottom edge)
     if (dw < W - 0.5 || dh < H - 0.5 || imageInfo(o.bg).transparent) fillFree(ctx, o.bg, f, W, H, dx, dy, dw, dh);       // zoomed out (or cut-out): something has to be behind
-    ctx.drawImage(o.bg, dx, dy, dw, dh);
+    ctx.drawImage(o.bg, sx, sy, nw, nh, dx, dy, dw, dh);
   } else {
     const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#0b1a12"); g.addColorStop(1, "#03100a"); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
@@ -262,6 +263,31 @@ function drawTracked(ctx, text, cx, y, track) {
   chars.forEach((c, i) => { ctx.fillText(c, x, y); x += widths[i] + track; });
 }
 
+/** A number field (in percent) with − / + buttons for steps of 1 %: next to every slider, to type a value or click in single steps.
+ *  onSet(v) gets the new value (0–1 scale, clamped), or null when the text is not a number (then show the old value again). */
+function numField(min, max, onSet) {
+  let cur = min;
+  const clamp = v => Math.min(max, Math.max(min, v)), pctOf = v => Math.round(v * 100);
+  const inp = h("input", { type: "number", class: "bnum-in", min: pctOf(min), max: pctOf(max), step: 1, inputmode: "numeric", "aria-label": T("Wert in Prozent") });
+  const commit = () => { const n = parseFloat(inp.value); if (Number.isNaN(n)) onSet(null); else onSet(clamp(Math.round(n) / 100)); };
+  const bump = d => onSet(clamp((pctOf(cur) + d) / 100));
+  inp.addEventListener("change", commit);
+  inp.addEventListener("keydown", e => {
+    if (e.key === "Enter") { commit(); inp.blur(); }
+    else if (e.shiftKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) { e.preventDefault(); bump(e.key === "ArrowUp" ? 10 : -10); }
+  });
+  const stepBtn = (label, text, d) => {
+    let t = null, iv = null;
+    const stop = () => { clearTimeout(t); clearInterval(iv); t = iv = null; };
+    return h("button", { class: "bstep", type: "button", "aria-label": label, title: label, onpointerdown: e => {
+      e.preventDefault(); bump(d); stop();
+      t = setTimeout(() => { iv = setInterval(() => bump(d), 70); }, 380);                       // held: repeats
+    }, onpointerup: stop, onpointerleave: stop, onpointercancel: stop, onkeydown: e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); bump(d); } } }, text);
+  };
+  return { el: h("span", { class: "bnum" }, stepBtn(T("Um 1 % verringern"), "−", -1), inp, stepBtn(T("Um 1 % erhöhen"), "+", 1)),
+    set: v => { cur = v; inp.value = pctOf(v); } };
+}
+
 /* -------------------------------------------------------------- builder --- */
 /** The editor. opts = { item, slots: [{ key, season, label }], multi, onSaved(lastItem, keys, trashId), onCancel }. Returns the DOM element.
  *  Backgrounds belong to a poster and are chosen on its tile. Logo, size and height are the same on all posters unless "for all posters" is switched off;
@@ -272,7 +298,7 @@ function makeBuilder(opts) {
   let titleText = it.title, logo = null /* { url, preview, source } */, logoRes = null, logoNote = "", presets = {}, sel = opts.start && slots.some(s => s.key === opts.start) ? opts.start : slots[0].key, saving = false, allTitle = true;
   const newP = s => ({ bg: null, line: s.season == null ? "" : seasonLine(s.season), color: null, auto: null, palette: [], autoSig: "", fit: { ...BUILD_FIT }, ov: {} });
   const P = Object.fromEntries(slots.map(s => [s.key, newP(s)]));
-  const TITLE_OV = ["titleScale", "titleY", "mode", "logo", "trim", "blend", "blendAmount", "blendHeight", "tint", "tintA", "tintB", "tintAmount", "logoColorMode", "logoColor"];        // what a single poster may do differently (when "for all posters" is off)
+  const TITLE_OV = ["titleScale", "titleY", "mode", "logo", "trim", "blend", "blendAmount", "blendHeight", "tint", "tintA", "tintB", "tintAmount", "logoColorMode", "logoColor", "edgeCut"];        // what a single poster may do differently (when "for all posters" is off)
   const val = (key, a) => a in P[key].ov ? P[key].ov[a] : a === "logo" ? logo : G[a];
   const style = key => ({ ...G, ...Object.fromEntries(TITLE_OV.filter(a => a !== "logo").map(a => [a, val(key, a)])) });
   const colorOf = key => P[key].color || P[key].auto || "#f1f1ee";
@@ -310,7 +336,7 @@ function makeBuilder(opts) {
     if (!f) { toast(T("Keine Bilder gefunden"), "bad"); return; }
     const u = URL.createObjectURL(f); setBg(key, { url: u, preview: u, name: f.name, file: f });
   };
-  const bgOnline = key => searchOnline(it, key, null, { pick: img => setBg(key, { url: img.url, preview: img.preview || img.url, name: img.label ? `${img.source} · ${img.label}` : img.source }), title: T("Hintergrund wählen"), scopes: slots.map(x => ({ key: x.key, label: x.label })) });
+  const bgOnline = key => searchOnline(it, key, null, { pick: img => setBg(key, { url: img.url, preview: img.preview || img.url, name: img.label ? `${img.source} · ${img.label}` : img.source, ...(img.file ? { file: img.file } : {}) }), title: T("Hintergrund wählen"), scopes: slots.map(x => ({ key: x.key, label: x.label })) });
   const copyBg = (from, to) => { if (from !== to && P[from].bg) setBg(to, { ...P[from].bg }, P[from].fit); };
   function bgForAll(from) {
     const src = P[from].bg; if (!src) return;
@@ -390,13 +416,14 @@ function makeBuilder(opts) {
   /** A slider row: label, slider, value, "Default" button. Always the same layout, so the sliders keep the same length.
    *  perPoster = the value may differ per poster (size and height of the title, when "for all posters" is off). */
   function slider(label, attr, min, max, step, fmt, perPoster) {
-    const def = BUILD_DEFAULT[attr], out = h("span", { class: "bval" });
+    const def = BUILD_DEFAULT[attr];
     const cur = () => perPoster ? val(sel, attr) : G[attr];
-    const show = v => { out.textContent = fmt(v); reset.classList.toggle("dim", Math.abs(v - def) < step / 2); };
+    const show = v => { num.set(v); reset.classList.toggle("dim", Math.abs(v - def) < step / 2); };
     const put = v => { if (perPoster) setTitle(attr, v); else G[attr] = v; show(v); perPoster ? repaintTitle() : paintAll(); if (perPoster) syncCustom(); };
+    const num = numField(min, max, v => { if (v == null) { show(cur()); return; } inp.value = v; put(v); });
     const inp = h("input", { type: "range", min, max, step, oninput: () => put(+inp.value) });
     const reset = h("button", { class: "btn sm breset", type: "button", title: T("Auf Standard zurücksetzen"), onclick: () => { inp.value = def; put(def); } }, T("Standard"));
-    const row = h("div", { class: "brow srow" }, h("span", { class: "blab" }, label), inp, out, reset);
+    const row = h("div", { class: "brow srow" }, h("span", { class: "blab" }, label), inp, num.el, reset);
     ctl[attr] = () => { inp.value = cur(); show(cur()); };
     ctl[attr].row = row;
     return row;
@@ -434,13 +461,14 @@ function makeBuilder(opts) {
   const fitCtl = {};
   /** Slider for the crop of the selected poster's background (zoom, shift): per poster, with its own "Default" button. */
   function fitSlider(label, prop, min, max, step, fmt) {
-    const def = BUILD_FIT[prop], out = h("span", { class: "bval" });
-    const show = v => { out.textContent = fmt(v); reset.classList.toggle("dim", Math.abs(v - def) < step / 2); };
+    const def = BUILD_FIT[prop];
+    const show = v => { num.set(v); reset.classList.toggle("dim", Math.abs(v - def) < step / 2); };
+    const num = numField(min, max, v => { if (v == null) { show(P[sel].fit[prop]); return; } inp.value = v; put(v); });
     const put = v => { P[sel].fit[prop] = v; show(v); paint(sel); fillRows.hidden = !(P[sel].fit.zoom < 0.999 || P[sel].transp); };     // zoomed out: the free area needs a fill
     const inp = h("input", { type: "range", min, max, step, oninput: () => put(+inp.value) });
     const reset = h("button", { class: "btn sm breset", type: "button", title: T("Auf Standard zurücksetzen"), onclick: () => { inp.value = def; put(def); } }, T("Standard"));
     fitCtl[prop] = () => { const v = P[sel].fit[prop]; inp.value = v; show(v); };
-    return h("div", { class: "brow srow" }, h("span", { class: "blab" }, label), inp, out, reset);
+    return h("div", { class: "brow srow" }, h("span", { class: "blab" }, label), inp, num.el, reset);
   }
   const pctOf = v => Math.round(v * 100) + " %";
   const setFit = patch => { P[sel].fit = { ...P[sel].fit, ...patch }; syncControls(); paint(sel); };
@@ -462,6 +490,7 @@ function makeBuilder(opts) {
     h("div", { class: "brow" }, h("span", { class: "blab" }, T("Freier Bereich")), h("div", { class: "segs" }, fillBtns)),
     h("div", { class: "brow bfillcolor" }, h("span", { class: "blab" }, T("Farbe")), fillSwatches, fillPipette, fillColorInp));
   const fitSec = h("div", { class: "bsec bfit" }, h("h4", {}, T("Bildausschnitt")),
+    slider(T("Rand abschneiden"), "edgeCut", 0, 0.15, 0.005, pct, true),
     fitSlider(T("Zoom"), "zoom", 0.3, 3, 0.01, pctOf), fitSlider(T("Links / rechts"), "x", 0, 1, 0.005, pctOf), fitSlider(T("Oben / unten"), "y", 0, 1, 0.005, pctOf),
     h("div", { class: "row wrap" }, fitAll), fillRows);
   /* --- colour filter (a look setting like the fade: for all posters, or for one) --- */
@@ -670,7 +699,6 @@ function makeBuilder(opts) {
           if (r.warning) toast(T("Plex: ") + r.warning, "bad");
         } finally { busyTile(it.id + "|" + key, false); }
       }
-      try { await api("/styles/last", { method: "PUT", json: { style: G } }); } catch { /* optional */ }
       try { await saveProject(); } catch (e) { toast(T("Der Look konnte nicht gespeichert werden: {0}", e.message), "bad"); }
       toast(TP(done, "Poster gespeichert ✓", "{0} Poster gespeichert ✓"), "ok", trash && done === 1 ? { label: T("Rückgängig"), fn: async () => { try { await api(`/trash/${trash}/restore`, { method: "POST" }); loadItems().then(renderGrid); } catch (e) { toast(e.message, "bad"); } } } : null);
       if (opts.onSaved) opts.onSaved(last, keys, trash);
@@ -696,8 +724,8 @@ function makeBuilder(opts) {
     h("div", { class: "bhead" }, h("span", { class: "hint", style: "margin:0" }, T("Bearbeitet:")), h("b", { class: "bedit" }), h("span", { class: "spacer" }), compareBtn),
     lookNote,
     h("div", { class: "hint bbghint" }, T("Hintergrund: über ein Poster fahren (am Handy antippen) – suchen, Datei wählen, Vorschau. Ein Poster auf ein anderes ziehen kopiert den Hintergrund.")),
-    fitSec,
     h("label", { class: "bchk ballchk" }, allChk, T("Einstellungen für alle Poster")),
+    fitSec,
     titleSec,
     h("div", { class: "bsec" }, h("h4", {}, T("Überblendung")),
       h("div", { class: "row wrap" }, h("div", { class: "segs" }, blendOff, blendDark, blendLight)),
@@ -716,7 +744,7 @@ function makeBuilder(opts) {
   root.append(grid, controls);
 
   (async () => {
-    try { const st = await api("/styles"); presets = st.presets || {}; if (st.last) { Object.assign(G, st.last); delete G.color; } } catch { /* optional */ }
+    try { presets = (await api("/styles")).presets || {}; } catch { /* optional */ }
     try { const pr = (await api(`/items/${it.id}/builder`)).project; if (pr) { applyProject(pr); lookNote.hidden = false; } } catch { /* optional */ }
     drawPresets(); syncControls(); paintAll(); loadLogos();
     if (cards[sel]) cards[sel].scrollIntoView({ block: "nearest" });

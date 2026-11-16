@@ -23,7 +23,7 @@ STALE_DAYS = 30
 FILE_RE = re.compile(r"^[0-9a-f]{16}\.(png|jpg|webp)$")
 SLOT_RE = re.compile(r"^(poster|season-\d{1,3})$")
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
-OVERRIDES = ("titleScale", "titleY", "mode", "trim", "blend", "blendAmount", "blendHeight", "tint", "tintA", "tintB", "tintAmount", "logoColorMode", "logoColor")
+OVERRIDES = ("titleScale", "titleY", "mode", "trim", "blend", "blendAmount", "blendHeight", "tint", "tintA", "tintB", "tintAmount", "logoColorMode", "logoColor", "edgeCut")
 
 
 def _root() -> Path:

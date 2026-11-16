@@ -1,4 +1,4 @@
-"""Saved looks ("styles") of the poster builder: the last used one and named presets, kept in /config/styles.json."""
+"""Saved looks ("styles") of the poster builder: named presets, kept in /config/styles.json."""
 from __future__ import annotations
 
 import json
@@ -9,7 +9,7 @@ import threading
 from . import config
 
 FONTS = ("montserrat", "raleway", "oswald", "bebas-neue", "anton", "cinzel", "playfair-display", "lato")
-NUMBERS = {"tintAmount": (0.1, 1.0), "seasonY": (0.03, 0.97), "blendAmount": (0.1, 1.0), "blendHeight": (0.1, 0.8), "titleScale": (0.3, 2.0), "titleY": (0.0, 1.0), "seasonScale": (0.3, 3.0), "gap": (0.0, 0.12), "tracking": (0.0, 0.5)}
+NUMBERS = {"edgeCut": (0.0, 0.15), "tintAmount": (0.1, 1.0), "seasonY": (0.03, 0.97), "blendAmount": (0.1, 1.0), "blendHeight": (0.1, 0.8), "titleScale": (0.3, 2.0), "titleY": (0.0, 1.0), "seasonScale": (0.3, 3.0), "gap": (0.0, 0.12), "tracking": (0.0, 0.5)}
 MAX_PRESETS = 50
 _lock = threading.Lock()
 
@@ -63,7 +63,7 @@ def load() -> dict:
     except (OSError, ValueError):
         data = {}
     presets = data.get("presets") if isinstance(data.get("presets"), dict) else {}
-    return {"presets": {clean_name(k): sanitize(v) for k, v in presets.items() if clean_name(k)}, "last": sanitize(data.get("last")) or None}
+    return {"presets": {clean_name(k): sanitize(v) for k, v in presets.items() if clean_name(k)}}
 
 
 def _save(data: dict) -> None:
@@ -72,13 +72,6 @@ def _save(data: dict) -> None:
     tmp = f.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), "utf-8")
     os.replace(tmp, f)
-
-
-def set_last(style: dict) -> None:
-    with _lock:
-        data = load()
-        data["last"] = sanitize(style) or None
-        _save(data)
 
 
 def save_preset(name: str, style: dict) -> bool:

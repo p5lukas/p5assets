@@ -159,6 +159,7 @@ def _public_item(it: dict, full: bool = False) -> dict:
     out["available"] = it.get("available")
     out["slots"] = {k: {kk: vv for kk, vv in v.items() if kk != "path"} for k, v in it["slots"].items()}
     out["season_count"] = len(it["seasons"])
+    out["tmdb_id"] = (it.get("ids") or {}).get("tmdb")
     out["poster_count"] = 1 + len(it["seasons"])      # series poster + every season (Specials included when there is a season 0)
     if full:
         out["seasons"] = [{"number": s["number"], "title": s["title"], "slot": kometa.slot_key(s["number"]),
@@ -899,6 +900,20 @@ async def builder_source(item_id: str, kind: str, slot: str = "poster"):
     return res
 
 
+@app.get("/api/items/{item_id}/tmdb-id")
+async def item_tmdb_id(item_id: str):
+    """The TMDb number of a title (for links to sites that use it, like MediUX); looked up through the other IDs when it is not known yet."""
+    it = _item(item_id)
+    tid = (it.get("ids") or {}).get("tmdb")
+    key = config.get()["apis"]["tmdb"]
+    if not tid and key:
+        try:
+            tid = await providers.tmdb_find_id(key, it.get("ids") or {}, it["type"], it["title"], it["year"])
+        except Exception as e:  # noqa: BLE001
+            log.warning("TMDb number of %s: %s", it["title"], short(e))
+    return {"id": str(tid) if tid else None}
+
+
 @app.get("/api/items/{item_id}/builder")
 async def get_builder_project(item_id: str):
     """What the poster builder remembers about this title (None = nothing yet)."""
@@ -953,12 +968,6 @@ async def get_styles():
 
 class StyleBody(BaseModel):
     style: dict
-
-
-@app.put("/api/styles/last")
-async def put_last_style(body: StyleBody):
-    await asyncio.to_thread(styles.set_last, body.style)
-    return {"ok": True}
 
 
 @app.put("/api/styles/presets/{name}")

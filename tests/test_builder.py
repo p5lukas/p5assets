@@ -39,12 +39,10 @@ def test_sanitize_logo_colour():
 
 def test_presets_roundtrip_and_limits(tmp_path, monkeypatch):
     monkeypatch.setattr(styles.config, "CONFIG_DIR", tmp_path)
-    assert styles.load() == {"presets": {}, "last": None}
+    assert styles.load() == {"presets": {}}
     assert styles.save_preset("  Dark  ", {"font": "anton"})
     assert styles.load()["presets"] == {"Dark": {"font": "anton"}}
     assert not styles.save_preset("   ", {})
-    styles.set_last({"mode": "logo"})
-    assert styles.load()["last"] == {"mode": "logo"}
     styles.delete_preset("Dark")
     assert styles.load()["presets"] == {}
     for i in range(styles.MAX_PRESETS):
@@ -94,12 +92,11 @@ def client(tmp_path, monkeypatch):
 
 
 def test_style_endpoints(client):
-    assert client.get("/api/styles").json() == {"presets": {}, "last": None}
+    assert client.get("/api/styles").json() == {"presets": {}}
     r = client.put("/api/styles/presets/Mine", json={"style": {"font": "cinzel", "titleY": 0.4, "x": 1}})
     assert r.status_code == 200 and r.json()["presets"] == {"Mine": {"font": "cinzel", "titleY": 0.4}}
     assert client.put("/api/styles/presets/%20", json={"style": {}}).status_code in (400, 404)
-    assert client.put("/api/styles/last", json={"style": {"mode": "text"}}).json() == {"ok": True}
-    assert client.get("/api/styles").json()["last"] == {"mode": "text"}
+    assert client.put("/api/styles/last", json={"style": {"mode": "text"}}).status_code in (404, 405)      # no global "last look" any more
     assert client.delete("/api/styles/presets/Mine").json()["presets"] == {}
 
 
@@ -286,3 +283,25 @@ def test_sources_endpoint(store, monkeypatch):
         assert c.get(f"/api/items/hd-abc/sources/{gone}").status_code == 404
     assert c.get("/api/items/hd-abc/sources/stills", params={"slot": "poster"}).status_code == 400      # no API keys
     assert c.get("/api/items/hd-abc/plex-photo", params={"path": "/library/metadata/1/art/1"}).status_code in (404, 405)
+
+
+def test_sanitize_edge_cut():
+    assert styles.sanitize({"edgeCut": 0.5}) == {"edgeCut": 0.15}
+    assert styles.sanitize({"edgeCut": -1}) == {"edgeCut": 0.0}
+
+
+def test_tmdb_id_endpoint(monkeypatch):
+    items = [{"id": "hd-1", "world": "hd", "title": "A", "year": 2020, "type": "movie", "ids": {"tmdb": "603"}},
+             {"id": "hd-2", "world": "hd", "title": "B", "year": 2021, "type": "show", "ids": {"tvdb": "9"}}]
+    monkeypatch.setitem(scanner.STATE, "items", items)
+    c = TestClient(main.app)
+    monkeypatch.setattr(main.config, "get", lambda: {"apis": {"tmdb": "k", "tvdb": "", "fanart": ""}, "worlds": []})
+    assert c.get("/api/items/hd-1/tmdb-id").json() == {"id": "603"}
+
+    async def find(key, ids, kind, title, year):
+        return "84773"
+
+    monkeypatch.setattr(main.providers, "tmdb_find_id", find)
+    assert c.get("/api/items/hd-2/tmdb-id").json() == {"id": "84773"}
+    monkeypatch.setattr(main.config, "get", lambda: {"apis": {"tmdb": "", "tvdb": "", "fanart": ""}, "worlds": []})
+    assert c.get("/api/items/hd-2/tmdb-id").json() == {"id": None}

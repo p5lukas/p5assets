@@ -89,7 +89,7 @@ No suitable poster? Build one right in p5assets. It is saved like any other post
 
 ### Online search
 Posters from TMDb, TVDB and fanart.tv, sorted by your **preferred poster languages per world** (e.g. Textless → German → English), applied with one click.
-For ThePosterDB, a link opens the site's search with the matching title. Download the poster or set there and drop it into p5assets (no login and no scraping on p5assets' side).
+For ThePosterDB, a link opens the site's search with the matching title; for MediUX, a link opens the page of the title. Download the poster or set there and drop it into p5assets (no login and no scraping on p5assets' side).
 
 <img src="docs/images/online-search.png" alt="Online search results from TMDb, TVDB and fanart.tv" width="560">
 

@@ -649,11 +649,11 @@ body.glitching #app,body.glitching #foot{text-shadow:0 0 9px var(--glow);transit
 .builder [hidden]{display:none!important}
 @font-face{font-family:"p5-source-sans-3";src:url("/static/fonts/source-sans-3.woff2") format("woff2");font-weight:400;font-style:normal;font-display:swap}
 .drawer .builder .bgrid,.builder .bgrid{grid-template-columns:repeat(auto-fill,minmax(110px,150px))}.bcard{min-width:0}.blabel{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.bposter{max-width:100%}
-.brow.srow{display:grid;grid-template-columns:130px minmax(0,1fr) 52px 84px;align-items:center;column-gap:12px}
+.brow.srow{display:grid;grid-template-columns:130px minmax(0,1fr) 112px 84px;align-items:center;column-gap:12px}
 .brow.srow input[type=range]{width:100%;min-width:0}
 .brow.srow .breset{width:84px;padding:4px 0;text-align:center;justify-content:center}
 .breset.dim{opacity:.45}
-@media(max-width:760px){.brow.srow{grid-template-columns:minmax(0,1fr) 52px 84px}.brow.srow .blab{grid-column:1/-1}.brow.srow .blab{flex:none}}
+@media(max-width:760px){.brow.srow{grid-template-columns:minmax(0,1fr) 112px 84px}.brow.srow .blab{grid-column:1/-1}.brow.srow .blab{flex:none}}
 .bzoom{position:absolute;top:6px;right:6px;z-index:4;width:28px;height:28px;padding:0;display:flex;align-items:center;justify-content:center;background:#000a;border:1px solid var(--line);border-radius:var(--r);color:var(--text);opacity:.85}
 .bzoom:hover{border-color:var(--accent);color:var(--accent)}
 .bcopy{max-width:220px}
@@ -715,3 +715,9 @@ body.glitching #app,body.glitching #foot{text-shadow:0 0 9px var(--glow);transit
 .bcard.nobg .bempty .btn{pointer-events:auto;width:100%;justify-content:center;background:color-mix(in srgb,var(--bg) 70%,transparent)}
 .bcard.nobg .hover{display:none}
 @media(max-width:760px){.bcard.nobg .bempty{flex-direction:row;flex-wrap:wrap;gap:4px}.bcard.nobg .bempty .btn{width:auto;padding:4px 6px}.bcard.nobg .bempty .btn span{display:none}}
+/* number field with - / + next to the sliders (0.9.5) */
+.bnum{display:inline-flex;align-items:center;justify-content:flex-end;gap:2px;width:112px}
+.bnum-in{width:42px;text-align:center;padding:4px 2px;font-size:12.5px;-moz-appearance:textfield;appearance:textfield}
+.bnum-in::-webkit-outer-spin-button,.bnum-in::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.bstep{width:24px;height:26px;padding:0;border:1px solid var(--line);border-radius:6px;background:var(--panel2);color:var(--text);font-size:15px;line-height:1;cursor:pointer;touch-action:manipulation}
+.bstep:hover{border-color:var(--accent);color:var(--accent)}

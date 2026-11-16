@@ -1033,8 +1033,9 @@ async function openItem(id) {
     const zip = keys => downloadUrl(`/api/download-zip/${it.id}?slots=${encodeURIComponent(keys.join(","))}`);
     const upload = h("button", { class: "btn sm primary", title: T("Ordner oder ZIP mit allen Bildern dieser Serie – p5assets ordnet sie den Kacheln zu"), onclick: () => pickSet(files => importFiles(files, it.id, draw, it, true)) }, icon("upload", 14), T("Set hochladen"));
     const tpdb = h("button", { class: "btn sm", title: T("ThePosterDB durchsuchen: im Fenster öffnest du die Suche und legst danach das heruntergeladene Set ab"), onclick: () => openPosterDbSet(it, draw) }, icon("search", 14), T("ThePosterDB"));
+    const mediux = h("button", { class: "btn sm", title: T("Die MediUX-Seite dieser Serie öffnen; das heruntergeladene Set legst du danach hier ab"), onclick: () => openMediuxSet(it, draw) }, icon("search", 14), T("MediUX"));
     const build = h("button", { class: "btn sm", title: T("Poster selbst bauen: textloses Poster, Logo oder Titel und Staffeltext"), onclick: () => startBuilder() }, icon("build", 14), T("Bauen"));
-    return h("div", { class: "dlbar row wrap" }, selMode ? null : upload, selMode ? null : tpdb, selMode ? null : build,
+    return h("div", { class: "dlbar row wrap" }, selMode ? null : upload, selMode ? null : tpdb, selMode ? null : mediux, selMode ? null : build,
       !have.length ? null : selMode ? [
         h("span", { class: "hint", style: "margin:0" }, T("{0} von {1} ausgewählt – Kacheln antippen", sel.size, have.length)),
         h("button", { class: "btn sm", onclick: () => { if (sel.size === have.length) sel.clear(); else have.forEach(k => sel.add(k)); draw(it); } }, sel.size === have.length ? T("Alle abwählen") : T("Alle wählen")),
@@ -1410,12 +1411,13 @@ async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img):
           h("button", { class: "tab" + (allOn ? " on" : ""), type: "button", onclick: () => toggleScope(allOn ? [slot, ...(scopes.some(x => x.key === "poster") && slot !== "poster" ? ["poster"] : [])] : scopes.map(x => x.key)) }, T("Alle")));
       } else if (scopes) fill(scopeBar);
       scopeBar.hidden = !(scopes && kind === "poster");
-      fill(tabs, [{ name: "*", label: T("Alle"), state: "ok", count: r.images.length }, ...r.providers, ...(kind === "poster" ? [{ name: "ThePosterDB", state: "ok", tpdb: true }] : [])].map(pv => h("button", {
+      fill(tabs, [{ name: "*", label: T("Alle"), state: "ok", count: r.images.length }, ...r.providers, ...(kind === "poster" ? [{ name: "ThePosterDB", state: "ok", tpdb: true }, { name: "MediUX", state: "ok", tpdb: true }] : [])].map(pv => h("button", {
         class: "tab" + (tab === pv.name ? " on" : "") + (pv.state !== "ok" ? " off" : ""), disabled: pv.state === "nokey",
         title: pv.state === "nokey" ? T("Kein API-Key hinterlegt (Einstellungen → Quellen)") : pv.state === "error" ? pv.error : "",
         onclick: () => { tab = pv.name; render(); } },
         pv.label || pv.name, pv.tpdb ? null : h("small", {}, pv.state === "nokey" ? T("kein Key") : pv.state === "error" ? T("Fehler") : pv.count))));
       if (tab === "ThePosterDB") { fill(content, posterDbPanel(it, slot, draw, () => m.close(), opts.pick)); return; }
+      if (tab === "MediUX") { fill(content, mediuxPanel(it, slot, draw, () => m.close(), opts.pick)); return; }
       const prov = r.providers.find(p => p.name === tab);
       const list = tab === "*" ? r.images : r.images.filter(i => i.source === tab);
       const groups = r.languages.map(l => ({ code: l.code, imgs: list.filter(i => i.lang === l.code) }));
@@ -1442,6 +1444,57 @@ async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img):
 }
 
 /* -------------------------------------------------------- ThePosterDB --- */
+/** The drop zone of the sites without an interface (ThePosterDB, MediUX): a downloaded picture goes to the tile (or becomes the background in the poster builder),
+ *  several files or a ZIP open the review dialog. */
+function posterDropZone(site, it, slot, draw, done, pick) {
+  const movie = it.type === "movie";
+  const handle = files => {
+    if (!files || !files.length) return;
+    if (pick) {
+      const f = files.map(x => x.file).find(x => x && /^image\//.test(x.type));
+      if (!f) { toast(T("Keine Bilder gefunden"), "bad"); return; }
+      const u = URL.createObjectURL(f); done(); pick({ url: u, preview: u, source: site, name: f.name, file: f });
+      return;
+    }
+    const imgs = files.filter(f => /\.(jpe?g|png|webp|gif|bmp|tiff?|avif)$/i.test(f.path));
+    done();
+    if (slot && files.length === 1 && imgs.length === 1) uploadSlot(it, slot, files, draw);   // one poster for this tile
+    else importFiles(files, it.id, draw, it, true);                                           // several files: review dialog, title fixed
+  };
+  const zone = h("div", { class: "tpzone" }, h("b", {}, "＋"),
+    h("div", {}, T("Heruntergeladenes Poster hier ablegen")),
+    h("small", {}, pick ? T("Das Bild wird als Hintergrund dieses Posters übernommen. Poster von {0} enthalten meist Text – als Hintergrund taugen nur textlose Varianten.", site) : T("Ein einzelnes Bild ersetzt das Poster dieses Films. Ein ZIP oder mehrere Bilder öffnen den Prüfdialog.")),
+    h("div", { class: "row wrap", style: "justify-content:center;margin-top:10px" },
+      h("button", { class: "btn sm primary", onclick: () => pickFiles(handle, !pick) }, T("Hochladen"))));
+  if (movie || pick) makeDropTarget(zone, handle);
+  return { zone, handle };
+}
+
+/** MediUX has no search address and no interface, but its title pages use the TMDb number: a button to the page of this title, then the same drop zone. */
+function mediuxPanel(it, slot, draw, done, pick) {
+  const movie = it.type === "movie";
+  const link = h("a", { class: "btn primary", target: "_blank", rel: "noopener noreferrer", referrerpolicy: "no-referrer", hidden: true }, T("Auf MediUX öffnen ↗"));
+  const note = h("div", { class: "hint", style: "margin:8px 0 0" }, h("span", { class: "spin" }), T(" Suche die TMDb-Nummer …"));
+  (async () => {
+    await null;                                                    // let the panel get into the page first
+    let id = it.tmdb_id;
+    if (!id) { try { id = (await api(`/items/${it.id}/tmdb-id`)).id; } catch { /* no key or no answer */ } }
+    if (id) { link.href = `https://mediux.pro/${movie ? "movies" : "shows"}/${id}`; link.hidden = false; note.remove(); }
+    else fill(note, T("Für diesen Titel ist keine TMDb-Nummer bekannt. Suche ihn direkt auf mediux.pro."));
+  })();
+  const { zone } = posterDropZone("MediUX", it, slot, draw, done, pick);
+  return h("div", { class: "tpdb" },
+    h("ol", { class: "tpsteps" },
+      h("li", {}, T("Die Seite dieses Titels auf MediUX öffnen, Poster oder Set wählen und herunterladen.")),
+      h("li", {}, pick ? T("Das heruntergeladene Bild danach hier ablegen oder wählen: es wird als Hintergrund dieses Posters übernommen und erst mit dem fertigen Poster gespeichert.") : movie ? T("Die heruntergeladene Datei danach hier hochladen oder ablegen: p5assets benennt sie Kometa-konform und legt sie ab.")
+        : slot ? T("Das Bild danach über „Ersetzen“ bzw. „Hochladen“ dieser Kachel wählen oder auf die Kachel ziehen: p5assets benennt es Kometa-konform und legt es ab.")
+        : T("Das Set danach über „Set hochladen“ wählen oder einfach in die Serien-Ansicht ziehen: p5assets benennt es Kometa-konform und legt es ab."))),
+    h("div", { class: "row wrap" }, link), note,
+    h("p", { class: "hint" }, T("Staffeln und Backdrops haben auf MediUX keine eigenen Seiten: Du findest sie auf der Seite der Serie bzw. des Films.")),
+    h("p", { class: "hint" }, T("MediUX hat keine Schnittstelle – deshalb lädt p5assets dort nichts selbst.")),
+    movie || pick ? zone : null);
+}
+
 /** ThePosterDB has no API and only lets signed-in users download, so p5assets does not fetch anything from there:
  *  a search link (in the arr naming of the folder) and a drop zone for what was downloaded in the browser.
  *  slot = a single tile (one poster, or a set that is then reviewed); slot = null: a whole series set. */
@@ -1465,25 +1518,7 @@ function posterDbPanel(it, slot, draw, done, pick) {      // pick(img): the post
   } }, T("Link kopieren"));
   term.oninput = upd; upd();
   const ids = h("input", { type: "checkbox", checked: lsGet("p5tpdbids") === "1", onchange: e => { lsSet("p5tpdbids", e.target.checked ? "1" : "0"); term.value = e.target.checked ? base : bare(base); upd(); } });
-  const handle = files => {
-    if (!files || !files.length) return;
-    if (pick) {
-      const f = files.map(x => x.file).find(x => x && /^image\//.test(x.type));
-      if (!f) { toast(T("Keine Bilder gefunden"), "bad"); return; }
-      const u = URL.createObjectURL(f); done(); pick({ url: u, preview: u, source: "ThePosterDB", name: f.name });
-      return;
-    }
-    const imgs = files.filter(f => /\.(jpe?g|png|webp|gif|bmp|tiff?|avif)$/i.test(f.path));
-    done();
-    if (slot && files.length === 1 && imgs.length === 1) uploadSlot(it, slot, files, draw);   // one poster for this tile
-    else importFiles(files, it.id, draw, it, true);                                           // several files: review dialog, title fixed
-  };
-  const zone = h("div", { class: "tpzone" }, h("b", {}, "＋"),
-    h("div", {}, T("Heruntergeladenes Poster hier ablegen")),
-    h("small", {}, pick ? T("Das Bild wird als Hintergrund dieses Posters übernommen. Poster von ThePosterDB enthalten meist Text – als Hintergrund taugen nur textlose Varianten.") : T("Ein einzelnes Bild ersetzt das Poster dieses Films. Ein ZIP oder mehrere Bilder öffnen den Prüfdialog.")),
-    h("div", { class: "row wrap", style: "justify-content:center;margin-top:10px" },
-      h("button", { class: "btn sm primary", onclick: () => pickFiles(handle, !pick) }, T("Hochladen"))));
-  if (movie || pick) makeDropTarget(zone, handle);
+  const { zone } = posterDropZone("ThePosterDB", it, slot, draw, done, pick);
   return h("div", { class: "tpdb" },
     h("ol", { class: "tpsteps" },
       h("li", {}, T("Auf ThePosterDB suchen, Sprache und Set wählen und dort (angemeldet) herunterladen.")),
@@ -1499,6 +1534,9 @@ function posterDbPanel(it, slot, draw, done, pick) {      // pick(img): the post
     movie || pick ? zone : null);
 }
 
+function openMediuxSet(it, draw) {
+  const m = modal(T("MediUX – Set für {0}", it.title), mediuxPanel(it, null, draw, () => m.close()));
+}
 function openPosterDbSet(it, draw) {
   const m = modal(T("ThePosterDB durchsuchen – Set für {0}", it.title), posterDbPanel(it, null, draw, () => m.close()));
 }
