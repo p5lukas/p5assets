@@ -117,24 +117,6 @@ class Plex:
             raise PlexError(f"HTTP {r.status_code}")
         return r.content
 
-    async def photos(self, rating_key: str, which: str) -> list[dict]:
-        """The pictures Plex holds for a title: which = "posters" or "arts" (backgrounds)."""
-        mc = await self._get(f"/library/metadata/{rating_key}/{which}")
-        return mc.get("Metadata", []) or []
-
-    async def photo(self, path: str, preview: bool = False) -> tuple[bytes, str]:
-        """A picture of this server (path below /library/metadata/); preview = a small copy."""
-        try:
-            if preview:
-                r = await self.client.get("/photo/:/transcode", params={"url": path, "width": 480, "height": 720, "minSize": 1, "upscale": 1})
-            else:
-                r = await self.client.get(path)
-        except httpx.HTTPError as e:
-            raise PlexError(short(e)) from e
-        if r.status_code >= 400:
-            raise PlexError(f"HTTP {r.status_code}")
-        return r.content, r.headers.get("content-type", "image/jpeg")
-
     async def upload_poster(self, rating_key: str, data: bytes) -> None:
         r = await self.client.post(f"/library/metadata/{rating_key}/posters", content=data)
         if r.status_code >= 400:

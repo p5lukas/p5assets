@@ -31,9 +31,11 @@ def sanitize(style: object) -> dict:
         out["upper"] = style["upper"]
     if style.get("seasonPos") in ("below", "free"):
         out["seasonPos"] = style["seasonPos"]
+    if style.get("logoColorMode") in ("off", "color"):
+        out["logoColorMode"] = style["logoColorMode"]
     if style.get("tint") in ("off", "mono", "tint", "duotone"):
         out["tint"] = style["tint"]
-    for key in ("tintA", "tintB"):
+    for key in ("tintA", "tintB", "logoColor"):
         v = style.get(key)
         if isinstance(v, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", v):
             out[key] = v.lower()

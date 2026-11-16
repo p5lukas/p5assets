@@ -30,6 +30,13 @@ def test_sanitize_trim_and_title_height_range():
     assert styles.sanitize({"trim": "yes"}) == {}
 
 
+def test_sanitize_logo_colour():
+    assert styles.sanitize({"logoColorMode": "color", "logoColor": "#FFAA00"}) == {"logoColorMode": "color", "logoColor": "#ffaa00"}
+    assert styles.sanitize({"logoColorMode": "x", "logoColor": "red"}) == {}
+    p = builder_store.sanitize("hd-abc", {"posters": {"poster": {"ov": {"logoColorMode": "color", "logoColor": "#000000"}}}})
+    assert p["posters"]["poster"]["ov"] == {"logoColorMode": "color", "logoColor": "#000000"}
+
+
 def test_presets_roundtrip_and_limits(tmp_path, monkeypatch):
     monkeypatch.setattr(styles.config, "CONFIG_DIR", tmp_path)
     assert styles.load() == {"presets": {}, "last": None}
@@ -234,55 +241,48 @@ def test_search_source_merges_and_marks_flat(monkeypatch):
     res = asyncio.run(providers.search_source("stills", {"tmdb": "k"}, "show", {}, "T", 2020, 1, [0, 1, 2]))
     assert res["flat"] is True and [i["url"] for i in res["images"]] == ["u1", "u2"]
     assert [p["name"] for p in res["providers"]] == ["TMDb"]
-    res = asyncio.run(providers.search_source("figures", {"fanart": ""}, "show", {}, "T", 2020, None, []))
-    assert res["images"] == [] and res["providers"][0]["state"] == "nokey"
+    res = asyncio.run(providers.search_source("seasonart", {"fanart": ""}, "show", {}, "T", 2020, None, []))
+    assert res["images"] == [] and {p["name"] for p in res["providers"]} == {"fanart.tv", "TVDB"} and res["flat"] is False
 
 
-def test_fanart_extras_filters_season_and_marks_transparency(monkeypatch):
+def test_fanart_seasonart_filters_season(monkeypatch):
     class R:
         status_code = 200
-        def raise_for_status(self): pass
-        def json(self): return {"seasonthumb": [{"url": "https://assets.fanart.tv/fanart/a.jpg", "season": "1", "lang": "en", "likes": "2"},
-                                                 {"url": "https://assets.fanart.tv/fanart/b.jpg", "season": "2", "lang": "en", "likes": "1"}],
-                                "characterart": [{"url": "https://assets.fanart.tv/fanart/c.png", "lang": "en", "likes": "3"}]}
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"seasonthumb": [{"url": "https://assets.fanart.tv/fanart/a.jpg", "season": "1", "lang": "en", "likes": "2"},
+                                    {"url": "https://assets.fanart.tv/fanart/b.jpg", "season": "2", "lang": "en", "likes": "1"}]}
 
     class C:
-        def __init__(self, *a, **k): pass
-        async def __aenter__(self): return self
-        async def __aexit__(self, *a): return False
-        async def get(self, *a, **k): return R()
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def get(self, *a, **k):
+            return R()
 
     monkeypatch.setattr(providers.httpx, "AsyncClient", C)
-    thumbs = asyncio.run(providers.fanart_extras("k", "show", {"tvdb": "9"}, None, 2, "seasonart"))
+    thumbs = asyncio.run(providers.fanart_seasonart("k", "show", {"tvdb": "9"}, 2))
     assert [i["url"][-5:] for i in thumbs] == ["b.jpg"] and thumbs[0]["landscape"] and thumbs[0]["label"] == "S02"
-    figs = asyncio.run(providers.fanart_extras("k", "show", {"tvdb": "9"}, None, None, "figures"))
-    assert figs and figs[0]["transparent"] is True
+    assert [i["label"] for i in asyncio.run(providers.fanart_seasonart("k", "show", {"tvdb": "9"}, None))] == ["S01", "S02"]
+    assert asyncio.run(providers.fanart_seasonart("k", "movie", {"tvdb": "9"}, None)) == []
 
 
-def test_sources_endpoint_and_plex_photo_path(store, monkeypatch):
+def test_sources_endpoint(store, monkeypatch):
     item = {"id": "hd-abc", "world": "hd", "title": "A", "year": 2020, "type": "show", "ids": {}, "rating_key": "10",
             "seasons": [{"number": 1, "rating_key": "11"}], "slots": {"poster": {}, "season-1": {}}}
     monkeypatch.setitem(scanner.STATE, "items", [item])
+    monkeypatch.setattr(main.config, "get", lambda: {"apis": {"tmdb": "", "tvdb": "", "fanart": ""}, "worlds": []})
     c = TestClient(main.app)
-    assert c.get("/api/items/hd-abc/sources/bogus").status_code == 404
-    assert c.get("/api/items/hd-abc/plex-photo", params={"path": "/etc/passwd"}).status_code == 400
-    assert c.get("/api/items/hd-abc/plex-photo", params={"path": "/library/metadata/1/../../x"}).status_code == 400
-
-    class FakePlex:
-        async def photos(self, rk, which):
-            return [{"key": "/library/metadata/10/art/1", "thumb": "/library/metadata/10/art/1", "selected": True},
-                    {"key": "https://elsewhere.example/x.jpg", "thumb": ""}] if which == "arts" else []
-
-        async def photo(self, path, preview=False):
-            return b"\xff\xd8", "image/jpeg"
-
-        async def close(self):
-            pass
-
-    monkeypatch.setattr(main, "_plex", lambda: FakePlex())
-    monkeypatch.setattr(main.config, "get", lambda: {"plex": {"url": "http://p", "token": "t"}, "apis": {"tmdb": "", "tvdb": "", "fanart": ""}, "worlds": []})
-    res = c.get("/api/items/hd-abc/sources/plex", params={"slot": "poster"}).json()
-    assert res["group"] == "label" and len(res["images"]) == 1 and res["images"][0]["landscape"] is True      # only pictures that live on the server
-    assert res["images"][0]["url"].startswith("/api/items/hd-abc/plex-photo?path=")
-    assert c.get("/api/items/hd-abc/plex-photo", params={"path": "/library/metadata/10/art/1"}).status_code == 200
+    for gone in ("bogus", "plex", "cast", "figures"):
+        assert c.get(f"/api/items/hd-abc/sources/{gone}").status_code == 404
     assert c.get("/api/items/hd-abc/sources/stills", params={"slot": "poster"}).status_code == 400      # no API keys
+    assert c.get("/api/items/hd-abc/plex-photo", params={"path": "/library/metadata/1/art/1"}).status_code in (404, 405)

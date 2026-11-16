@@ -1356,13 +1356,10 @@ async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img):
     let r = merge(), tab = "*", kind = "poster";
     const kindRes = {}, kindLoading = new Set(), EMPTY = { images: [], providers: [], languages: [], flat: true };
     const KINDS = !opts.pick ? [] : [["poster", T("Poster")], ["backdrop", T("Backdrops")],
-      ...(it.type === "show" ? [["stills", T("Episodenbilder")], ["seasonart", T("Staffelbilder")]] : []), ["cast", T("Darsteller")], ["figures", T("Figuren")], ["plex", T("Plex")]];
+      ...(it.type === "show" ? [["stills", T("Episodenbilder")], ["seasonart", T("Staffelbilder")]] : [])];
     const HINTS = { backdrop: T("Backdrops gehören zur ganzen Serie bzw. zum ganzen Film, nicht zu einer Staffel. Du wählst danach den Bildausschnitt."),
       stills: T("Bilder aus den Folgen. Bei einer Staffel nur ihre Folgen, beim Serienposter alle Staffeln."),
-      seasonart: T("Bilder, die fanart.tv und TheTVDB einer Staffel zuordnen."),
-      cast: T("Fotos der Darsteller im Hochformat."),
-      figures: T("Freigestellte Figuren und Motive mit Transparenz. Sie brauchen eine Fläche dahinter: Wähle danach unter „Bildausschnitt“ die Füllung."),
-      plex: T("Bilder aus Plex: alternative Poster und Hintergründe dieses Titels.") };
+      seasonart: T("Bilder, die fanart.tv und TheTVDB einer Staffel zuordnen.") };
     const kindBar = opts.pick ? h("div", { class: "tabs scopes" }) : null;
     async function setKind(k) {
       kind = k; tab = "*";
@@ -1376,7 +1373,7 @@ async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img):
     const src = u => u.startsWith("http") ? "/api/proxy?url=" + encodeURIComponent(u) : u;
     const scopeBar = h("div", { class: "tabs scopes" }), tabs = h("div", { class: "tabs" }), content = h("div");
     const pick = img => {
-      const p = h("div", { class: "pick" + (img.transparent ? " checker" : ""), title: T("Übernehmen"), onclick: async () => {
+      const p = h("div", { class: "pick", title: T("Übernehmen"), onclick: async () => {
         if (opts.pick) { opts.pick(img); m.close(); return; }
         p.classList.add("busy");
         try { const res = await api(`/items/${it.id}/${slot}/url`, { json: { url: img.url } }); undoToast(T("Übernommen ✓"), res, draw); m.close(); S.rain.add(it.id + "|" + slot); draw(res.item); }
@@ -1419,11 +1416,7 @@ async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img):
       if (opts.pick) groups.sort((a, b) => (b.code === "xx") - (a.code === "xx"));      // building: textless first, whatever the language preferences say
       const wide = ["backdrop", "stills", "seasonart"].includes(kind);
       let shown;
-      if (r.group === "label") {                                      // e.g. Plex: posters and backgrounds apart
-        const labels = [...new Set(list.map(i => i.label))];
-        shown = labels.map(l => { const imgs = list.filter(i => i.label === l); return h("div", { class: "langgroup" }, h("h4", {}, l, h("small", {}, ` ${imgs.length}`)),
-          h("div", { class: "picks" + (imgs[0].landscape ? " wide" : "") }, imgs.map(pick))); });
-      } else if (r.flat) shown = list.length ? h("div", { class: "picks" + (wide ? " wide" : "") }, list.map(pick)) : null;
+      if (r.flat) shown = list.length ? h("div", { class: "picks" + (wide ? " wide" : "") }, list.map(pick)) : null;
       else shown = groups.filter(g => g.imgs.length).map((g, n) => h("div", { class: "langgroup" },
         h("h4", {}, g.other ? T("Weitere Sprache · ") : `${n + 1}. `, langTitle(g.code), h("small", {}, ` ${g.imgs.length}`)),
         h("div", { class: "picks" + (wide ? " wide" : "") }, g.imgs.map(pick))));

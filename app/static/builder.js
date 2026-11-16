@@ -7,7 +7,7 @@ const BW = 1000, BH = 1500;
 const BUILD_FONTS = [["montserrat", "Montserrat", 700], ["raleway", "Raleway", 700], ["oswald", "Oswald", 700], ["bebas-neue", "Bebas Neue", 400],
   ["anton", "Anton", 400], ["cinzel", "Cinzel", 700], ["playfair-display", "Playfair Display", 700], ["lato", "Lato", 700]];
 const BUILD_FIT = { zoom: 1, x: 0.5, y: 0.5, fill: "auto", color: "#12161c" };
-const BUILD_DEFAULT = { font: "montserrat", upper: true, mode: "logo", trim: true, tint: "off", tintA: "#101a2e", tintB: "#ffd9a0", tintAmount: 1, blend: "off", blendAmount: 0.7, blendHeight: 0.35, titleScale: 0.7, titleY: 0.82, seasonScale: 0.9, gap: 0.02, seasonPos: "below", seasonY: 0.92, tracking: 0.22, titleColor: "#ffffff" };     // same on all posters; only the colour of the season line is per poster
+const BUILD_DEFAULT = { font: "montserrat", upper: true, mode: "logo", trim: true, logoColorMode: "off", logoColor: "#ffffff", tint: "off", tintA: "#101a2e", tintB: "#ffd9a0", tintAmount: 1, blend: "off", blendAmount: 0.7, blendHeight: 0.35, titleScale: 0.7, titleY: 0.82, seasonScale: 0.9, gap: 0.02, seasonPos: "below", seasonY: 0.92, tracking: 0.22, titleColor: "#ffffff" };     // same on all posters; only the colour of the season line is per poster
 
 /* ---------------------------------------------------------------- texts --- */
 const ONES = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen",
@@ -30,28 +30,19 @@ function loadImage(src) {
 }
 const proxied = url => url && url.startsWith("http") ? "/api/proxy?url=" + encodeURIComponent(url) : url;
 
-/** A colour for the season line that fits the picture where the line stands: the dominant hue of the saturated pixels of that strip, light on a dark
- *  strip and dark on a light one. data = RGBA pixels of the strip. */
-function autoColorFrom(d) {
-  let sx = 0, sy = 0, wsum = 0, lum = 0, n = 0;
-  for (let i = 0; i < d.length; i += 4) {
-    const r = d[i] / 255, g = d[i + 1] / 255, b = d[i + 2] / 255, mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, ch = mx - mn;
-    lum += 0.2126 * r + 0.7152 * g + 0.0722 * b; n++;
-    if (ch < 0.04) continue;
-    const hue = mx === r ? ((g - b) / ch) % 6 : mx === g ? (b - r) / ch + 2 : (r - g) / ch + 4;
-    const wt = ch * (1 - Math.abs(2 * l - 1)) + 0.001;
-    sx += Math.cos(hue * Math.PI / 3) * wt; sy += Math.sin(hue * Math.PI / 3) * wt; wsum += wt;
-  }
-  const dark = lum / Math.max(1, n) < 0.5;
-  if (wsum < n * 0.03) return dark ? "#f1f1ee" : "#1a1a1a";
-  return hslHex(((Math.atan2(sy, sx) * 180 / Math.PI) + 360) % 360, dark ? 0.82 : 0.75, dark ? 0.76 : 0.26);
-}
-/** The automatic colour for one poster: the background as it is drawn (crop, fade) is sampled in the strip around the season line. */
+/** The automatic colours for the season line of one poster: the hues come from the whole picture (its palette); lightness is adjusted so that they can be read
+ *  on the strip behind the line (drawn as it will look: crop, filter, fade). Returns { auto, palette (up to three) }. */
 function autoColorAt(bg, st, fit, yc) {
   const w = 100, h = 150, c = document.createElement("canvas"); c.width = w; c.height = h;
   drawBuilt(c, { bg, logo: null, title: "", line: "", st: { ...st, mode: "text" }, color: null, fit });
   const y0 = Math.max(0, Math.round((yc - 0.06) * h)), y1 = Math.min(h, Math.round((yc + 0.06) * h));
-  return autoColorFrom(c.getContext("2d", { willReadFrequently: true }).getImageData(0, y0, w, Math.max(1, y1 - y0)).data);
+  const d = c.getContext("2d", { willReadFrequently: true }).getImageData(0, y0, w, Math.max(1, y1 - y0)).data;
+  let sum = 0, n = 0;
+  for (let i = 0; i < d.length; i += 4) { sum += relLum(d[i], d[i + 1], d[i + 2]); n++; }
+  const bgL = n ? sum / n : 0.1, pal = imageInfo(bg).palette;
+  const palette = pal.map(p => legibleColor(p.hue, p.sat, bgL));
+  if (pal.length && palette.length < 3) for (let k = palette.length; k < 3; k++) palette.push(legibleColor(pal[0].hue + 25 * k, pal[0].sat, bgL));   // a quiet picture: neighbours of its main hue
+  return { auto: palette[0] || (contrastOf(1, bgL) >= contrastOf(0, bgL) ? "#f1f1ee" : "#1a1a1a"), palette: palette.slice(0, 3) };
 }
 function hslHex(hue, s, l) {
   const a = s * Math.min(l, 1 - l), f = n => { const k = (n + hue / 30) % 12; return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)))); };
@@ -99,13 +90,46 @@ function trimTransparent(img) {
 }
 
 /* ------------------------------------------------------ background helpers --- */
+/** The main colours of a picture (RGBA pixels): hue sectors weighted by how vivid and mid-bright their pixels are; grey, near-black and near-white are ignored.
+ *  Returns up to three { hue, sat } of clearly different hues, strongest first. */
+function paletteOf(d) {
+  const sectors = Array.from({ length: 12 }, () => ({ w: 0, hs: 0, ss: 0 }));
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] < 128) continue;
+    const [hu, sa, l] = hexHsl("#" + [d[i], d[i + 1], d[i + 2]].map(v => v.toString(16).padStart(2, "0")).join(""));
+    if (sa < 0.12 || l < 0.08 || l > 0.95) continue;
+    const wt = (0.3 + sa) * (1 - Math.abs(2 * l - 1)), k = Math.floor(hu / 30) % 12;
+    sectors[k].w += wt; sectors[k].hs += hu * wt; sectors[k].ss += sa * wt;
+  }
+  const out = [];
+  for (const sec of sectors.filter(x => x.w > 0).sort((a, b) => b.w - a.w)) {
+    const hue = sec.hs / sec.w;
+    if (out.every(o => Math.min(Math.abs(o.hue - hue), 360 - Math.abs(o.hue - hue)) >= 28)) out.push({ hue, sat: sec.ss / sec.w });
+    if (out.length === 3) break;
+  }
+  return out;
+}
+const lin = c => (c /= 255) <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+const relLum = (r, g, b) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+const contrastOf = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+/** A colour of the given hue that can be read on a background of relative luminance bgL (contrast ≥ 4.5 where possible): lighter on dark, darker on light. */
+function legibleColor(hue, sat, bgL) {
+  const s = Math.min(0.9, Math.max(0.55, sat)), light = contrastOf(1, bgL) >= contrastOf(0, bgL);
+  let best = null, bestC = 0;
+  for (let i = 0; i <= 12; i++) {
+    const hex = hslHex(hue, s, light ? 0.62 + i * 0.03 : 0.4 - i * 0.03), [r, g, b] = hexRgb(hex), c = contrastOf(relLum(r, g, b), bgL);
+    if (c >= 4.5) return hex;
+    if (c > bestC) { bestC = c; best = hex; }
+  }
+  return bestC >= 3 ? best : light ? "#f1f1ee" : "#1a1a1a";
+}
 const infoCache = new WeakMap();
 /** A tiny copy of a picture: its average colour, the colour of each edge and whether it has transparency (all read from ~32 px). */
 function imageInfo(img) {
   if (infoCache.has(img)) return infoCache.get(img);
-  const info = { avg: "#f1f1ee", edges: {}, transparent: false, tiny: null };
+  const info = { avg: "#f1f1ee", edges: {}, transparent: false, tiny: null, palette: [] };
   try {
-    const w = 32, h = Math.max(4, Math.round(32 * img.naturalHeight / img.naturalWidth)), c = document.createElement("canvas"); c.width = w; c.height = h;
+    const w = 48, h = Math.max(4, Math.round(48 * img.naturalHeight / img.naturalWidth)), c = document.createElement("canvas"); c.width = w; c.height = h;
     const x = c.getContext("2d", { willReadFrequently: true }); x.drawImage(img, 0, 0, w, h);
     const d = x.getImageData(0, 0, w, h).data, mean = (x0, y0, x1, y1) => {
       let r = 0, g = 0, b = 0, a = 0;
@@ -117,6 +141,7 @@ function imageInfo(img) {
     const all = mean(0, 0, w, h);
     if (all) info.avg = "#" + all.map(v => Math.round(v).toString(16).padStart(2, "0")).join("");
     for (let i = 3; i < d.length; i += 4) if (d[i] < 250) { info.transparent = true; break; }
+    info.palette = paletteOf(d);
     info.tiny = c;
   } catch { /* unreadable: neutral values */ }
   infoCache.set(img, info);
@@ -166,6 +191,13 @@ function applyTint(ctx, W, H, st) {
   ctx.putImageData(img, 0, 0);
 }
 
+/** The logo as a one-colour silhouette: its transparency is the stencil. */
+function tintedLogo(logo, color, w, h) {
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  const x = c.getContext("2d"); x.drawImage(logo, 0, 0, w, h); x.globalCompositeOperation = "source-in"; x.fillStyle = color; x.fillRect(0, 0, w, h);
+  return c;
+}
+
 /* -------------------------------------------------------------- drawing --- */
 /** Draws one poster. o = { bg, logo, title, line, st (merged style), color } – images are already loaded (or null). */
 function drawBuilt(canvas, o) {
@@ -192,7 +224,8 @@ function drawBuilt(canvas, o) {
   if (st.mode === "logo" && o.logo) {
     const lw = o.logo.naturalWidth || o.logo.width, lh = o.logo.naturalHeight || o.logo.height;
     const s = Math.min(W * 0.8 * st.titleScale / lw, H * 0.28 * st.titleScale / lh, W * 0.94 / lw), dw = lw * s, dh = lh * s;
-    titleH = dh; drawTitle = top => ctx.drawImage(o.logo, (W - dw) / 2, top, dw, dh);
+    const src = st.logoColorMode === "color" ? tintedLogo(o.logo, st.logoColor, Math.max(1, Math.round(dw)), Math.max(1, Math.round(dh))) : o.logo;
+    titleH = dh; drawTitle = top => ctx.drawImage(src, (W - dw) / 2, top, dw, dh);
   } else if (o.title) {
     let fs = W * 0.095 * st.titleScale, lines;
     const maxW = W * 0.84, measure = () => { ctx.font = `${def[2]} ${fs}px ${fam}`; lines = wrapLines(ctx, upper(o.title), maxW); return Math.max(...lines.map(l => ctx.measureText(l).width)); };
@@ -237,9 +270,9 @@ function makeBuilder(opts) {
   const it = opts.item, multi = !!opts.multi, slots = opts.slots;
   const G = { ...BUILD_DEFAULT };                                   // the look shared by all posters
   let titleText = it.title, logo = null /* { url, preview, source } */, logoRes = null, logoNote = "", presets = {}, sel = slots[0].key, saving = false, allTitle = true;
-  const newP = s => ({ bg: null, line: s.season == null ? "" : seasonLine(s.season), color: null, auto: null, autoSig: "", fit: { ...BUILD_FIT }, ov: {} });
+  const newP = s => ({ bg: null, line: s.season == null ? "" : seasonLine(s.season), color: null, auto: null, palette: [], autoSig: "", fit: { ...BUILD_FIT }, ov: {} });
   const P = Object.fromEntries(slots.map(s => [s.key, newP(s)]));
-  const TITLE_OV = ["titleScale", "titleY", "mode", "logo", "trim", "blend", "blendAmount", "blendHeight", "tint", "tintA", "tintB", "tintAmount"];        // what a single poster may do differently (when "for all posters" is off)
+  const TITLE_OV = ["titleScale", "titleY", "mode", "logo", "trim", "blend", "blendAmount", "blendHeight", "tint", "tintA", "tintB", "tintAmount", "logoColorMode", "logoColor"];        // what a single poster may do differently (when "for all posters" is off)
   const val = (key, a) => a in P[key].ov ? P[key].ov[a] : a === "logo" ? logo : G[a];
   const style = key => ({ ...G, ...Object.fromEntries(TITLE_OV.filter(a => a !== "logo").map(a => [a, val(key, a)])) });
   const colorOf = key => P[key].color || P[key].auto || "#f1f1ee";
@@ -261,7 +294,7 @@ function makeBuilder(opts) {
     if (bg) {                                                       // the automatic colour follows the picture where the line stands
       const yc = st.seasonPos === "free" ? st.seasonY : Math.min(st.titleY + 0.07, 0.97);
       const sig = [p.bg.url, p.fit.zoom, p.fit.x, p.fit.y, st.blend, st.blendAmount, st.blendHeight, yc].join("|");
-      if (p.autoSig !== sig) { p.auto = autoColorAt(bg, st, p.fit, yc); p.autoSig = sig; }
+      if (p.autoSig !== sig) { Object.assign(p, autoColorAt(bg, st, p.fit, yc)); p.autoSig = sig; }
     }
     const out = full || size ? Object.assign(document.createElement("canvas"), size ? { width: size, height: Math.round(size * 1.5) } : { width: BW, height: BH }) : cv;
     drawBuilt(out, { bg, logo: bgOnly ? null : lg, title: bgOnly ? "" : titleText, line: bgOnly ? "" : p.line, st, color: colorOf(key), fit: p.fit });
@@ -277,7 +310,7 @@ function makeBuilder(opts) {
     if (!f) { toast(T("Keine Bilder gefunden"), "bad"); return; }
     const u = URL.createObjectURL(f); setBg(key, { url: u, preview: u, name: f.name, file: f });
   };
-  const bgOnline = key => searchOnline(it, key, null, { pick: img => setBg(key, { url: img.url, preview: img.preview || img.url, name: img.label ? `${img.source} · ${img.label}` : img.source }, img.transparent ? { ...BUILD_FIT, fill: "color" } : undefined), title: T("Hintergrund wählen"), scopes: slots.map(x => ({ key: x.key, label: x.label })) });
+  const bgOnline = key => searchOnline(it, key, null, { pick: img => setBg(key, { url: img.url, preview: img.preview || img.url, name: img.label ? `${img.source} · ${img.label}` : img.source }), title: T("Hintergrund wählen"), scopes: slots.map(x => ({ key: x.key, label: x.label })) });
   const copyBg = (from, to) => { if (from !== to && P[from].bg) setBg(to, { ...P[from].bg }, P[from].fit); };
   function bgForAll(from) {
     const src = P[from].bg; if (!src) return;
@@ -446,6 +479,18 @@ function makeBuilder(opts) {
   const tintRowP = h("div", { class: "brow" }, h("span", { class: "blab" }, T("Vorschläge")), h("div", { class: "swatches" }, tintPresets));
   const tintSec = h("div", { class: "bsec" }, h("h4", {}, T("Farbfilter")), h("div", { class: "row wrap" }, h("div", { class: "segs" }, tintBtns)),
     tintRowP, tintRowA, tintRowB, slider(T("Stärke"), "tintAmount", 0.1, 1, 0.01, pct, true));
+  /* --- logo colour: the logo as a one-colour silhouette (handy for white logos) --- */
+  const logoColorBtns = [["off", T("Original")], ["color", T("Einfärben")]].map(([v, l]) => {
+    const b = h("button", { class: "seg", type: "button", onclick: () => { setTitle("logoColorMode", v); tintChange(); } }, l); b.dataset.v = v; return b;
+  });
+  const logoColorInp = h("input", { type: "color", title: T("Eigene Farbe"), oninput: e => { setTitle("logoColorMode", "color"); setTitle("logoColor", e.target.value); repaintTitle(); syncCustom(); } });
+  const logoSwatches = h("div", { class: "swatches" });
+  const logoPipette = h("button", { class: "btn sm", type: "button", title: T("Farbe aus dem Poster aufnehmen"), onclick: async () => {
+    const key = sel, cv = await paint(key, true, true);
+    pickFromPoster(cv, hex => { sel = key; setTitle("logoColorMode", "color"); setTitle("logoColor", hex); tintChange(); });
+  } }, icon("eye", 14), T("Pipette"));
+  const logoModeRow = h("div", { class: "brow" }, h("span", { class: "blab" }, T("Logofarbe")), h("div", { class: "segs" }, logoColorBtns));
+  const logoColorRow = h("div", { class: "brow" }, h("span", { class: "blab" }, T("Farbe")), logoSwatches, logoPipette, logoColorInp);
   function resetAll() {
     if (!confirm(T("Alle Einstellungen auf Standard zurücksetzen? Hintergründe und Logo bleiben."))) return;
     for (const k of Object.keys(G)) delete G[k];
@@ -524,6 +569,11 @@ function makeBuilder(opts) {
     logoBtn.textContent = val(key, "logo") ? T("Anderes Logo …") : T("Logo wählen …");
     textInp.closest(".brow").hidden = mode === "logo"; titleColorInp.closest(".brow").hidden = mode === "logo";
     titleColorInp.value = G.titleColor || "#ffffff"; colorInp.value = colorOf(key);
+    const lm = val(key, "logoColorMode"), lc = val(key, "logoColor");
+    logoColorBtns.forEach(b => b.classList.toggle("on", b.dataset.v === lm));
+    logoModeRow.hidden = mode !== "logo"; logoColorRow.hidden = mode !== "logo" || lm !== "color"; logoColorInp.value = lc;
+    fill(logoSwatches, [...(P[key].palette || []), "#ffffff", "#141414"].map(c => h("button", { type: "button", class: "swatch" + (lm === "color" && lc.toLowerCase() === c.toLowerCase() ? " on" : ""),
+      style: `background:${c}`, title: c, "aria-label": c, onclick: () => { setTitle("logoColorMode", "color"); setTitle("logoColor", c); tintChange(); } })));
     const tn = val(key, "tint");
     tintBtns.forEach(b => b.classList.toggle("on", b.dataset.v === tn));
     tintRowP.hidden = tn === "off" || tn === "mono"; tintRowA.hidden = tn !== "duotone"; tintRowB.hidden = tn === "off" || tn === "mono";
@@ -548,7 +598,7 @@ function makeBuilder(opts) {
         style: `background:${c}`, title: c, "aria-label": c, onclick: () => setFit({ fill: "color", color: c }) })));
     }
     colorAuto.classList.toggle("on", P[key].color == null);
-    fill(swatches, colorChoices(P[key].auto).map(c => h("button", { type: "button", class: "swatch" + (P[key].color && P[key].color.toLowerCase() === c.toLowerCase() ? " on" : ""),
+    fill(swatches, [...(P[key].palette || []), "#ffffff", "#141414"].map(c => h("button", { type: "button", class: "swatch" + (P[key].color && P[key].color.toLowerCase() === c.toLowerCase() ? " on" : ""),
       style: `background:${c}`, title: c, "aria-label": c, onclick: () => setColor(c) })));
     root.querySelector(".bedit").textContent = slots.find(s => s.key === key).label;
     root.querySelector(".bnote").textContent = logoNote;
@@ -631,6 +681,7 @@ function makeBuilder(opts) {
     h("div", { class: "row wrap" }, h("div", { class: "segs" }, modeLogo, modeText), logoBtn, logoUp),
     h("div", { class: "hint" }, T("PNG oder WebP mit Transparenz, auch per Drag & Drop hier ablegen")),
     h("label", { class: "bchk btrim" }, trimChk, T("Transparenten Rand abschneiden")),
+    logoModeRow, logoColorRow,
     h("div", { class: "hint bnote" }),
     h("label", { class: "brow" }, h("span", { class: "blab" }, T("Text")), textInp),
     h("label", { class: "brow" }, h("span", { class: "blab" }, T("Titelfarbe")), titleColorInp),

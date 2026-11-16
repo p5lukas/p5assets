@@ -733,7 +733,6 @@ async def download_zip(item_id: str, slots: str = ""):
             tmp.close()
     name = _safe_name(f"{it['title']} ({it['year']})" if it.get("year") else it["title"]) + ".zip"
     quoted = re.sub(r"[^A-Za-z0-9._ -]", "_", name)
-    from urllib.parse import quote
     return StreamingResponse(chunks(), media_type="application/zip", headers={
         "Content-Length": str(size), "Cache-Control": "no-store",
         "Content-Disposition": f"attachment; filename=\"{quoted}\"; filename*=UTF-8''{quote(name)}"})
@@ -883,11 +882,9 @@ async def search_item_backdrops(item_id: str):
 
 @app.get("/api/items/{item_id}/sources/{kind}")
 async def builder_source(item_id: str, kind: str, slot: str = "poster"):
-    """Extra picture sources for the poster builder: backdrops, episode pictures, season pictures, cast photos, cut-out figures, Plex."""
+    """Extra picture sources for the poster builder: backdrops, episode pictures, season pictures."""
     it = _item(item_id)
     season = _slot_check(it, slot)
-    if kind == "plex":
-        return await _plex_sources(it, season)
     if kind not in providers.SOURCE_KINDS:
         raise HTTPException(404, tr("Unbekannte Quelle"))
     apis = config.get()["apis"]
@@ -900,55 +897,6 @@ async def builder_source(item_id: str, kind: str, slot: str = "poster"):
         if p["state"] == "error":
             log.warning("Source %s %s (%s / %s): %s", kind, p["name"], it["title"], slot, p["error"])
     return res
-
-
-async def _plex_sources(it: dict, season: int | None) -> dict:
-    """What Plex itself holds for the title (or season): alternative posters and backgrounds."""
-    status = {"name": "Plex", "state": "ok", "count": 0, "error": None}
-    out = {"images": [], "providers": [status], "languages": [], "flat": True, "group": "label", "errors": {}}
-    rk = it.get("rating_key") if season is None else next((s["rating_key"] for s in it["seasons"] if s["number"] == season), None)
-    if not rk:
-        return out
-    c = config.get()
-    if not c["plex"]["url"] or not c["plex"]["token"]:
-        status.update(state="nokey")
-        return out
-    p = _plex()
-    try:
-        for which, label in (("posters", tr("Poster")), ("arts", tr("Hintergrund"))):
-            try:
-                photos = await p.photos(rk, which)
-            except PlexError as e:
-                status.update(state="error", error=short(e))
-                continue
-            for ph in photos:
-                key, thumb = ph.get("key") or "", ph.get("thumb") or ""
-                internal = key if key.startswith("/library/metadata/") else thumb if thumb.startswith("/library/metadata/") else ""
-                if not internal:
-                    continue
-                prev = thumb if thumb.startswith("/library/metadata/") else internal
-                url = f"/api/items/{it['id']}/plex-photo?path={quote(internal, safe='')}"
-                out["images"].append({"source": "Plex", "url": url, "preview": f"/api/items/{it['id']}/plex-photo?path={quote(prev, safe='')}&preview=1",
-                                      "lang": "xx", "label": label, "landscape": which == "arts", "score": 1 if ph.get("selected") else 0})
-    finally:
-        await p.close()
-    status["count"] = len(out["images"])
-    return out
-
-
-@app.get("/api/items/{item_id}/plex-photo")
-async def plex_photo(item_id: str, path: str, preview: bool = False):
-    _item(item_id)
-    if not re.fullmatch(r"/library/metadata/[0-9]+/[a-z]+/[0-9A-Za-z_-]+", path):
-        raise HTTPException(400, tr("Ungültiger Pfad"))
-    p = _plex()
-    try:
-        data, mime = await p.photo(path, preview)
-    except PlexError as e:
-        raise HTTPException(502, str(e)) from e
-    finally:
-        await p.close()
-    return Response(data, media_type=mime, headers={"Cache-Control": "private, max-age=3600"})
 
 
 @app.get("/api/items/{item_id}/builder")

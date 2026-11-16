@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.2 – 2026-11-16
+
+**New**
+- Poster builder: colourise the logo (“Logo colour”: Original or Colourise with suggestions, eyedropper and a free colour), handy for white logos; for all posters or for one, saved with the look
+
+**Changed**
+- The automatic colour of the season line is taken from the colours of the whole poster (its palette), with lightness adjusted so that it can be read on the strip behind the line, fade included. The suggestions are now three colours from the poster plus white and near-black. A dark fade no longer turns the line white
+- Removed the background sources “Cast”, “Figures” and “Plex” again; “Backdrops”, “Episode pictures” and “Season pictures” stay
+
 ## 0.9.1 – 2026-11-15
 
 **New**
