@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.3 – 2026-11-16
+
+**New**
+- Online search: a “Build it myself” button on top opens the poster builder for that title (movies: the builder window; series: the build mode with the searched poster preselected), and the empty result offers it too (“Nothing suitable? Build it myself”)
+- Poster builder: tiles without a background show their actions (“Search online”, “Choose file”) permanently, so newcomers see what to do without hovering; with a background the hover menu stays as it was
+
 ## 0.9.2 – 2026-11-16
 
 **New**

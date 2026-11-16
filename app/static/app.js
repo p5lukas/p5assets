@@ -990,12 +990,16 @@ async function openItem(id) {
   document.addEventListener("keydown", onKey);
   function close() {
     scrim.remove(); document.removeEventListener("keydown", onKey);
+    if (S.seriesBuildItem === id) S.seriesBuild = S.seriesBuildItem = null;
     api("/status").then(s => { S.st.summary = s; updateHero(); });
     loadItems().then(renderGrid);
   }
 
   let selMode = false, cur = item;
   const sel = new Set();
+  // the build mode of this series: also reachable from the online search of one of its posters (start = the poster to begin with)
+  const startBuilder = start => openSeriesBuilder({ it: cur, drawer, close, start, back: item => matrixSwap(() => draw(item || cur)) });
+  S.seriesBuild = startBuilder; S.seriesBuildItem = id;
   function draw(it) {
     cur = it;
     const have = Object.keys(it.slots).filter(k => it.slots[k].exists);
@@ -1029,7 +1033,7 @@ async function openItem(id) {
     const zip = keys => downloadUrl(`/api/download-zip/${it.id}?slots=${encodeURIComponent(keys.join(","))}`);
     const upload = h("button", { class: "btn sm primary", title: T("Ordner oder ZIP mit allen Bildern dieser Serie – p5assets ordnet sie den Kacheln zu"), onclick: () => pickSet(files => importFiles(files, it.id, draw, it, true)) }, icon("upload", 14), T("Set hochladen"));
     const tpdb = h("button", { class: "btn sm", title: T("ThePosterDB durchsuchen: im Fenster öffnest du die Suche und legst danach das heruntergeladene Set ab"), onclick: () => openPosterDbSet(it, draw) }, icon("search", 14), T("ThePosterDB"));
-    const build = h("button", { class: "btn sm", title: T("Poster selbst bauen: textloses Poster, Logo oder Titel und Staffeltext"), onclick: () => openSeriesBuilder({ it: cur, drawer, close, back: item => matrixSwap(() => draw(item || cur)) }) }, icon("build", 14), T("Bauen"));
+    const build = h("button", { class: "btn sm", title: T("Poster selbst bauen: textloses Poster, Logo oder Titel und Staffeltext"), onclick: () => startBuilder() }, icon("build", 14), T("Bauen"));
     return h("div", { class: "dlbar row wrap" }, selMode ? null : upload, selMode ? null : tpdb, selMode ? null : build,
       !have.length ? null : selMode ? [
         h("span", { class: "hint", style: "margin:0" }, T("{0} von {1} ausgewählt – Kacheln antippen", sel.size, have.length)),
@@ -1331,6 +1335,11 @@ function modal(title, body, footer) {
 async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img): choose an image for something else (the poster builder) instead of saving it
   const body = h("div", {}, h("div", { class: "empty" }, h("span", { class: "spin" }), T(" Suche bei TMDb, TVDB und fanart.tv …")));
   const m = modal(`${opts.title ? opts.title + " – " : ""}${it.title} – ${slotLabel(slot, it.type)}`, body);
+  // no luck with the search: build the poster instead (not while choosing a background inside the builder)
+  const buildOpen = opts.pick ? null : it.type === "movie" ? () => openMovieBuilder(it, draw) : S.seriesBuild && S.seriesBuildItem === it.id ? () => S.seriesBuild(slot) : null;
+  const buildBtn = (cls, label) => buildOpen ? h("button", { class: cls, type: "button", title: T("Poster selbst bauen: textloses Poster, Logo oder Titel und Staffeltext"), onclick: () => { m.close(); buildOpen(); } },
+    icon("build", 14), label) : null;
+  const buildRow = buildOpen ? h("div", { class: "row buildrow" }, h("span", { class: "grow" }), buildBtn("btn sm", T("Selbst bauen"))) : null;
   const byCode = Object.fromEntries(S.langs.map(l => [l.code, l]));
   const langTitle = code => { const l = byCode[code]; const name = !l ? code : code === "xx" ? T("Textless (No Text)") : l.native && l.native !== l.name ? `${l.name} (${l.native})` : l.name; return `${code} • ${name}`; };
   try {
@@ -1425,10 +1434,11 @@ async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img):
         prov && prov.state === "error" ? h("div", { class: "status bad" }, `[ !! ] ${prov.name}: ${prov.error}`) : null,
         tab === "*" ? r.providers.filter(p => p.state === "error").map(p => h("div", { class: "status bad" }, `[ !! ] ${p.name}: ${p.error}`)) : null,
         shown,
-        list.length || kindLoading.has(kind) ? null : h("div", { class: "empty" }, kind === "poster" ? T("Keine Poster gefunden.") : T("Keine Bilder gefunden.")));
+        list.length || kindLoading.has(kind) ? null : h("div", { class: "empty" }, kind === "poster" ? T("Keine Poster gefunden.") : T("Keine Bilder gefunden."),
+          buildOpen ? h("div", { style: "margin-top:12px" }, T("Nichts Passendes?"), " ", buildBtn("btn sm primary", T("Selbst bauen"))) : null));
     }
-    fill(body, kindBar, scopes ? scopeBar : null, tabs, content); render();
-  } catch (e) { fill(body, h("div", { class: "status bad" }, e.message), [h("h4", { style: "margin:18px 0 0;color:var(--accent)" }, T("ThePosterDB")), posterDbPanel(it, slot, draw, () => m.close(), opts.pick)]); }
+    fill(body, buildRow, kindBar, scopes ? scopeBar : null, tabs, content); render();
+  } catch (e) { fill(body, buildRow, h("div", { class: "status bad" }, e.message), [h("h4", { style: "margin:18px 0 0;color:var(--accent)" }, T("ThePosterDB")), posterDbPanel(it, slot, draw, () => m.close(), opts.pick)]); }
 }
 
 /* -------------------------------------------------------- ThePosterDB --- */

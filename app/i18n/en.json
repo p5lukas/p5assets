@@ -863,5 +863,9 @@
 "Original": "Original",
 "Einfärben": "Colourise",
 "Logos einfärben, bessere Auto-Farbe": "Colourise logos, better automatic colour",
-"Logos lassen sich jetzt in einer beliebigen Farbe einfärben, praktisch bei weißen Logos. Die automatische Farbe der Staffelzeile kommt aus den Farben des ganzen Posters und bleibt auch bei dunkler Überblendung farbig.": "Logos can now be colourised in any colour, handy for white logos. The automatic colour of the season line comes from the colours of the whole poster and stays colourful even with a dark fade."
+"Logos lassen sich jetzt in einer beliebigen Farbe einfärben, praktisch bei weißen Logos. Die automatische Farbe der Staffelzeile kommt aus den Farben des ganzen Posters und bleibt auch bei dunkler Überblendung farbig.": "Logos can now be colourised in any colour, handy for white logos. The automatic colour of the season line comes from the colours of the whole poster and stays colourful even with a dark fade.",
+"Selbst bauen": "Build it myself",
+"Nichts Passendes?": "Nothing suitable?",
+"Direkt aus der Suche bauen": "Build straight from the search",
+"Findest du in der Online-Suche nichts Passendes, öffnet „Selbst bauen“ oben den Builder für dieses Poster. Leere Kacheln im Builder zeigen ihre Knöpfe jetzt immer sichtbar.": "If the online search finds nothing suitable, “Build it myself” at the top opens the builder for this poster. Empty tiles in the builder now always show their buttons."
 }

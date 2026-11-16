@@ -269,7 +269,7 @@ function drawTracked(ctx, text, cx, y, track) {
 function makeBuilder(opts) {
   const it = opts.item, multi = !!opts.multi, slots = opts.slots;
   const G = { ...BUILD_DEFAULT };                                   // the look shared by all posters
-  let titleText = it.title, logo = null /* { url, preview, source } */, logoRes = null, logoNote = "", presets = {}, sel = slots[0].key, saving = false, allTitle = true;
+  let titleText = it.title, logo = null /* { url, preview, source } */, logoRes = null, logoNote = "", presets = {}, sel = opts.start && slots.some(s => s.key === opts.start) ? opts.start : slots[0].key, saving = false, allTitle = true;
   const newP = s => ({ bg: null, line: s.season == null ? "" : seasonLine(s.season), color: null, auto: null, palette: [], autoSig: "", fit: { ...BUILD_FIT }, ov: {} });
   const P = Object.fromEntries(slots.map(s => [s.key, newP(s)]));
   const TITLE_OV = ["titleScale", "titleY", "mode", "logo", "trim", "blend", "blendAmount", "blendHeight", "tint", "tintA", "tintB", "tintAmount", "logoColorMode", "logoColor"];        // what a single poster may do differently (when "for all posters" is off)
@@ -304,7 +304,7 @@ function makeBuilder(opts) {
   const repaintTitle = () => allTitle ? paintAll() : paint(sel);
 
   /* --- backgrounds (chosen on the tiles) -------------------------------- */
-  async function setBg(key, bg, fit) { P[key].bg = bg; P[key].auto = null; P[key].autoSig = ""; P[key].fit = { ...(fit || BUILD_FIT) }; cards[key].draggable = !!bg; await paint(key); syncControls(); }
+  async function setBg(key, bg, fit) { cards[key].classList.toggle("nobg", !bg); P[key].bg = bg; P[key].auto = null; P[key].autoSig = ""; P[key].fit = { ...(fit || BUILD_FIT) }; cards[key].draggable = !!bg; await paint(key); syncControls(); }
   const bgFromFile = (key, files) => {
     const f = (files || []).map(x => x.file).find(x => x && /^image\//.test(x.type));
     if (!f) { toast(T("Keine Bilder gefunden"), "bad"); return; }
@@ -529,7 +529,7 @@ function makeBuilder(opts) {
       const p = P[k]; if (!p) continue;
       p.bg = v.bg; if (v.line) p.line = v.line;
       p.color = v.color; p.fit = { ...BUILD_FIT, ...v.fit }; p.ov = v.ov || {}; p.autoSig = "";
-      cards[k].draggable = !!v.bg;
+      cards[k].draggable = !!v.bg; cards[k].classList.toggle("nobg", !v.bg);
     }
   }
   const lookNote = h("div", { class: "blook", hidden: true }, h("span", {}, T("Gespeicherter Look dieser Serie geladen")),
@@ -625,7 +625,9 @@ function makeBuilder(opts) {
         ov("upload", T("Datei wählen"), () => pickFiles(files => bgFromFile(s.key, files), false)),
         ov("eye", T("Vorschau"), () => zoom(s.key)),
         multi ? ov("copy", T("Für alle übernehmen"), () => bgForAll(s.key)) : null)));
-    const card = h("div", { class: "bcard", "data-key": s.key, onclick: () => { selectSlot(s.key); if (matchMedia("(hover:none)").matches) box.classList.toggle("show"); }, ondblclick: () => zoom(s.key) },
+    const act = (name, label, fn) => h("button", { class: "btn sm bempty-btn", type: "button", title: label, "aria-label": label, onclick: e => { e.stopPropagation(); selectSlot(s.key); fn(); } }, icon(name, 14), h("span", {}, label));
+    box.append(h("div", { class: "bempty" }, act("search", T("Online suchen"), () => bgOnline(s.key)), act("upload", T("Datei wählen"), () => pickFiles(files => bgFromFile(s.key, files), false))));
+    const card = h("div", { class: "bcard nobg", "data-key": s.key, onclick: () => { selectSlot(s.key); if (matchMedia("(hover:none)").matches) box.classList.toggle("show"); }, ondblclick: () => zoom(s.key) },
       box, h("div", { class: "blabel" }, h("span", {}, s.label), h("small", { class: "bcustom" }, T("angepasst"))));
     makeDropTarget(card, files => bgFromFile(s.key, files));
     if (multi) {                                                    // drag a poster onto another one: it gets the same background
@@ -717,6 +719,7 @@ function makeBuilder(opts) {
     try { const st = await api("/styles"); presets = st.presets || {}; if (st.last) { Object.assign(G, st.last); delete G.color; } } catch { /* optional */ }
     try { const pr = (await api(`/items/${it.id}/builder`)).project; if (pr) { applyProject(pr); lookNote.hidden = false; } } catch { /* optional */ }
     drawPresets(); syncControls(); paintAll(); loadLogos();
+    if (cards[sel]) cards[sel].scrollIntoView({ block: "nearest" });
   })();
   return root;
 }
@@ -825,9 +828,9 @@ function openMovieBuilder(it, draw) {
   m.el.querySelector(".body").replaceChildren(b);
 }
 /** Series: the detail view turns into the build mode (same window); the letters scramble on the way in and out. */
-function openSeriesBuilder({ it, drawer, close, back }) {
+function openSeriesBuilder({ it, drawer, close, back, start }) {
   matrixSwap(() => {
-    const b = makeBuilder({ item: it, multi: true, slots: buildSlotsFor(it), onSaved: item => back(item), onCancel: () => back() });
+    const b = makeBuilder({ item: it, multi: true, start, slots: buildSlotsFor(it), onSaved: item => back(item), onCancel: () => back() });
     fill(drawer, h("header", {}, h("button", { class: "btn ghost", "aria-label": T("Schließen"), onclick: close }, "✕"),
       h("div", { class: "grow" }, h("h2", {}, T("Poster bauen – {0}", it.title)), h("div", { class: "hint", style: "margin:2px 0" }, T("Alle Poster der Serie in einem Look: Hintergrund, Logo oder Titel, Staffeltext")))),
       h("div", { class: "body" }, b));
