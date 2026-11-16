@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.4 – 2026-11-16
+
+**Changed**
+- README (English and German): the poster builder section now lists all features briefly, with a second screenshot of the background search
+
+**Fixed**
+- Poster builder: the “Free area” choices appeared only after another setting was changed when zooming out with the slider; they now show up at once
+
 ## 0.9.3 – 2026-11-16
 
 **New**

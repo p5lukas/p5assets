@@ -74,9 +74,18 @@ p5assets reads the title, year and season from file and folder names, shows you 
 - **Download** in original quality: single posters, or a selection as a ZIP. On iPhone/iPad the original opens in p5assets; long-press the image and choose “Add to Photos”.
 
 ### Poster builder
-No suitable poster? Build one. Pick a textless background on the poster tile (online search or your own file), then a clear logo from TMDb, fanart.tv or TheTVDB, or the title as text if there is none. Series get a season line (“Season One”, “Specials”) under it, with a colour picked from the background that you can change. Movies: **Build** in the hover menu. Series: the build button in the detail view opens build mode, where every poster is previewed and the one being edited has a Matrix frame. Posters are rendered at 1000×1500 JPG, saved with the usual naming, trash and undo, and looks can be saved as presets. Eight bundled open-licence fonts (OFL). Backdrops, episode pictures and season pictures can be used as backgrounds with an adjustable crop (zoom out with a filled free area, optional colour filter), and p5assets remembers the look of each series (including the chosen backgrounds), so a later visit can swap only the logo on all posters or build a new season to match.
+No suitable poster? Build one right in p5assets. It is saved like any other poster (Kometa naming, 1000×1500 JPG, trash and undo).
+
+- **Background:** search online (posters, backdrops, episode pictures, season pictures) or use your own file. Crop and zoom out with a filled free area, optional colour filter and a fade from the bottom.
+- **Title:** a clear logo from TMDb, fanart.tv or TheTVDB (or your own PNG/WebP), or the title as text. Size, height, colour, eight bundled fonts.
+- **Series:** one look for all posters, with a season line (“Season One”, “Specials”) in a colour taken from the picture. Settings apply to all posters, with exceptions per poster.
+- **Check:** compare all posters side by side, view each one large, switch between draft and existing poster.
+- **Remembered:** the look of each series is kept, so later you can swap only the logo on all posters or add a season in the same style. Looks can also be saved as presets.
+- **Where:** movies: “Build” in the hover menu. Series: “Build” in the detail view. Or “Build it myself” in the online search.
 
 <img src="docs/images/poster-builder.png" alt="Poster builder for a series: all posters in one look" width="640">
+
+<img src="docs/images/poster-builder-search.png" alt="Background search with backdrops, episode pictures and season pictures" width="640">
 
 ### Online search
 Posters from TMDb, TVDB and fanart.tv, sorted by your **preferred poster languages per world** (e.g. Textless → German → English), applied with one click.

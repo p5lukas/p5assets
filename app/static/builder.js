@@ -436,7 +436,7 @@ function makeBuilder(opts) {
   function fitSlider(label, prop, min, max, step, fmt) {
     const def = BUILD_FIT[prop], out = h("span", { class: "bval" });
     const show = v => { out.textContent = fmt(v); reset.classList.toggle("dim", Math.abs(v - def) < step / 2); };
-    const put = v => { P[sel].fit[prop] = v; show(v); paint(sel); };
+    const put = v => { P[sel].fit[prop] = v; show(v); paint(sel); fillRows.hidden = !(P[sel].fit.zoom < 0.999 || P[sel].transp); };     // zoomed out: the free area needs a fill
     const inp = h("input", { type: "range", min, max, step, oninput: () => put(+inp.value) });
     const reset = h("button", { class: "btn sm breset", type: "button", title: T("Auf Standard zurücksetzen"), onclick: () => { inp.value = def; put(def); } }, T("Standard"));
     fitCtl[prop] = () => { const v = P[sel].fit[prop]; inp.value = v; show(v); };

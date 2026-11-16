@@ -71,9 +71,18 @@ und welche vorhandenen Bilder ersetzt würden.
 - **Herunterladen** in Originalqualität: einzelne Poster oder eine Auswahl als ZIP (auf iPhone und iPad öffnet sich das Original in p5assets: Bild lange drücken → „Zu Fotos hinzufügen“)
 
 ### Poster-Builder
-Kein passendes Poster gefunden? Dann baust du eins. Du wählst einen textlosen Hintergrund direkt auf der Kachel (Online-Suche oder eigene Datei), dazu ein Clear-Logo von TMDb, fanart.tv oder TheTVDB – oder, falls es keins gibt, den Titel als Text. Serien bekommen darunter eine Staffelzeile („Season One“, „Specials“) in einer zum Hintergrund passenden, frei änderbaren Farbe. Filme: **Bauen** im Hover-Menü. Serien: der Bauen-Knopf in der Detailansicht öffnet den Baumodus mit Vorschau aller Poster; das gerade bearbeitete hat einen Matrix-Rahmen. Gespeichert wird als 1000×1500-JPG mit der üblichen Benennung, Papierkorb und Rückgängig; Looks lassen sich als Vorlagen speichern. Acht mitgelieferte Schriften (OFL). Backdrops, Episodenbilder und Staffelbilder lassen sich mit einstellbarem Bildausschnitt als Hintergrund nutzen (Wegzoomen mit gefülltem freiem Bereich, optionaler Farbfilter), und p5assets merkt sich den Look jeder Serie (samt gewählten Hintergründen): Später tauschst du zum Beispiel nur das Logo für alle Poster oder baust eine neue Staffel passend nach.
+Kein passendes Poster? Dann baust du eins direkt in p5assets. Es wird wie jedes andere Poster gespeichert (Kometa-Benennung, 1000×1500-JPG, Papierkorb und Rückgängig).
+
+- **Hintergrund:** online suchen (Poster, Backdrops, Episodenbilder, Staffelbilder) oder eigene Datei. Bildausschnitt, Wegzoomen mit gefülltem freiem Bereich, optionaler Farbfilter und Überblendung von unten.
+- **Titel:** Clear-Logo von TMDb, fanart.tv oder TheTVDB (oder eigenes PNG/WebP) oder der Titel als Text. Größe, Höhe, Farbe, acht mitgelieferte Schriften.
+- **Serien:** ein Look für alle Poster, mit Staffelzeile („Season One“, „Specials“) in einer Farbe aus dem Bild. Einstellungen gelten für alle Poster, mit Ausnahmen pro Poster.
+- **Prüfen:** alle Poster nebeneinander vergleichen, jedes groß ansehen, zwischen Entwurf und vorhandenem Poster umschalten.
+- **Gemerkt:** der Look jeder Serie bleibt erhalten. Später tauschst du zum Beispiel nur das Logo für alle Poster oder baust eine neue Staffel passend nach. Looks lassen sich auch als Vorlagen speichern.
+- **Wo:** Filme: **Bauen** im Hover-Menü. Serien: **Bauen** in der Detailansicht. Oder **Selbst bauen** in der Online-Suche.
 
 <img src="docs/images/poster-builder.png" alt="Poster-Builder für eine Serie" width="640">
+
+<img src="docs/images/poster-builder-search.png" alt="Hintergrund-Suche mit Backdrops, Episodenbildern und Staffelbildern" width="640">
 
 ### Online-Suche
 Poster von TMDb, TVDB und fanart.tv, gruppiert nach deiner **Sprach-Priorität pro Welt** (z. B. Textless → Deutsch → Englisch),
