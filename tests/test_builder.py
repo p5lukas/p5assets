@@ -389,8 +389,13 @@ def test_collection_root_state_and_write(tmp_path, monkeypatch):
     made, _ = collection_assets.write_poster(world, "The Vengeance Trilogy", _png_big(), True, {})
     assert made == base / "Collections" / "The Vengeance Trilogy" / "poster.png"
     with pytest.raises(ValueError):
-        collection_assets.write_poster(world, "../evil", _png_big(), True, {})
-    assert not collection_assets.valid_name("a/b") and not collection_assets.valid_name("..") and collection_assets.valid_name("Odyssey: Part 2")
+        collection_assets.write_poster(world, "///", _png_big(), True, {})
+    evil, _ = collection_assets.write_poster(world, "../evil", _png_big(), True, {})              # never leaves the collections folder: illegal characters are left out
+    assert evil.parent == base / "Collections" / "evil"
+    odd, _ = collection_assets.write_poster(world, "Fast & Furious: Saga / 2", _png_big(), True, {})
+    assert odd.parent == base / "Collections" / "Fast & Furious Saga 2"
+    assert collection_assets.folder_of(base / "Collections", "Fast & Furious: Saga / 2") == odd.parent
+    assert not collection_assets.valid_name("..") and not collection_assets.valid_name("/") and collection_assets.valid_name("Odyssey: Part 2")
 
 
 def test_collection_poster_endpoints_and_orphans(tmp_path, monkeypatch):

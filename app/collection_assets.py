@@ -30,21 +30,39 @@ def root_for(world: dict) -> Path | None:
     return None
 
 
+_ILLEGAL = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
+
+
+def safe_name(name: str) -> str:
+    """The collection name as a folder name: characters a file system does not allow are left out, like Kometa does (\"Fast & Furious: Saga\" -> \"Fast & Furious Saga\")."""
+    return re.sub(r"\s+", " ", _ILLEGAL.sub("", name)).strip(" .")[:200]
+
+
 def valid_name(name: str) -> bool:
-    """A collection name that can be one folder name (no path parts)."""
-    return bool(name.strip()) and name not in (".", "..") and not re.search(r"[/\\\x00-\x1f]", name) and len(name) <= 200
+    """A collection name that can be turned into a folder name."""
+    return bool(safe_name(name)) and safe_name(name) not in (".", "..")
+
+
+def _norm(name: str) -> str:
+    return re.sub(r"[\W_]+", "", name.casefold())
 
 
 def folder_of(root: Path, name: str) -> Path | None:
-    """The folder of a collection: the name, exactly like in Plex (upper / lower case does not matter)."""
+    """The folder of a collection: the name like in Plex (case does not matter; characters Kometa leaves out of folder names, spaces and punctuation are ignored)."""
+    exact, loose = {name.casefold(), safe_name(name).casefold()}, _norm(name)
+    fuzzy = None
     try:
         with os.scandir(root) as it:
             for e in it:
-                if e.is_dir() and e.name.casefold() == name.casefold():
+                if not e.is_dir():
+                    continue
+                if e.name.casefold() in exact:
                     return Path(e.path)
+                if loose and _norm(e.name) == loose:
+                    fuzzy = fuzzy or Path(e.path)
     except OSError:
         pass
-    return None
+    return fuzzy
 
 
 def poster_of(folder: Path) -> Path | None:
@@ -78,7 +96,7 @@ def write_poster(world: dict, name: str, data: bytes, create: bool, undo: dict) 
     if folder is None:
         if not create:
             return None, "folder"
-        folder = root / name
+        folder = root / safe_name(name)
     body, ext = uploads.normalize_image(data, config.get()["assets"]["convert_to_jpg"])
     gid = trash.begin("replace", item_id=None, world=world.get("id"), title=name, slot="poster", type="collection")
     undo["gid"] = gid

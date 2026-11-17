@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.9 – 2026-11-17
+
+**Fixed**
+- Collection poster: names with characters a folder cannot have (e.g. “:” or “/”) no longer fail with “cannot be used as a folder name”; those characters are left out of the folder name (as Kometa does) and an existing folder is also found when only spaces or punctuation differ
+
 ## 0.9.8 – 2026-11-17
 
 **New**
