@@ -1234,36 +1234,70 @@ function chooseCollectionPoster(cid, title, done) {
     } catch (e) { toast(e.message, "bad"); }
   }, false);
 }
+/** "Search in": the collection's own posters plus the posters of its films (textless ones are often filed there). First scope = the slot the search starts with. */
+function collectionScopes(cid, members, slot = "poster") {
+  return [{ key: slot, label: T("Collection"), path: `/collection-search?id=${encodeURIComponent(cid)}` },
+    ...members.slice(0, 8).map(m => ({ key: "film:" + m.id, label: m.title, path: `/items/${m.id}/poster/search` }))];
+}
+/** The hover menu of a collection poster, like on every other tile: upload / replace, preview, search online, build, delete. */
+function collectionActions(g, box, change) {
+  const p = g.poster, exists = !!(p && p.exists), cid = g.id;
+  const members = g.members.map(m => ({ id: m.id, title: m.title }));
+  const ob = (label, fn, cls = "") => h("button", { class: "ov-btn " + cls, onclick: e => { e.stopPropagation(); box.classList.remove("show"); fn(); } }, label);
+  const pick = () => chooseCollectionPoster(cid, g.title, np => change(np));
+  const search = () => {
+    const first = g.members[0];
+    searchOnline(first, "poster", null, { scopes: collectionScopes(cid, members), heading: `${g.title} – ${T("Collection-Poster")}`,
+      apply: async img => { const np = await collectionPosterFromUrl(cid, g.title, img.url); if (np) change(np); } });
+  };
+  const preview = () => { const m = modal(g.title, h("img", { alt: "", src: `/api/collection-poster?id=${encodeURIComponent(cid)}&v=${p.v}`, style: "max-width:100%;max-height:75vh;display:block;margin:0 auto;border-radius:6px" })); return m; };
+  const del = async () => {
+    if (!confirm(T("{0} wirklich löschen?", T("Collection-Poster")))) return;
+    try { const r = await api(`/collection-poster?id=${encodeURIComponent(cid)}`, { method: "DELETE" }); undoToast(T("Gelöscht"), r, null); change({ ...p, exists: false, v: 0 }); } catch (e) { toast(e.message, "bad"); }
+  };
+  const el = h("div", { class: "hover" },
+    h("div", { class: "ovbtns" }, exists
+      ? [ob(T("Ersetzen"), pick), ob(T("Vorschau"), preview), ob(T("Online suchen"), search), ob(T("Bauen"), () => g.build()), ob(T("Löschen"), del, "danger")]
+      : [ob(T("Hochladen"), pick), ob(T("Online suchen"), search), ob(T("Bauen"), () => g.build())]),
+    h("div", { class: "ovhint" }, T("oder Bild hierher ziehen")));
+  el.preview = preview;
+  return el;
+}
 const COLPOSTER_NO_DIR = () => T("Für diese Welt ist kein Collection-Ordner bekannt (Einstellungen → Welten)");
 
-/** A Plex collection: its own poster in front (a dashed card when missing), four of its films behind; click opens it, "Hochladen" / a dropped picture sets the collection poster, "Bauen" its builder. */
+/** A Plex collection: its own poster in front (a dashed card when missing), four of its films fanned out behind. A click opens the collection; the poster has the usual hover menu, and a dropped picture becomes the collection poster. */
 function collectionTile(g) {
   const shown = g.members.filter(m => m.has_poster).concat(g.members.filter(m => !m.has_poster)).slice(0, 4), mid = (shown.length - 1) / 2;
-  const front = h("div", { class: "colfront" });
-  const drawFront = () => {
-    const p = g.poster;
-    front.className = "colfront" + (p && p.exists ? "" : " empty");
-    fill(front, p && p.exists ? h("img", { loading: "lazy", alt: "", src: `/api/collection-poster?id=${encodeURIComponent(g.id)}&v=${p.v}` }) : h("span", { class: "plus" }, p ? "＋" : "–"),
-      p && p.exists ? null : h("small", {}, p ? T("Collection-Poster fehlt") : T("kein Collection-Ordner")));
+  const front = h("div", { class: "poster colfront" });
+  const meta = h("div", { class: "colmeta" });
+  g.build = () => openCollection(g.id, { build: true });
+  const set = p => {
+    if (p) g.poster = p;
+    drawFront(); fill(meta, metaPills());
   };
-  drawFront();
+  function drawFront() {
+    const p = g.poster;
+    front.classList.toggle("empty", !(p && p.exists));
+    fill(front, p && p.exists ? h("img", { loading: "lazy", alt: "", class: "loaded", draggable: false, src: `/api/collection-poster?id=${encodeURIComponent(g.id)}&v=${p.v}` })
+      : h("div", { class: "ph" }, h("div", {}, h("b", {}, "＋"), p ? T("Collection-Poster fehlt") : T("kein Collection-Ordner"))),
+      p ? collectionActions(g, front, set) : null);
+  }
+  function metaPills() { return g.poster ? h("span", { class: "pill " + (g.poster.exists ? "ok" : "warn"), title: T("Das Poster der Collection selbst (Kometa-Asset im Collection-Ordner)") },
+    g.poster.exists ? T("Collection-Poster ✓") : T("Collection-Poster fehlt")) : null; }
+  drawFront(); fill(meta, metaPills());
   const fan = h("div", { class: "colfan" }, shown.map((m, i) => h("div", { class: "colp" + (m.has_poster ? "" : " empty"), style: `--o:${(i - mid).toFixed(2)};--z:${Math.round(10 - Math.abs(i - mid) * 2)}`, title: m.title },
     m.has_poster ? h("img", { loading: "lazy", alt: "", src: `/api/thumb/${m.id}/poster?v=${m.v}` }) : h("span", {}, "＋"))), front,
     g.total > shown.length ? h("span", { class: "colmore" }, "+" + (g.total - shown.length)) : null);
   const open = () => openCollection(g.id);
-  const set = p => { if (p) { g.poster = p; drawFront(); fill(meta, metaPills()); } };
-  const metaPills = () => g.poster ? h("span", { class: "pill " + (g.poster.exists ? "ok" : "warn"), title: T("Das Poster der Collection selbst (Kometa-Asset im Collection-Ordner)") },
-    g.poster.exists ? T("Collection-Poster ✓") : T("Collection-Poster fehlt")) : null;
-  const meta = h("div", { class: "colmeta" }, metaPills());
-  const card = h("div", { class: "colcard", tabindex: "0", role: "button", "aria-label": g.title, onclick: open, onkeydown: e => { if (e.key === "Enter" && e.target === card || e.key === " " && e.target === card) { e.preventDefault(); open(); } } },
+  const card = h("div", { class: "colcard", tabindex: "0", role: "button", "aria-label": g.title, onclick: e => {
+      if (g.poster && e.target.closest(".colfront") && matchMedia("(hover: none)").matches && !e.target.closest(".ov-btn")) { toggleActions(front); return; }      // touch: first tap shows the menu
+      open(); },
+    onkeydown: e => { if ((e.key === "Enter" || e.key === " ") && e.target === card) { e.preventDefault(); open(); } } },
     fan,
     h("div", { class: "colinfo" }, h("div", { class: "colname" }, g.title),
       h("div", { class: "colmeta" }, pl(g.total, "Film", "Filme"), " · ",
         h("span", { class: "pill " + (g.with_poster === g.total ? "ok" : "warn") }, g.with_poster === g.total ? T("vollständig ({0})", g.total) : T("{0} von {1} Postern", g.with_poster, g.total))),
-      meta,
-      h("div", { class: "row wrap" },
-        g.poster ? h("button", { class: "btn sm", type: "button", title: T("Ein Bild als Poster der Collection wählen (oder einfach auf die Kachel ziehen)"), onclick: e => { e.stopPropagation(); chooseCollectionPoster(g.id, g.title, set); } }, icon("upload", 14), T("Hochladen")) : null,
-        h("button", { class: "btn sm", type: "button", title: T("Alle Filme dieser Collection in einem Look bauen"), onclick: e => { e.stopPropagation(); openCollection(g.id, { build: true }); } }, icon("build", 14), T("Bauen")))));
+      meta));
   makeDropTarget(card, async files => {
     const imgs = files.filter(f => /\.(jpe?g|png|webp|gif|bmp|tiff?|avif)$/i.test(f.path));
     try {
@@ -1274,23 +1308,18 @@ function collectionTile(g) {
   return card;
 }
 
-/** The poster of the collection itself as the first tile of its detail view: replace (click / drop), search online, build, delete. */
+/** The poster of the collection itself as the first tile of its detail view: same look and hover menu as every other tile. */
 function collectionPosterCard(data, reload) {
   const p = data.poster, cid = data.id;
-  if (!p) return h("div", { class: "card colposter nodir" }, h("div", { class: "empty" }, COLPOSTER_NO_DIR()));
-  const send = fn => async (...a) => { try { const r = await fn(...a); if (r !== null) reload(); } catch (e) { toast(e.message, "bad"); } };
-  const el = h("div", { class: "card colposter" + (p.exists ? "" : " missing") },
-    h("div", { class: "poster", onclick: () => chooseCollectionPoster(cid, data.title, () => reload()) },
-      p.exists ? h("img", { alt: "", class: "loaded", src: `/api/collection-poster?id=${encodeURIComponent(cid)}&v=${p.v}` }) : h("div", { class: "colfront empty" }, h("span", { class: "plus" }, "＋"), h("small", {}, T("Collection-Poster fehlt")))),
-    h("div", { class: "info pmeta" }, h("div", { class: "t" }, T("Collection-Poster")),
-      h("div", { class: "row wrap" },
-        h("button", { class: "btn sm", onclick: () => chooseCollectionPoster(cid, data.title, () => reload()) }, icon("upload", 14), p.exists ? T("Ersetzen") : T("Hochladen")),
-        h("button", { class: "btn sm", onclick: () => searchOnline(data.members[0], "poster", null, { searchPath: `/collection-search?id=${encodeURIComponent(cid)}`, heading: `${data.title} – ${T("Collection-Poster")}`, apply: send(img => collectionPosterFromUrl(cid, data.title, img.url)) }) }, icon("search", 14), T("Online suchen")),
-        h("button", { class: "btn sm", onclick: () => openCollection(cid, { build: true }) }, icon("build", 14), T("Bauen")),
-        p.exists ? h("button", { class: "btn sm danger", onclick: async () => {
-          if (!confirm(T("{0} wirklich löschen?", T("Collection-Poster")))) return;
-          try { const r = await api(`/collection-poster?id=${encodeURIComponent(cid)}`, { method: "DELETE" }); undoToast(T("Gelöscht"), r, reload); reload(); } catch (e) { toast(e.message, "bad"); }
-        } }, T("Löschen")) : null)));
+  if (!p) return h("div", { class: "card colposter nodir" }, h("div", { class: "poster miss" }, h("div", { class: "ph" }, h("div", {}, h("b", {}, "–"), T("kein Collection-Ordner")))), h("div", { class: "info" }, h("div", { class: "t" }, T("Collection-Poster")), h("div", { class: "s" }, COLPOSTER_NO_DIR())));
+  const box = h("div", { class: "poster" + (p.exists ? "" : " miss") }, p.exists
+    ? h("img", { alt: "", class: "loaded", draggable: false, src: `/api/collection-poster?id=${encodeURIComponent(cid)}&v=${p.v}` })
+    : h("div", { class: "ph" }, h("div", {}, h("b", {}, "＋"), T("fehlt"))));
+  const g = { ...data, build: () => openCollection(cid, { build: true }) };
+  const act = collectionActions(g, box, () => reload());
+  box.append(act);
+  box.onclick = () => { if (isTouch()) toggleActions(box); else if (p.exists) act.preview(); };
+  const el = h("div", { class: "card colposter" }, box, h("div", { class: "info" }, h("div", { class: "t" }, T("Collection-Poster")), h("div", { class: "s" }, data.title)));
   makeDropTarget(el, async files => {
     const imgs = files.filter(f => /\.(jpe?g|png|webp|gif|bmp|tiff?|avif)$/i.test(f.path));
     try {
@@ -1464,12 +1493,12 @@ async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img):
   try {
     // Several posters can be searched at once (the poster builder: textless posters of a series are often filed under the series poster)
     const scopes = opts.scopes && opts.scopes.length > 1 ? opts.scopes : null, cache = {}, done = {};
-    const load = key => cache[key] ||= api(opts.searchPath && key === slot ? opts.searchPath : `/items/${it.id}/${key}/search`).then(res => (done[key] = res));
+    const load = key => cache[key] ||= api((scopes && scopes.find(x => x.key === key) || {}).path || (opts.searchPath && key === slot ? opts.searchPath : `/items/${it.id}/${key}/search`)).then(res => (done[key] = res));
     const chosen = new Set([slot, ...(scopes && scopes.some(x => x.key === "poster") ? ["poster"] : [])]);
     const loadSafe = key => load(key).catch(e => { toast(e.message, "bad"); done[key] = { images: [], providers: first.providers, languages: [] }; });
     const first = await load(slot);
     await Promise.all([...chosen].map(loadSafe));
-    const short = k => k === "poster" ? T("Serie") : seasonNum(k) === 0 ? T("Specials") : "S" + seasonNum(k);
+    const short = k => { const sc = scopes && scopes.find(x => x.key === k); return sc && sc.path ? sc.label : k === "poster" ? T("Serie") : seasonNum(k) === 0 ? T("Specials") : "S" + seasonNum(k); };
     function merge() {                                    // the results of all chosen posters as one (same shape as a single search)
       const seen = new Set(), images = [];
       for (const k of chosen) for (const i of (done[k] ? done[k].images : [])) if (!seen.has(i.url)) { seen.add(i.url); images.push({ ...i, scope: k }); }

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.10 – 2026-11-17
+
+**New**
+- Collection poster search: “Search in” (like in the builder) searches the collection's own posters and the posters of its films, so textless posters of single films can be used for the collection too; the same in the builder when choosing the background of the collection poster
+
+**Changed**
+- The collection poster tile (collection view and Collections tab) now has the usual hover menu on the poster (Upload / Replace, Preview, Search online, Build, Delete; on touch devices a tap shows it) instead of buttons below the poster
+
 ## 0.9.9 – 2026-11-17
 
 **Fixed**

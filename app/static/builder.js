@@ -343,7 +343,7 @@ function makeBuilder(opts) {
     const u = URL.createObjectURL(f); setBg(key, { url: u, preview: u, name: f.name, file: f });
   };
   const slotOf = key => slots.find(s => s.key === key) || {};
-  const bgOnline = key => searchOnline(itemOf(key), apiSlot(key), null, { ...(slotOf(key).colPoster ? { searchPath: `/collection-search?id=${encodeURIComponent(slotOf(key).colPoster.cid)}`, heading: `${T("Hintergrund wählen")} – ${P[key].title}` } : {}), pick: img => setBg(key, { url: img.url, preview: img.preview || img.url, name: img.label ? `${img.source} · ${img.label}` : img.source, ...(img.file ? { file: img.file } : {}) }), title: T("Hintergrund wählen"), scopes: col ? null : slots.map(x => ({ key: x.key, label: x.label })) });
+  const bgOnline = key => searchOnline(itemOf(key), apiSlot(key), null, { ...(slotOf(key).colPoster ? { searchPath: `/collection-search?id=${encodeURIComponent(slotOf(key).colPoster.cid)}`, heading: `${T("Hintergrund wählen")} – ${P[key].title}` } : {}), pick: img => setBg(key, { url: img.url, preview: img.preview || img.url, name: img.label ? `${img.source} · ${img.label}` : img.source, ...(img.file ? { file: img.file } : {}) }), title: T("Hintergrund wählen"), scopes: slotOf(key).colPoster ? collectionScopes(slotOf(key).colPoster.cid, slotOf(key).colPoster.members, apiSlot(key)) : col ? null : slots.map(x => ({ key: x.key, label: x.label })) });
   const copyBg = (from, to) => { if (from !== to && P[from].bg) setBg(to, { ...P[from].bg }, P[from].fit); };
   function bgForAll(from) {
     const src = P[from].bg; if (!src) return;
@@ -918,7 +918,7 @@ function openCollectionBuilder({ data, drawer, close, back, start }) {
   matrixSwap(() => {
     const slots = data.members.map(m => ({ key: m.id, season: null, label: m.year ? `${m.title} (${m.year})` : m.title, item: m }));
     // the poster of the collection itself comes first (only when the world has a collections folder): the name of the collection as the title
-    if (data.poster) slots.unshift({ key: "__col", season: null, label: T("Collection-Poster"), item: data.members[0], title: data.title, colPoster: { cid: data.id, exists: data.poster.exists, v: data.poster.v } });
+    if (data.poster) slots.unshift({ key: "__col", season: null, label: T("Collection-Poster"), item: data.members[0], title: data.title, colPoster: { cid: data.id, exists: data.poster.exists, v: data.poster.v, members: data.members.map(m => ({ id: m.id, title: m.title })) } });
     const pseudo = { id: data.builder_key, title: data.title, type: "collection", slots: {} };
     const b = makeBuilder({ item: pseudo, builderKey: data.builder_key, collection: true, multi: true, start, slots, onSaved: () => back(), onCancel: () => back() });
     fill(drawer, h("header", {}, h("button", { class: "btn ghost", "aria-label": T("Schließen"), onclick: close }, "✕"),

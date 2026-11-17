@@ -922,5 +922,7 @@
 "kein Collection-Ordner": "no collections folder",
 "Collection": "Collection",
 "Collection-Poster hochladen und per Drag & Drop": "Upload collection posters, also by drag & drop",
-"Im Reiter Collections zeigt jede Collection ihr eigenes Poster vorn; es lässt sich hochladen oder direkt auf die Kachel ziehen. In der Collection-Ansicht ist es die erste Kachel. Beim Import lassen sich Dateien einer Collection zuordnen.": "In the Collections tab every collection shows its own poster in front; upload it or drop a picture right onto the tile. In the collection view it is the first tile. During import, files can be assigned to a collection."
+"Im Reiter Collections zeigt jede Collection ihr eigenes Poster vorn; es lässt sich hochladen oder direkt auf die Kachel ziehen. In der Collection-Ansicht ist es die erste Kachel. Beim Import lassen sich Dateien einer Collection zuordnen.": "In the Collections tab every collection shows its own poster in front; upload it or drop a picture right onto the tile. In the collection view it is the first tile. During import, files can be assigned to a collection.",
+"Collection-Poster: Suche in allen Filmen, Hover-Menü": "Collection poster: search in all films, hover menu",
+"Die Suche nach einem Collection-Poster durchsucht auf Wunsch auch die Poster der einzelnen Filme (z. B. Textless-Poster). Die Kachel des Collection-Posters hat jetzt wie alle anderen das Hover-Menü auf dem Poster.": "The search for a collection poster can now also search the posters of the single films (e.g. textless posters). The collection poster tile has the usual hover menu on the poster like all the others."
 }
