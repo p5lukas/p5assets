@@ -82,7 +82,9 @@ def state(world: dict, name: str) -> dict | None:
         return None
     folder = folder_of(root, name)
     poster = poster_of(folder) if folder else None
-    return {"folder": bool(folder), "exists": bool(poster), "v": int(poster.stat().st_mtime) if poster else 0}
+    st = poster.stat() if poster else None
+    return {"folder": bool(folder), "exists": bool(poster), "v": int(st.st_mtime) if st else 0, "dir": folder.name if folder else name,
+            "file": poster.name if poster else None, "size": st.st_size if st else 0}
 
 
 def write_poster(world: dict, name: str, data: bytes, create: bool, undo: dict) -> tuple[Path | None, str]:

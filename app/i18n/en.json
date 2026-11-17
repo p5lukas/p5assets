@@ -924,5 +924,15 @@
 "Collection-Poster hochladen und per Drag & Drop": "Upload collection posters, also by drag & drop",
 "Im Reiter Collections zeigt jede Collection ihr eigenes Poster vorn; es lässt sich hochladen oder direkt auf die Kachel ziehen. In der Collection-Ansicht ist es die erste Kachel. Beim Import lassen sich Dateien einer Collection zuordnen.": "In the Collections tab every collection shows its own poster in front; upload it or drop a picture right onto the tile. In the collection view it is the first tile. During import, files can be assigned to a collection.",
 "Collection-Poster: Suche in allen Filmen, Hover-Menü": "Collection poster: search in all films, hover menu",
-"Die Suche nach einem Collection-Poster durchsucht auf Wunsch auch die Poster der einzelnen Filme (z. B. Textless-Poster). Die Kachel des Collection-Posters hat jetzt wie alle anderen das Hover-Menü auf dem Poster.": "The search for a collection poster can now also search the posters of the single films (e.g. textless posters). The collection poster tile has the usual hover menu on the poster like all the others."
+"Die Suche nach einem Collection-Poster durchsucht auf Wunsch auch die Poster der einzelnen Filme (z. B. Textless-Poster). Die Kachel des Collection-Posters hat jetzt wie alle anderen das Hover-Menü auf dem Poster.": "The search for a collection poster can now also search the posters of the single films (e.g. textless posters). The collection poster tile has the usual hover menu on the poster like all the others.",
+"Collection auf MediUX öffnen ↗": "Open collection on MediUX ↗",
+"Ein einzelnes Bild ersetzt das Poster dieser Collection. Ein ZIP oder mehrere Bilder öffnen den Prüfdialog.": "A single picture replaces the poster of this collection. A ZIP or several pictures open the review dialog.",
+"Ersten Film auf MediUX öffnen ↗": "Open the first film on MediUX ↗",
+"Falls die Collection auf MediUX keine eigene Seite hat: die Seite des ersten Films": "If the collection has no page of its own on MediUX: the page of its first film",
+"Falls es unter „Collections“ nichts gibt: den Bereich „Filme“ wählen.": "If there is nothing under “Collections”: choose “Movies”.",
+"Für diese Collection ist keine TMDb-Nummer bekannt. Suche sie direkt auf mediux.pro.": "No TMDb number is known for this collection. Search for it on mediux.pro directly.",
+"Suchbegriff (Name der Collection)": "Search term (name of the collection)",
+"Bereich": "Section",
+"Überall Bauen, Collection-Poster vollständig": "Build everywhere, collection posters complete",
+"ThePosterDB und MediUX gibt es jetzt auch bei Collection-Postern, dazu Matrix-Regen, volle Vorschau und Herunterladen. „Bauen“ steht in jedem Menü und jeder Vorschau, die Reihenfolge der Aktionen ist überall gleich.": "ThePosterDB and MediUX are now also there for collection posters, plus matrix rain, a full preview and download. “Build” is in every menu and every preview, and the order of the actions is the same everywhere."
 }

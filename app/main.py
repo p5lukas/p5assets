@@ -630,13 +630,15 @@ async def collections_dir(world: str = ""):
 
 
 @app.get("/api/collection-poster")
-async def collection_poster(id: str):
+async def collection_poster(id: str, download: bool = False):
     _, world, title = _collection_films(id)
     root = collection_assets.root_for(world)
     folder = collection_assets.folder_of(root, title) if root else None
     poster = collection_assets.poster_of(folder) if folder else None
     if not poster:
         raise HTTPException(404, tr("Datei nicht gefunden"))
+    if download:                                      # the original file, named like the other downloads
+        return FileResponse(poster, filename=f"{collection_assets.safe_name(title)} - Collection{poster.suffix.lower()}", headers={"Cache-Control": "no-store"})
     return FileResponse(poster, headers={"Cache-Control": "no-cache"})
 
 
@@ -696,6 +698,23 @@ async def collection_search(id: str):
         raise HTTPException(400, tr("Keine API-Keys hinterlegt (Einstellungen → Quellen)"))
     movies = [{"ids": f["ids"], "title": f["title"], "year": f["year"]} for f in films[:6]]
     return await providers.search_collection(apis, movies, world.get("languages"))
+
+
+@app.get("/api/collection-tmdb-id")
+async def collection_tmdb_id(id: str):
+    """The TMDb number of a collection and of its first film (for links to MediUX); null when TMDb does not know it."""
+    films, _, _ = _collection_films(id)
+    movies = [{"ids": f["ids"], "title": f["title"], "year": f["year"]} for f in films[:6]]
+    out = {"id": None, "film": None}
+    try:
+        out["id"] = await providers.tmdb_collection_id(config.get()["apis"], movies)
+        key = config.get()["apis"]["tmdb"]
+        if key and movies:
+            tid = (films[0].get("ids") or {}).get("tmdb") or await providers.tmdb_find_id(key, movies[0]["ids"], "movie", movies[0]["title"], movies[0]["year"])
+            out["film"] = str(tid) if tid else None
+    except Exception as e:  # noqa: BLE001
+        log.warning("TMDb number of a collection: %s", short(e))
+    return out
 
 
 @app.get("/api/collections/hidden")

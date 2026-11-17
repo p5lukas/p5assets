@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.11 – 2026-11-17
+
+**New**
+- Collection poster: ThePosterDB and MediUX tabs in the online search, like for films (search term = name of the collection, section “Collections” or “Movies”, link to the collection and to its first film on MediUX, drop zone that stores the picture as the collection poster; in the builder it becomes the background)
+- Matrix rain on the collection poster after upload, drop, online choice and saving from the builder (Collections tab and collection view)
+- “Build” in the menu of every series and season tile and in every preview; “Build collection” in the menu of a film inside a collection view
+- Collection poster: full preview with details (folder, file, size, date, resolution), “Download” in the menu and the preview
+
+**Changed**
+- One order of actions everywhere (Replace/Upload, Preview, Search online, Build, Download, Apply to all, Delete), also in the preview; “Build it myself” is now simply “Build”
+
 ## 0.9.10 – 2026-11-17
 
 **New**

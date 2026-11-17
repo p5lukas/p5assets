@@ -375,7 +375,7 @@ def test_collection_root_state_and_write(tmp_path, monkeypatch):
     assert collection_assets.root_for(world) == base / "Collections"                              # found by itself
     assert collection_assets.root_for({**world, "collections_dir": "Nope"}) is None
     assert collection_assets.root_for({**world, "collections_dir": str(base / "Collections")}) == base / "Collections"
-    assert collection_assets.state(world, "vaiana filmreihe") == {"folder": True, "exists": False, "v": 0}   # case does not matter
+    assert collection_assets.state(world, "vaiana filmreihe") == {"folder": True, "exists": False, "v": 0, "dir": "Vaiana Filmreihe", "file": None, "size": 0}   # case does not matter
     assert collection_assets.state({**world, "assets_path": str(tmp_path / "x")}, "A") is None
     monkeypatch.setattr(collection_assets.config, "get", lambda: {"assets": {"convert_to_jpg": False}})
     monkeypatch.setattr(collection_assets.trash, "_root", lambda: tmp_path / "trash")
@@ -413,7 +413,7 @@ def test_collection_poster_endpoints_and_orphans(tmp_path, monkeypatch):
     assert c.get("/api/collections-dir").json() == {"path": str(base / "Collections"), "set": False}
     assert c.get("/api/collection-poster", params={"id": "1:77"}).status_code == 404
     over = c.get("/api/collections").json()["collections"][0]
-    assert over["poster"] == {"folder": True, "exists": False, "v": 0}
+    assert over["poster"] == {"folder": True, "exists": False, "v": 0, "dir": "Odyssey Saga", "file": None, "size": 0}
     up = c.post("/api/collection-poster", params={"id": "1:77"}, files={"file": ("p.png", _png_big(), "image/png")})
     assert up.status_code == 200 and up.json()["poster"]["exists"]
     assert c.get("/api/collection-poster", params={"id": "1:77"}).status_code == 200
@@ -456,7 +456,7 @@ def test_import_recognises_collection_posters_and_applies_them(tmp_path, monkeyp
     names = {e["name"]: e for e in res["entries"]}
     assert names["Odyssey Saga Collection.png"]["collection_id"] == "1:77" and names["odyssey saga.png"]["collection_id"] == "1:77"      # either spelling, any case
     assert "collection_id" not in names["Something Else Collection.png"] and names["Something Else Collection.png"]["collection"] is True          # unknown: the user decides
-    assert res["collections"]["1:77"]["poster"] == {"folder": True, "exists": False, "v": 0}
+    assert res["collections"]["1:77"]["poster"] == {"folder": True, "exists": False, "v": 0, "dir": "Odyssey Saga", "file": None, "size": 0}
     # the autocomplete of the review dialog offers the collection
     hit = [o for o in c.get("/api/slots", params={"q": "odyssey"}).json() if o.get("collection")]
     assert hit and hit[0]["collection_id"] == "1:77" and hit[0]["slots"][0]["slot"] == "collection"
@@ -471,3 +471,29 @@ def test_import_recognises_collection_posters_and_applies_them(tmp_path, monkeyp
     gone = c.delete("/api/collection-poster", params={"id": "1:77"}).json()
     assert gone["ok"] and gone["poster"]["exists"] is False and gone["trash"]
     assert c.delete("/api/collection-poster", params={"id": "1:77"}).status_code == 404
+
+
+
+def test_collection_poster_download_and_tmdb_number(tmp_path, monkeypatch):
+    base = tmp_path / "HD"
+    (base / "Collections" / "Odyssey Saga").mkdir(parents=True)
+    col = [{"id": "1:77", "title": "Odyssey Saga"}]
+    monkeypatch.setitem(scanner.STATE, "items", [_film(1, "Part One", 2001, col), _film(2, "Part Two", 2003, col)])
+    world = {"id": "hd", "name": "HD", "assets_path": str(base), "collections_dir": "", "languages": ["xx", "en"]}
+    monkeypatch.setattr(main, "_world", lambda w=None: world)
+    monkeypatch.setattr(main.config, "get", lambda: {"worlds": [world], "apis": {"tmdb": "k", "tvdb": "", "fanart": ""}, "assets": {"convert_to_jpg": False, "asset_folders": "", "mirror": False}})
+    monkeypatch.setattr(collection_assets.trash, "_root", lambda: tmp_path / "trash")
+    c = TestClient(main.app)
+    up = c.post("/api/collection-poster", params={"id": "1:77"}, files={"file": ("p.png", _png_big(), "image/png")}).json()
+    assert up["poster"]["file"] == "poster.png" and up["poster"]["size"] > 0 and up["poster"]["dir"] == "Odyssey Saga"
+    dl = c.get("/api/collection-poster", params={"id": "1:77", "download": "true"})
+    assert dl.status_code == 200 and "Odyssey%20Saga%20-%20Collection.png" in dl.headers["content-disposition"]
+
+    async def fake_cid(apis, movies):
+        return "4242"
+
+    async def fake_find(key, ids, kind, title, year):
+        return "99"
+    monkeypatch.setattr(main.providers, "tmdb_collection_id", fake_cid)
+    monkeypatch.setattr(main.providers, "tmdb_find_id", fake_find)
+    assert c.get("/api/collection-tmdb-id", params={"id": "1:77"}).json() == {"id": "4242", "film": "99"}

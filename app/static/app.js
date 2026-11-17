@@ -953,7 +953,7 @@ function metaText(it) {
   return [world && cfg().worlds.length > 1 ? T("Welt: {0}", world.name) : null, T("Quellen: {0}", it.sources.join(" · ")), T("Status: {0}", statusTags(it).map(t => t.text).join(" · "))].filter(Boolean).join("\n");
 }
 
-function card(item, local) {
+function card(item, local, extra) {
   const movie = item.type === "movie";
   const el = h("div", { class: "card" + (movie ? " movie" : ""), onclick: movie ? null : () => openItem(item.id) });
   const box = posterBox(item, "poster");
@@ -976,7 +976,7 @@ function card(item, local) {
   }
   if (movie && item.folder) {
     let ready = false;
-    const ensure = () => { if (!ready) { ready = true; box.append(slotActions(item, "poster", box, changed)); } };
+    const ensure = () => { if (!ready) { ready = true; box.append(slotActions(item, "poster", box, changed, extra)); } };
     box.addEventListener("pointerenter", ensure, { once: true });
     box.onclick = () => {
       ensure();
@@ -1127,18 +1127,26 @@ function downloadUrl(url) {
 const downloadSlot = (it, key, draw) => isTouch() ? openPreview(it, key, draw) : downloadUrl(`/api/download/${it.id}/${key}`);
 
 /** Hover/tap overlay of a poster tile with its actions (series tiles in the detail view, movie posters on the dashboard). */
-function slotActions(it, key, box, draw) {
+/** Open the poster builder for a title / tile; null when there is none (a series builder is only there while its detail view is open). */
+function builderOpener(it, key, draw, extra) {
+  if (extra && extra.build) return extra.build;
+  if (it.type === "movie") return () => openMovieBuilder(it, draw);
+  if (it.type === "show" && S.seriesBuild && S.seriesBuildItem === it.id) return () => S.seriesBuild(key);
+  return null;
+}
+function slotActions(it, key, box, draw, extra) {
   const exists = !!(it.slots[key] && it.slots[key].exists);
+  const build = builderOpener(it, key, draw);
   const pick = () => pickFiles(files => uploadSlot(it, key, files, draw), false);
   const del = async () => { if (confirm(T("{0} wirklich löschen?", slotLabel(key, it.type)))) { const r = await api(`/items/${it.id}/${key}`, { method: "DELETE" }); draw(r.item); undoToast(T("Gelöscht"), r, draw); } };
   const ob = (label, fn, cls = "") => h("button", { class: "ov-btn " + cls, onclick: e => { e.stopPropagation(); box.classList.remove("show"); fn(); } }, label);
   return h("div", { class: "hover" },
     h("div", { class: "ovbtns" }, exists
       ? [ob(T("Ersetzen"), pick), ob(T("Vorschau"), () => openPreview(it, key, draw)), ob(T("Online suchen"), () => searchOnline(it, key, draw)),
-         it.type === "movie" ? ob(T("Bauen"), () => openMovieBuilder(it, draw)) : null,
+         build ? ob(T("Bauen"), build) : null, extra && extra.collectionBuild ? ob(T("Collection bauen"), extra.collectionBuild) : null,
          ob(T("Herunterladen"), () => downloadSlot(it, key, draw)),
          it.type === "show" ? ob(T("Auf alle …"), () => openApplyAll(it, key, draw)) : null, ob(T("Löschen"), del, "danger")]
-      : [ob(T("Hochladen"), pick), ob(T("Online suchen"), () => searchOnline(it, key, draw)), it.type === "movie" ? ob(T("Bauen"), () => openMovieBuilder(it, draw)) : null]),
+      : [ob(T("Hochladen"), pick), ob(T("Online suchen"), () => searchOnline(it, key, draw)), build ? ob(T("Bauen"), build) : null, extra && extra.collectionBuild ? ob(T("Collection bauen"), extra.collectionBuild) : null]),
     h("div", { class: "ovhint" }, T("oder Bild hierher ziehen")));
 }
 
@@ -1189,8 +1197,9 @@ function openPreview(it, key, draw) {
         h("dl", {}, rows.map(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]), src ? [h("dt", {}, T("Auflösung")), res] : null),
         h("div", { class: "row wrap", style: "margin-top:20px" },
           it.folder ? h("button", { class: "btn sm primary", onclick: pick }, exists ? T("Ersetzen") : T("Hochladen")) : null,
-          exists && !touch ? h("button", { class: "btn sm", onclick: () => downloadSlot(it, key) }, icon("download", 14), T("Herunterladen")) : null,
           draw && it.folder ? h("button", { class: "btn sm", onclick: () => { close(); searchOnline(it, key, draw); } }, T("Online suchen")) : null,
+          draw && it.folder && builderOpener(it, key, draw) ? h("button", { class: "btn sm", title: T("Poster selbst bauen: textloses Poster, Logo oder Titel und Staffeltext"), onclick: () => { const b = builderOpener(it, key, draw); close(); b(); } }, icon("build", 14), T("Bauen")) : null,
+          exists && !touch ? h("button", { class: "btn sm", onclick: () => downloadSlot(it, key) }, icon("download", 14), T("Herunterladen")) : null,
           draw && exists && it.type === "show" ? h("button", { class: "btn sm", onclick: () => { close(); openApplyAll(it, key, draw); } }, T("Auf alle …")) : null,
           draw && exists ? h("button", { class: "btn sm danger", onclick: async () => {
             if (!confirm(T("{0} wirklich löschen?", slotLabel(key, it.type)))) return;
@@ -1239,28 +1248,55 @@ function collectionScopes(cid, members, slot = "poster") {
   return [{ key: slot, label: T("Collection"), path: `/collection-search?id=${encodeURIComponent(cid)}` },
     ...members.slice(0, 8).map(m => ({ key: "film:" + m.id, label: m.title, path: `/items/${m.id}/poster/search` }))];
 }
-/** The hover menu of a collection poster, like on every other tile: upload / replace, preview, search online, build, delete. */
-function collectionActions(g, box, change) {
+/** Enlarged view of a collection poster, like the one of a film: details and the same actions. */
+function openCollectionPreview(g, change) {
+  const p = g.poster, cid = g.id, touch = isTouch();
+  const fmtSize = b => b >= 1048576 ? (b / 1048576).toFixed(2) + T(" MB") : Math.round(b / 1024) + T(" KB");
+  const res = h("dd", {}, "…");
+  const rows = [[T("Titel"), g.title], [T("Slot"), T("Collection-Poster")], [T("Kometa-Ordner"), p.dir || "—"],
+    [T("Datei"), p.file || "—"], [T("Größe"), fmtSize(p.size || 0)], [T("Geändert"), new Date(p.v * 1000).toLocaleString(LOCALE)], [T("Format"), ((p.file || "").split(".").pop() || "").toUpperCase()]];
+  const wrap = h("div", { class: "modalwrap lightbox", onclick: e => { if (e.target === wrap) close(); } },
+    h("div", { class: "lbox" },
+      h("header", { class: "lbhead" }, h("h2", { class: "grow" }, T("Vorschau")), h("button", { class: "btn ghost sm", "aria-label": T("Schließen"), onclick: () => close() }, "✕")),
+      h("div", { class: "lbbody" },
+        h("div", { class: "limg" }, h("img", { alt: "", src: `/api/collection-poster?id=${encodeURIComponent(cid)}&v=${p.v}`, onload: e => { res.textContent = T("{0} × {1} px{2}", e.target.naturalWidth, e.target.naturalHeight, ""); } }),
+          touch ? h("div", { class: "hint", style: "text-align:center" }, T("Bild lange drücken → „Zu Fotos hinzufügen“ (Originalqualität)")) : null),
+        h("div", { class: "lside" },
+          h("dl", {}, rows.map(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]), [h("dt", {}, T("Auflösung")), res]),
+          h("div", { class: "row wrap", style: "margin-top:20px" }, ...collectionButtons(g, change, close))))));
+  function close() { wrap.remove(); document.removeEventListener("keydown", onKey); }
+  const onKey = e => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  document.body.append(wrap);
+}
+/** The actions of a collection poster as button descriptors, shared by the hover menu and the preview (same order as on every tile). */
+function collectionActionList(g, change) {
   const p = g.poster, exists = !!(p && p.exists), cid = g.id;
   const members = g.members.map(m => ({ id: m.id, title: m.title }));
-  const ob = (label, fn, cls = "") => h("button", { class: "ov-btn " + cls, onclick: e => { e.stopPropagation(); box.classList.remove("show"); fn(); } }, label);
+  const pseudo = { type: "collection", id: cid, title: g.title, first: members[0] };
   const pick = () => chooseCollectionPoster(cid, g.title, np => change(np));
-  const search = () => {
-    const first = g.members[0];
-    searchOnline(first, "poster", null, { scopes: collectionScopes(cid, members), heading: `${g.title} – ${T("Collection-Poster")}`,
-      apply: async img => { const np = await collectionPosterFromUrl(cid, g.title, img.url); if (np) change(np); } });
-  };
-  const preview = () => { const m = modal(g.title, h("img", { alt: "", src: `/api/collection-poster?id=${encodeURIComponent(cid)}&v=${p.v}`, style: "max-width:100%;max-height:75vh;display:block;margin:0 auto;border-radius:6px" })); return m; };
+  const search = () => searchOnline(g.members[0], "poster", np => change(np), { collection: pseudo, build: () => g.build(), scopes: collectionScopes(cid, members), heading: `${g.title} – ${T("Collection-Poster")}`,
+    apply: async img => { const np = await collectionPosterFromUrl(cid, g.title, img.url); if (np) change(np); } });
+  const download = () => isTouch() ? openCollectionPreview(g, change) : downloadUrl(`/api/collection-poster?id=${encodeURIComponent(cid)}&download=true`);
   const del = async () => {
     if (!confirm(T("{0} wirklich löschen?", T("Collection-Poster")))) return;
     try { const r = await api(`/collection-poster?id=${encodeURIComponent(cid)}`, { method: "DELETE" }); undoToast(T("Gelöscht"), r, null); change({ ...p, exists: false, v: 0 }); } catch (e) { toast(e.message, "bad"); }
   };
-  const el = h("div", { class: "hover" },
-    h("div", { class: "ovbtns" }, exists
-      ? [ob(T("Ersetzen"), pick), ob(T("Vorschau"), preview), ob(T("Online suchen"), search), ob(T("Bauen"), () => g.build()), ob(T("Löschen"), del, "danger")]
-      : [ob(T("Hochladen"), pick), ob(T("Online suchen"), search), ob(T("Bauen"), () => g.build())]),
-    h("div", { class: "ovhint" }, T("oder Bild hierher ziehen")));
-  el.preview = preview;
+  return exists
+    ? [[T("Ersetzen"), pick], [T("Vorschau"), () => openCollectionPreview(g, change)], [T("Online suchen"), search], [T("Bauen"), () => g.build()], [T("Herunterladen"), download], [T("Löschen"), del, "danger"]]
+    : [[T("Hochladen"), pick], [T("Online suchen"), search], [T("Bauen"), () => g.build()]];
+}
+/** Buttons for the preview: the first one is the primary action. */
+function collectionButtons(g, change, close) {
+  return collectionActionList(g, change).filter(([l]) => l !== T("Vorschau")).map(([label, fn, cls], n) =>
+    h("button", { class: "btn sm" + (n === 0 ? " primary" : "") + (cls ? " " + cls : ""), onclick: () => { close(); fn(); } }, label));
+}
+/** The hover menu of a collection poster, like on every other tile. */
+function collectionActions(g, box, change) {
+  const ob = ([label, fn, cls = ""]) => h("button", { class: "ov-btn " + cls, onclick: e => { e.stopPropagation(); box.classList.remove("show"); fn(); } }, label);
+  const list = collectionActionList(g, change);
+  const el = h("div", { class: "hover" }, h("div", { class: "ovbtns" }, list.map(ob)), h("div", { class: "ovhint" }, T("oder Bild hierher ziehen")));
+  el.preview = () => openCollectionPreview(g, change);
   return el;
 }
 const COLPOSTER_NO_DIR = () => T("Für diese Welt ist kein Collection-Ordner bekannt (Einstellungen → Welten)");
@@ -1281,6 +1317,7 @@ function collectionTile(g) {
     fill(front, p && p.exists ? h("img", { loading: "lazy", alt: "", class: "loaded", draggable: false, src: `/api/collection-poster?id=${encodeURIComponent(g.id)}&v=${p.v}` })
       : h("div", { class: "ph" }, h("div", {}, h("b", {}, "＋"), p ? T("Collection-Poster fehlt") : T("kein Collection-Ordner"))),
       p ? collectionActions(g, front, set) : null);
+    if (S.rain.has("colposter|" + g.id)) { S.rain.delete("colposter|" + g.id); front.append(rainEl()); }
   }
   function metaPills() { return g.poster ? h("span", { class: "pill " + (g.poster.exists ? "ok" : "warn"), title: T("Das Poster der Collection selbst (Kometa-Asset im Collection-Ordner)") },
     g.poster.exists ? T("Collection-Poster ✓") : T("Collection-Poster fehlt")) : null; }
@@ -1316,6 +1353,7 @@ function collectionPosterCard(data, reload) {
     ? h("img", { alt: "", class: "loaded", draggable: false, src: `/api/collection-poster?id=${encodeURIComponent(cid)}&v=${p.v}` })
     : h("div", { class: "ph" }, h("div", {}, h("b", {}, "＋"), T("fehlt"))));
   const g = { ...data, build: () => openCollection(cid, { build: true }) };
+  if (S.rain.has("colposter|" + cid)) { S.rain.delete("colposter|" + cid); box.append(rainEl()); }
   const act = collectionActions(g, box, () => reload());
   box.append(act);
   box.onclick = () => { if (isTouch()) toggleActions(box); else if (p.exists) act.preview(); };
@@ -1387,7 +1425,7 @@ async function openCollection(cid, opts = {}) {
           h("button", { class: "btn sm", title: T("Alle Filme dieser Collection in einem Look bauen"), onclick: () => startBuilder() }, icon("build", 14), T("Bauen")),
           h("button", { class: "btn sm", title: T("Diese Collection nicht mehr anzeigen (z. B. eine Sammel-Collection, die keine Filmreihe ist). Wieder einblenden: Einstellungen → Bibliotheken"),
             onclick: async () => { try { await api("/collections/hidden", { json: { id: cid, hidden: true, title: data.title, count: total } }); S.st.config.hidden_collections = [...(S.st.config.hidden_collections || []), { id: cid, title: data.title, count: total }]; toast(T("Collection ausgeblendet"), "ok"); close(); } catch (e) { toast(e.message, "bad"); } } }, T("Ausblenden"))),
-        h("div", { class: "grid colgrid" }, [collectionPosterCard(data, reload), ...data.members.map(m => card(m, onChange))])));
+        h("div", { class: "grid colgrid" }, [collectionPosterCard(data, reload), ...data.members.map(m => card(m, onChange, { collectionBuild: () => startBuilder(m.id) }))])));
   }
   draw();
   if (opts.build) startBuilder(opts.start);
@@ -1484,10 +1522,10 @@ async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img):
   const body = h("div", {}, h("div", { class: "empty" }, h("span", { class: "spin" }), T(" Suche bei TMDb, TVDB und fanart.tv …")));
   const m = modal(opts.heading || `${opts.title ? opts.title + " – " : ""}${it.title} – ${slotLabel(slot, it.type)}`, body);
   // no luck with the search: build the poster instead (not while choosing a background inside the builder)
-  const buildOpen = opts.pick ? null : it.type === "movie" ? () => openMovieBuilder(it, draw) : S.seriesBuild && S.seriesBuildItem === it.id ? () => S.seriesBuild(slot) : null;
+  const buildOpen = opts.pick ? null : opts.build ? opts.build : it.type === "movie" ? () => openMovieBuilder(it, draw) : S.seriesBuild && S.seriesBuildItem === it.id ? () => S.seriesBuild(slot) : null;
   const buildBtn = (cls, label) => buildOpen ? h("button", { class: cls, type: "button", title: T("Poster selbst bauen: textloses Poster, Logo oder Titel und Staffeltext"), onclick: () => { m.close(); buildOpen(); } },
     icon("build", 14), label) : null;
-  const buildRow = buildOpen ? h("div", { class: "row buildrow" }, h("span", { class: "grow" }), buildBtn("btn sm", T("Selbst bauen"))) : null;
+  const buildRow = buildOpen ? h("div", { class: "row buildrow" }, h("span", { class: "grow" }), buildBtn("btn sm", T("Bauen"))) : null;
   const byCode = Object.fromEntries(S.langs.map(l => [l.code, l]));
   const langTitle = code => { const l = byCode[code]; const name = !l ? code : code === "xx" ? T("Textless (No Text)") : l.native && l.native !== l.name ? `${l.name} (${l.native})` : l.name; return `${code} • ${name}`; };
   try {
@@ -1559,13 +1597,13 @@ async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img):
           h("button", { class: "tab" + (allOn ? " on" : ""), type: "button", onclick: () => toggleScope(allOn ? [slot, ...(scopes.some(x => x.key === "poster") && slot !== "poster" ? ["poster"] : [])] : scopes.map(x => x.key)) }, T("Alle")));
       } else if (scopes) fill(scopeBar);
       scopeBar.hidden = !(scopes && kind === "poster");
-      fill(tabs, [{ name: "*", label: T("Alle"), state: "ok", count: r.images.length }, ...r.providers, ...(kind === "poster" && !opts.apply ? [{ name: "ThePosterDB", state: "ok", tpdb: true }, { name: "MediUX", state: "ok", tpdb: true }] : [])].map(pv => h("button", {
+      fill(tabs, [{ name: "*", label: T("Alle"), state: "ok", count: r.images.length }, ...r.providers, ...(kind === "poster" ? [{ name: "ThePosterDB", state: "ok", tpdb: true }, { name: "MediUX", state: "ok", tpdb: true }] : [])].map(pv => h("button", {
         class: "tab" + (tab === pv.name ? " on" : "") + (pv.state !== "ok" ? " off" : ""), disabled: pv.state === "nokey",
         title: pv.state === "nokey" ? T("Kein API-Key hinterlegt (Einstellungen → Quellen)") : pv.state === "error" ? pv.error : "",
         onclick: () => { tab = pv.name; render(); } },
         pv.label || pv.name, pv.tpdb ? null : h("small", {}, pv.state === "nokey" ? T("kein Key") : pv.state === "error" ? T("Fehler") : pv.count))));
-      if (tab === "ThePosterDB") { fill(content, posterDbPanel(it, slot, draw, () => m.close(), opts.pick)); return; }
-      if (tab === "MediUX") { fill(content, mediuxPanel(it, slot, draw, () => m.close(), opts.pick)); return; }
+      if (tab === "ThePosterDB") { fill(content, posterDbPanel(opts.collection || it, slot, draw, () => m.close(), opts.pick)); return; }
+      if (tab === "MediUX") { fill(content, mediuxPanel(opts.collection || it, slot, draw, () => m.close(), opts.pick)); return; }
       const prov = r.providers.find(p => p.name === tab);
       const list = tab === "*" ? r.images : r.images.filter(i => i.source === tab);
       const groups = r.languages.map(l => ({ code: l.code, imgs: list.filter(i => i.lang === l.code) }));
@@ -1585,17 +1623,17 @@ async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img):
         tab === "*" ? r.providers.filter(p => p.state === "error").map(p => h("div", { class: "status bad" }, `[ !! ] ${p.name}: ${p.error}`)) : null,
         shown,
         list.length || kindLoading.has(kind) ? null : h("div", { class: "empty" }, kind === "poster" ? T("Keine Poster gefunden.") : T("Keine Bilder gefunden."),
-          buildOpen ? h("div", { style: "margin-top:12px" }, T("Nichts Passendes?"), " ", buildBtn("btn sm primary", T("Selbst bauen"))) : null));
+          buildOpen ? h("div", { style: "margin-top:12px" }, T("Nichts Passendes?"), " ", buildBtn("btn sm primary", T("Bauen"))) : null));
     }
     fill(body, buildRow, kindBar, scopes ? scopeBar : null, tabs, content); render();
-  } catch (e) { fill(body, buildRow, h("div", { class: "status bad" }, e.message), [h("h4", { style: "margin:18px 0 0;color:var(--accent)" }, T("ThePosterDB")), posterDbPanel(it, slot, draw, () => m.close(), opts.pick)]); }
+  } catch (e) { fill(body, buildRow, h("div", { class: "status bad" }, e.message), [h("h4", { style: "margin:18px 0 0;color:var(--accent)" }, T("ThePosterDB")), posterDbPanel(opts.collection || it, slot, draw, () => m.close(), opts.pick)]); }
 }
 
 /* -------------------------------------------------------- ThePosterDB --- */
 /** The drop zone of the sites without an interface (ThePosterDB, MediUX): a downloaded picture goes to the tile (or becomes the background in the poster builder),
  *  several files or a ZIP open the review dialog. */
 function posterDropZone(site, it, slot, draw, done, pick) {
-  const movie = it.type === "movie";
+  const coll = it.type === "collection", movie = it.type === "movie" || coll;
   const handle = files => {
     if (!files || !files.length) return;
     if (pick) {
@@ -1606,12 +1644,17 @@ function posterDropZone(site, it, slot, draw, done, pick) {
     }
     const imgs = files.filter(f => /\.(jpe?g|png|webp|gif|bmp|tiff?|avif)$/i.test(f.path));
     done();
+    if (coll) {                                                                              // the poster of a collection
+      if (files.length === 1 && imgs.length === 1) uploadCollectionPoster(it.id, it.title, imgs[0].file).then(np => { if (np) draw(np); }).catch(e => toast(e.message, "bad"));
+      else importFiles(files, null, () => draw(null), null, null, { collection: it.id });
+      return;
+    }
     if (slot && files.length === 1 && imgs.length === 1) uploadSlot(it, slot, files, draw);   // one poster for this tile
     else importFiles(files, it.id, draw, it, true);                                           // several files: review dialog, title fixed
   };
   const zone = h("div", { class: "tpzone" }, h("b", {}, "＋"),
     h("div", {}, T("Heruntergeladenes Poster hier ablegen")),
-    h("small", {}, pick ? T("Das Bild wird als Hintergrund dieses Posters übernommen. Poster von {0} enthalten meist Text – als Hintergrund taugen nur textlose Varianten.", site) : T("Ein einzelnes Bild ersetzt das Poster dieses Films. Ein ZIP oder mehrere Bilder öffnen den Prüfdialog.")),
+    h("small", {}, pick ? T("Das Bild wird als Hintergrund dieses Posters übernommen. Poster von {0} enthalten meist Text – als Hintergrund taugen nur textlose Varianten.", site) : coll ? T("Ein einzelnes Bild ersetzt das Poster dieser Collection. Ein ZIP oder mehrere Bilder öffnen den Prüfdialog.") : T("Ein einzelnes Bild ersetzt das Poster dieses Films. Ein ZIP oder mehrere Bilder öffnen den Prüfdialog.")),
     h("div", { class: "row wrap", style: "justify-content:center;margin-top:10px" },
       h("button", { class: "btn sm primary", onclick: () => pickFiles(handle, !pick) }, T("Hochladen"))));
   if (movie || pick) makeDropTarget(zone, handle);
@@ -1620,11 +1663,19 @@ function posterDropZone(site, it, slot, draw, done, pick) {
 
 /** MediUX has no search address and no interface, but its title pages use the TMDb number: a button to the page of this title, then the same drop zone. */
 function mediuxPanel(it, slot, draw, done, pick) {
-  const movie = it.type === "movie";
-  const link = h("a", { class: "btn primary", target: "_blank", rel: "noopener noreferrer", referrerpolicy: "no-referrer", hidden: true }, T("Auf MediUX öffnen ↗"));
+  const coll = it.type === "collection", movie = it.type === "movie" || coll;
+  const link = h("a", { class: "btn primary", target: "_blank", rel: "noopener noreferrer", referrerpolicy: "no-referrer", hidden: true }, coll ? T("Collection auf MediUX öffnen ↗") : T("Auf MediUX öffnen ↗"));
+  const filmLink = coll ? h("a", { class: "btn", target: "_blank", rel: "noopener noreferrer", referrerpolicy: "no-referrer", hidden: true, title: T("Falls die Collection auf MediUX keine eigene Seite hat: die Seite des ersten Films") }, T("Ersten Film auf MediUX öffnen ↗")) : null;
   const note = h("div", { class: "hint", style: "margin:8px 0 0" }, h("span", { class: "spin" }), T(" Suche die TMDb-Nummer …"));
   (async () => {
     await null;                                                    // let the panel get into the page first
+    if (coll) {
+      let r = {}; try { r = await api(`/collection-tmdb-id?id=${encodeURIComponent(it.id)}`); } catch { /* no key or no answer */ }
+      if (r.id) { link.href = `https://mediux.pro/collections/${r.id}`; link.hidden = false; }
+      if (r.film) { filmLink.href = `https://mediux.pro/movies/${r.film}`; filmLink.hidden = false; }
+      if (r.id || r.film) note.remove(); else fill(note, T("Für diese Collection ist keine TMDb-Nummer bekannt. Suche sie direkt auf mediux.pro."));
+      return;
+    }
     let id = it.tmdb_id;
     if (!id) { try { id = (await api(`/items/${it.id}/tmdb-id`)).id; } catch { /* no key or no answer */ } }
     if (id) { link.href = `https://mediux.pro/${movie ? "movies" : "shows"}/${id}`; link.hidden = false; note.remove(); }
@@ -1637,7 +1688,7 @@ function mediuxPanel(it, slot, draw, done, pick) {
       h("li", {}, pick ? T("Das heruntergeladene Bild danach hier ablegen oder wählen: es wird als Hintergrund dieses Posters übernommen und erst mit dem fertigen Poster gespeichert.") : movie ? T("Die heruntergeladene Datei danach hier hochladen oder ablegen: p5assets benennt sie Kometa-konform und legt sie ab.")
         : slot ? T("Das Bild danach über „Ersetzen“ bzw. „Hochladen“ dieser Kachel wählen oder auf die Kachel ziehen: p5assets benennt es Kometa-konform und legt es ab.")
         : T("Das Set danach über „Set hochladen“ wählen oder einfach in die Serien-Ansicht ziehen: p5assets benennt es Kometa-konform und legt es ab."))),
-    h("div", { class: "row wrap" }, link), note,
+    h("div", { class: "row wrap" }, link, filmLink), note,
     h("p", { class: "hint" }, T("Staffeln und Backdrops haben auf MediUX keine eigenen Seiten: Du findest sie auf der Seite der Serie bzw. des Films.")),
     h("p", { class: "hint" }, T("MediUX hat keine Schnittstelle – deshalb lädt p5assets dort nichts selbst.")),
     movie || pick ? zone : null);
@@ -1650,16 +1701,18 @@ function posterDbPanel(it, slot, draw, done, pick) {      // pick(img): the post
   const base = (it.arr_folders && it.arr_folders[0]) || it.folder || `${it.title}${it.year ? ` (${it.year})` : ""}`;
   const bare = s => s.replace(/\s*[\{\[][^}\]]*[\}\]]/g, "").replace(/[:"&<>|\\\/*?;]+/g, " ").replace(/\s+/g, " ").trim();   // without {tvdb-…} / [...] and characters a firewall may dislike
   const enc = s => encodeURIComponent(s).replace(/[()!'*]/g, c => "%" + c.charCodeAt(0).toString(16).toUpperCase());
-  const section = it.type === "movie" ? "movies" : "shows";
+  const coll = it.type === "collection";
+  const secSel = coll ? h("select", { "aria-label": T("Bereich"), onchange: () => upd() }, h("option", { value: "collections" }, T("Collections")), h("option", { value: "movies" }, T("Filme"))) : null;
+  const section = () => coll ? secSel.value : it.type === "movie" ? "movies" : "shows";
   const term = h("input", { type: "text", value: lsGet("p5tpdbids") === "1" ? base : bare(base), "aria-label": T("Suchbegriff") });
   // no Referer: ThePosterDB's firewall blocked clicks coming from a local address (the same link typed by hand worked)
   const link = h("a", { class: "btn primary", target: "_blank", rel: "noopener noreferrer", referrerpolicy: "no-referrer" }, T("Auf ThePosterDB suchen ↗"));
   const url = h("input", { type: "text", readOnly: true, class: "tpurl", "aria-label": T("Fertige Such-Adresse"), onfocus: e => e.target.select() });
   // Series: once the search is open in its tab the window has done its job (the download goes in via "Set hochladen" / the tile / dragging).
   // Movies: the window stays and has its own upload button, a handy workflow for a single poster.
-  const movie = it.type === "movie";
+  const movie = it.type === "movie" || coll;
   if (!movie && !pick) link.addEventListener("click", () => setTimeout(done, 150));
-  const upd = () => { link.href = url.value = `https://theposterdb.com/search?term=${enc(term.value.trim())}&section=${section}`; };
+  const upd = () => { link.href = url.value = `https://theposterdb.com/search?term=${enc(term.value.trim())}&section=${section()}`; };
   const copy = h("button", { class: "btn sm", onclick: async () => {
     try { await navigator.clipboard.writeText(url.value); } catch { url.select(); document.execCommand("copy"); }
     toast(T("Link kopiert"), "ok");
@@ -1673,11 +1726,12 @@ function posterDbPanel(it, slot, draw, done, pick) {      // pick(img): the post
       h("li", {}, pick ? T("Das heruntergeladene Bild danach hier ablegen oder wählen: es wird als Hintergrund dieses Posters übernommen und erst mit dem fertigen Poster gespeichert.") : movie ? T("Die heruntergeladene Datei danach hier hochladen oder ablegen: p5assets benennt sie Kometa-konform und legt sie ab.")
         : slot ? T("Das Bild danach über „Ersetzen“ bzw. „Hochladen“ dieser Kachel wählen oder auf die Kachel ziehen: p5assets benennt es Kometa-konform und legt es ab.")
         : T("Das Set danach über „Set hochladen“ wählen oder einfach in die Serien-Ansicht ziehen: p5assets benennt es Kometa-konform und legt es ab."))),
-    h("label", { class: "f" }, T("Suchbegriff (englischer Ordnername aus Sonarr/Radarr)")),
-    h("div", { class: "row wrap" }, h("div", { class: "grow", style: "min-width:220px" }, term), link),
+    h("label", { class: "f" }, coll ? T("Suchbegriff (Name der Collection)") : T("Suchbegriff (englischer Ordnername aus Sonarr/Radarr)")),
+    h("div", { class: "row wrap" }, h("div", { class: "grow", style: "min-width:220px" }, term), secSel, link),
+    coll ? h("div", { class: "hint", style: "margin:2px 0 0" }, T("Falls es unter „Collections“ nichts gibt: den Bereich „Filme“ wählen.")) : null,
     h("div", { class: "row", style: "margin-top:8px" }, h("div", { class: "grow" }, url), copy),
     h("div", { class: "hint", style: "margin:2px 0 0" }, T("Falls der Button blockiert wird: Link kopieren und in einen neuen Tab einfügen.")),
-    h("label", { class: "opt", style: "margin-top:8px" }, ids, h("div", {}, T("Kennung wie {tvdb-123} mitsuchen"), h("small", {}, T("Ohne Kennung (Standard) wird nur „Titel (Jahr)“ gesucht.")))),
+    coll ? null : h("label", { class: "opt", style: "margin-top:8px" }, ids, h("div", {}, T("Kennung wie {tvdb-123} mitsuchen"), h("small", {}, T("Ohne Kennung (Standard) wird nur „Titel (Jahr)“ gesucht.")))),
     h("p", { class: "hint" }, T("ThePosterDB bietet Downloads nur für angemeldete Nutzer an – deshalb lädt p5assets dort nichts selbst und braucht keine Zugangsdaten.")),
     movie || pick ? zone : null);
 }

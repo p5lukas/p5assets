@@ -111,6 +111,19 @@ async def tmdb_collection_posters(key: str, wanted: list[str], movie_id: str) ->
             for p in data.get("posters", []) if p.get("file_path")]
 
 
+async def tmdb_collection_id(apis: dict, movies: list[dict]) -> str | None:
+    """The TMDb number of the collection of a Plex collection (found through its films: the first one that has one)."""
+    if not apis.get("tmdb"):
+        return None
+    for m in movies:
+        tid = await tmdb_find_id(apis["tmdb"], m["ids"], "movie", m["title"], m["year"])
+        if tid:
+            cid = ((await _tmdb_images(apis["tmdb"], f"/movie/{tid}")).get("belongs_to_collection") or {}).get("id")
+            if cid:
+                return str(cid)
+    return None
+
+
 async def search_collection(apis: dict, movies: list[dict], order: list[str] | None = None) -> dict:
     """Posters of a Plex collection from TMDb (same shape as ``search``); movies = [{ids, title, year}] of its films, the first one TMDb knows is used."""
     order = order or langs.DEFAULT_ORDER
