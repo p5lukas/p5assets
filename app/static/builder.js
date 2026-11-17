@@ -7,7 +7,7 @@ const BW = 1000, BH = 1500;
 const BUILD_FONTS = [["montserrat", "Montserrat", 700], ["raleway", "Raleway", 700], ["oswald", "Oswald", 700], ["bebas-neue", "Bebas Neue", 400],
   ["anton", "Anton", 400], ["cinzel", "Cinzel", 700], ["playfair-display", "Playfair Display", 700], ["lato", "Lato", 700]];
 const BUILD_FIT = { zoom: 1, x: 0.5, y: 0.5, fill: "auto", color: "#12161c" };
-const BUILD_DEFAULT = { edgeCut: 0, font: "montserrat", upper: true, mode: "logo", trim: true, logoColorMode: "off", logoColor: "#ffffff", tint: "off", tintA: "#101a2e", tintB: "#ffd9a0", tintAmount: 1, blend: "off", blendAmount: 0.7, blendHeight: 0.35, titleScale: 0.7, titleY: 0.82, seasonScale: 0.9, gap: 0.02, seasonPos: "below", seasonY: 0.92, tracking: 0.22, titleColor: "#ffffff" };     // same on all posters; only the colour of the season line is per poster
+const BUILD_DEFAULT = { seasonOn: true, edgeCut: 0, font: "montserrat", upper: true, mode: "logo", trim: true, logoColorMode: "off", logoColor: "#ffffff", tint: "off", tintA: "#101a2e", tintB: "#ffd9a0", tintAmount: 1, blend: "off", blendAmount: 0.7, blendHeight: 0.35, titleScale: 0.7, titleY: 0.82, seasonScale: 0.9, gap: 0.02, seasonPos: "below", seasonY: 0.92, tracking: 0.22, titleColor: "#ffffff" };     // same on all posters; only the colour of the season line is per poster
 
 /* ---------------------------------------------------------------- texts --- */
 const ONES = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen",
@@ -227,7 +227,7 @@ function drawBuilt(canvas, o) {
     const s = Math.min(W * 0.8 * st.titleScale / lw, H * 0.28 * st.titleScale / lh, W * 0.94 / lw), dw = lw * s, dh = lh * s;
     const src = st.logoColorMode === "color" ? tintedLogo(o.logo, st.logoColor, Math.max(1, Math.round(dw)), Math.max(1, Math.round(dh))) : o.logo;
     titleH = dh; drawTitle = top => ctx.drawImage(src, (W - dw) / 2, top, dw, dh);
-  } else if (o.title) {
+  } else if (o.title && st.mode !== "none") {
     let fs = W * 0.095 * st.titleScale, lines;
     const maxW = W * 0.84, measure = () => { ctx.font = `${def[2]} ${fs}px ${fam}`; lines = wrapLines(ctx, upper(o.title), maxW); return Math.max(...lines.map(l => ctx.measureText(l).width)); };
     while (measure() > maxW && fs > 8) fs *= 0.94;
@@ -239,10 +239,10 @@ function drawBuilt(canvas, o) {
   }
   // The title (logo or text) sits at the same height on every poster. The season line either hangs below it ("below") or is placed freely over the whole
   // poster ("free"). In "below" room for the line is always reserved so that the clamp near the edges is the same with and without a line.
-  const fsS = W * 0.05 * st.seasonScale, gapPx = st.gap * H, lineH = fsS * 1.15, free = st.seasonPos === "free";
+  const fsS = W * 0.05 * st.seasonScale, gapPx = titleH ? st.gap * H : 0, lineH = fsS * 1.15, free = st.seasonPos === "free";      // without a title the line sits where it would be
   const top = Math.min(Math.max(st.titleY * H - titleH / 2, 0), H - titleH);     // may reach both edges of the poster (but not leave it)
   drawTitle(top);
-  if (o.line) {
+  if (o.line && st.seasonOn !== false) {
     const lineTop = free ? Math.min(Math.max(st.seasonY * H - lineH / 2, H * 0.03), H * 0.97 - lineH) : Math.min(top + titleH + gapPx, H * 0.985 - lineH);
     ctx.font = `400 ${fsS}px "p5-source-sans-3", sans-serif`; ctx.fillStyle = o.color || "#ffffff"; ctx.textBaseline = "alphabetic";
     drawTracked(ctx, upper(o.line), W / 2, lineTop + fsS * 0.86, st.tracking * fsS);
@@ -296,12 +296,13 @@ function makeBuilder(opts) {
   const it = opts.item, multi = !!opts.multi, slots = opts.slots;
   // collection builder: every poster is another film (slot.item); each has its own logo and title, everything else is one look
   const col = !!opts.collection, projId = opts.builderKey || it.id;
+  const tileKeyOf = key => { const cp = (slots.find(s => s.key === key) || {}).colPoster; return cp ? "colposter|" + cp.cid : itemOf(key).id + "|" + apiSlot(key); };
   const itemOf = key => (slots.find(s => s.key === key) || {}).item || it, apiSlot = key => col ? "poster" : key;
   const G = { ...BUILD_DEFAULT };                                   // the look shared by all posters
   let titleText = it.title, logo = null /* { url, preview, source } */, logoRes = null, logoNote = "", presets = {}, sel = opts.start && slots.some(s => s.key === opts.start) ? opts.start : slots[0].key, saving = false, allTitle = true;
-  const newP = s => ({ title: s.item ? s.item.title : "", bg: null, line: s.season == null ? "" : seasonLine(s.season), color: null, auto: null, palette: [], autoSig: "", fit: { ...BUILD_FIT }, ov: {} });
+  const newP = s => ({ title: s.title ?? (s.item ? s.item.title : ""), bg: null, line: s.season == null ? "" : seasonLine(s.season), color: null, auto: null, palette: [], autoSig: "", fit: { ...BUILD_FIT }, ov: {} });
   const P = Object.fromEntries(slots.map(s => [s.key, newP(s)]));
-  const TITLE_OV = ["titleScale", "titleY", "mode", "logo", "trim", "blend", "blendAmount", "blendHeight", "tint", "tintA", "tintB", "tintAmount", "logoColorMode", "logoColor", "edgeCut"];        // what a single poster may do differently (when "for all posters" is off)
+  const TITLE_OV = ["titleScale", "titleY", "mode", "logo", "trim", "blend", "blendAmount", "blendHeight", "tint", "tintA", "tintB", "tintAmount", "logoColorMode", "logoColor", "edgeCut", "seasonOn"];        // what a single poster may do differently (when "for all posters" is off)
   const val = (key, a) => a in P[key].ov ? P[key].ov[a] : a === "logo" ? logo : G[a];
   const style = key => ({ ...G, ...Object.fromEntries(TITLE_OV.filter(a => a !== "logo").map(a => [a, val(key, a)])) });
   const colorOf = key => P[key].color || P[key].auto || "#f1f1ee";
@@ -341,7 +342,8 @@ function makeBuilder(opts) {
     if (!f) { toast(T("Keine Bilder gefunden"), "bad"); return; }
     const u = URL.createObjectURL(f); setBg(key, { url: u, preview: u, name: f.name, file: f });
   };
-  const bgOnline = key => searchOnline(itemOf(key), apiSlot(key), null, { pick: img => setBg(key, { url: img.url, preview: img.preview || img.url, name: img.label ? `${img.source} · ${img.label}` : img.source, ...(img.file ? { file: img.file } : {}) }), title: T("Hintergrund wählen"), scopes: col ? null : slots.map(x => ({ key: x.key, label: x.label })) });
+  const slotOf = key => slots.find(s => s.key === key) || {};
+  const bgOnline = key => searchOnline(itemOf(key), apiSlot(key), null, { ...(slotOf(key).colPoster ? { searchPath: `/collection-search?id=${encodeURIComponent(slotOf(key).colPoster.cid)}`, heading: `${T("Hintergrund wählen")} – ${P[key].title}` } : {}), pick: img => setBg(key, { url: img.url, preview: img.preview || img.url, name: img.label ? `${img.source} · ${img.label}` : img.source, ...(img.file ? { file: img.file } : {}) }), title: T("Hintergrund wählen"), scopes: col ? null : slots.map(x => ({ key: x.key, label: x.label })) });
   const copyBg = (from, to) => { if (from !== to && P[from].bg) setBg(to, { ...P[from].bg }, P[from].fit); };
   function bgForAll(from) {
     const src = P[from].bg; if (!src) return;
@@ -366,6 +368,7 @@ function makeBuilder(opts) {
   async function loadLogos() {
     if (col) {                                                      // one logo search per film, in parallel
       await Promise.all(slots.map(async s => {
+        if (s.colPoster) { if (!("mode" in P[s.key].ov)) P[s.key].ov.mode = "text"; return; }      // the poster of the collection itself: its name as the title
         try {
           const r = logoResBy[s.key] = await api(`/items/${s.item.id}/logos`);
           const first = r.images.find(i => i.lang !== "xx") || r.images[0];
@@ -379,9 +382,9 @@ function makeBuilder(opts) {
     try {
       logoRes = await api(`/items/${it.id}/logos`);
       const first = logoRes.images.find(i => i.lang !== "xx") || logoRes.images[0];     // preferred language first, a logo without language only as a fallback
-      if (!first) { logoNote = T("Kein Logo gefunden – der Titel wird als Text gesetzt"); if (!logo) G.mode = "text"; }
-      else if (!logo) { logo = { url: first.url, preview: first.preview, source: first.source }; G.mode = "logo"; }
-    } catch (e) { logoRes = { images: [], providers: [], languages: [] }; logoNote = e.message; if (!logo) G.mode = "text"; }
+      if (!first) { logoNote = T("Kein Logo gefunden – der Titel wird als Text gesetzt"); if (!logo && G.mode !== "none") G.mode = "text"; }
+      else if (!logo) { logo = { url: first.url, preview: first.preview, source: first.source }; if (G.mode !== "none") G.mode = "logo"; }
+    } catch (e) { logoRes = { images: [], providers: [], languages: [] }; logoNote = e.message; if (!logo && G.mode !== "none") G.mode = "text"; }
     syncControls(); paintAll();
   }
   const useLogo = l => setLogoMode("logo", l);
@@ -464,6 +467,11 @@ function makeBuilder(opts) {
   const titleColorInp = h("input", { type: "color", oninput: e => { G.titleColor = e.target.value; paintAll(); } });
   const modeLogo = h("button", { class: "seg", type: "button", onclick: () => { if (val(sel, "logo")) setLogoMode("logo"); else pickLogo(); } }, T("Logo"));
   const modeText = h("button", { class: "seg", type: "button", onclick: () => setLogoMode("text") }, T("Text"));
+  const modeNone = h("button", { class: "seg", type: "button", title: T("Weder Logo noch Titel zeichnen"), onclick: () => setLogoMode("none") }, T("Aus"));
+  const dropHint = h("div", { class: "hint" }, T("PNG oder WebP mit Transparenz, auch per Drag & Drop hier ablegen"));
+  const noteEl = h("div", { class: "hint bnote" });
+  const seasonChk = h("input", { type: "checkbox", checked: true, onchange: e => { setTitle("seasonOn", e.target.checked); syncControls(); repaintTitle(); syncCustom(); } });
+  const seasonBody = h("div", { class: "bseasonbody" });
   const logoBtn = h("button", { class: "btn sm", type: "button", onclick: pickLogo }, T("Logo wählen …"));
   const logoUp = h("button", { class: "btn sm", type: "button", onclick: pickLogoFile }, icon("upload", 14), T("Logo hochladen"));
   const blendBtn = (v, label) => h("button", { class: "seg", type: "button", onclick: () => { setTitle("blend", v); syncControls(); repaintTitle(); syncCustom(); } }, label);
@@ -614,9 +622,13 @@ function makeBuilder(opts) {
     root.querySelectorAll(".bcard").forEach(c => c.classList.toggle("editing", c.dataset.key === key));
     syncCustom();
     fontSel.value = G.font; upperChk.checked = !!G.upper; textInp.value = titleOf(key);
-    modeLogo.classList.toggle("on", mode === "logo"); modeText.classList.toggle("on", mode === "text");
+    modeLogo.classList.toggle("on", mode === "logo"); modeText.classList.toggle("on", mode === "text"); modeNone.classList.toggle("on", mode === "none");
     logoBtn.textContent = val(key, "logo") ? T("Anderes Logo …") : T("Logo wählen …");
-    textInp.closest(".brow").hidden = mode === "logo"; titleColorInp.closest(".brow").hidden = mode === "logo";
+    const none = mode === "none";                                  // title off: only the controls for its height stay
+    logoBtn.hidden = logoUp.hidden = dropHint.hidden = noteEl.hidden = fontRow.hidden = none;
+    textInp.closest(".brow").hidden = mode !== "text"; titleColorInp.closest(".brow").hidden = mode !== "text";
+    ctl.titleScale.row.hidden = none;
+    const son = val(key, "seasonOn") !== false; seasonChk.checked = son; seasonBody.hidden = !son;
     titleColorInp.value = G.titleColor || "#ffffff"; colorInp.value = colorOf(key);
     const lm = val(key, "logoColorMode"), lc = val(key, "logoColor");
     logoColorBtns.forEach(b => b.classList.toggle("on", b.dataset.v === lm));
@@ -664,6 +676,8 @@ function makeBuilder(opts) {
   }
   const SLOT_DRAG = "application/x-p5slot";
   const currentUrl = key => {
+    const cp = slotOf(key).colPoster;
+    if (cp) return cp.exists ? `/api/collection-poster?id=${encodeURIComponent(cp.cid)}&v=${cp.v}` : null;
     const item = itemOf(key), k = apiSlot(key), sl = item.slots[k];
     return !sl ? null : sl.exists ? `/api/asset/${item.id}/${k}?v=${sl.mtime}` : sl.plex_thumb ? `/api/season-thumb/${item.id}/${k}` : null;
   };
@@ -671,7 +685,7 @@ function makeBuilder(opts) {
   function makeCard(s) {
     const cv = h("canvas", { width: 300, height: 450 }); canvases[s.key] = cv;
     const ov = (name, label, fn) => h("button", { class: "ov-btn bov", type: "button", title: label, "aria-label": label, onclick: e => { e.stopPropagation(); box.classList.remove("show"); selectSlot(s.key); fn(); } }, icon(name, 16), h("span", {}, label));
-    const box = h("div", { class: "poster bposter", "data-key": itemOf(s.key).id + "|" + apiSlot(s.key) }, cv,
+    const box = h("div", { class: "poster bposter", "data-key": tileKeyOf(s.key) }, cv,
       h("div", { class: "hover" }, h("div", { class: "ovbtns" },
         ov("search", T("Online suchen"), () => bgOnline(s.key)),
         ov("upload", T("Datei wählen"), () => pickFiles(files => bgFromFile(s.key, files), false)),
@@ -705,21 +719,32 @@ function makeBuilder(opts) {
   async function save() {
     const keys = slots.filter(s => P[s.key].bg).map(s => s.key);
     if (!keys.length || saving) return;
-    const overwritten = keys.filter(k => { const sl = itemOf(k).slots[apiSlot(k)]; return sl && sl.exists; });
+    const overwritten = keys.filter(k => { const cp = slotOf(k).colPoster; if (cp) return cp.exists; const sl = itemOf(k).slots[apiSlot(k)]; return sl && sl.exists; });
     if (overwritten.length && !confirm(TP(overwritten.length, "Ein vorhandenes Poster wird ersetzt (das alte liegt 30 Tage im Papierkorb). Fortfahren?", "{0} vorhandene Poster werden ersetzt (die alten liegen 30 Tage im Papierkorb). Fortfahren?"))) return;
     saving = true; syncControls();
     let last = null, trash = null, done = 0;
     try {
       for (const key of keys) {
-        const tileKey = itemOf(key).id + "|" + apiSlot(key);
+        const tileKey = tileKeyOf(key), cp = slotOf(key).colPoster;
         busyTile(tileKey, true);
         status.textContent = T("Speichere … {0} von {1}", done + 1, keys.length);
         try {
           const cv = await paint(key, true);
           const blob = await new Promise(res => cv.toBlob(res, "image/jpeg", 0.92));
           const fd = new FormData(); fd.append("file", new File([blob], "poster.jpg", { type: "image/jpeg" }));
-          const r = await api(`/items/${itemOf(key).id}/${apiSlot(key)}/upload`, { method: "POST", body: fd });
-          last = r.item; trash = r.trash; done++; S.rain.add(tileKey);
+          let r = null;
+          if (cp) {                                                   // the poster of the collection itself: into its folder in the collections folder
+            const url = create => `/collection-poster?id=${encodeURIComponent(cp.cid)}${create ? "&create=true" : ""}`;
+            try { r = await api(url(false), { method: "POST", body: fd }); }
+            catch (e) {
+              if (!(e.status === 409 && e.data && e.data.needs_folder)) throw e;
+              if (confirm(T("Der Ordner „{0}“ existiert noch nicht im Collection-Ordner. Jetzt anlegen?", e.data.needs_folder))) {
+                const fd2 = new FormData(); fd2.append("file", new File([blob], "poster.jpg", { type: "image/jpeg" })); r = await api(url(true), { method: "POST", body: fd2 });
+              } else { toast(T("Das Collection-Poster wurde nicht gespeichert: Der Ordner fehlt."), "bad"); continue; }
+            }
+            cp.exists = true; cp.v = Date.now();
+          } else r = await api(`/items/${itemOf(key).id}/${apiSlot(key)}/upload`, { method: "POST", body: fd });
+          last = r.item || last; trash = r.trash; done++; S.rain.add(tileKey);
           if (r.warning) toast(T("Plex: ") + r.warning, "bad");
         } finally { busyTile(tileKey, false); }
       }
@@ -731,18 +756,25 @@ function makeBuilder(opts) {
   }
 
   /* --- layout ----------------------------------------------------------- */
+  const fontRow = h("label", { class: "brow" }, h("span", { class: "blab" }, T("Schrift")), fontSel, h("label", { class: "bchk" }, upperChk, T("Großbuchstaben")));
   const titleSec = h("div", { class: "bsec" }, h("h4", {}, T("Titel")),
     col ? h("div", { class: "hint", style: "margin:0" }, T("Logo und Titeltext gelten für den gewählten Film, alles andere für alle Poster.")) : null,
-    h("div", { class: "row wrap" }, h("div", { class: "segs" }, modeLogo, modeText), logoBtn, logoUp),
-    h("div", { class: "hint" }, T("PNG oder WebP mit Transparenz, auch per Drag & Drop hier ablegen")),
+    h("div", { class: "row wrap" }, h("div", { class: "segs" }, modeLogo, modeText, modeNone), logoBtn, logoUp),
+    dropHint,
     h("label", { class: "bchk btrim" }, trimChk, T("Transparenten Rand abschneiden")),
     logoModeRow, logoColorRow,
-    h("div", { class: "hint bnote" }),
+    noteEl,
     h("label", { class: "brow" }, h("span", { class: "blab" }, T("Text")), textInp),
     h("label", { class: "brow" }, h("span", { class: "blab" }, T("Titelfarbe")), titleColorInp),
-    h("label", { class: "brow" }, h("span", { class: "blab" }, T("Schrift")), fontSel, h("label", { class: "bchk" }, upperChk, T("Großbuchstaben"))),
+    fontRow,
     slider(T("Titelgröße"), "titleScale", 0.4, 1.6, 0.01, pct, true),
     slider(T("Titelhöhe"), "titleY", 0, 1, 0.005, pct, true));
+  seasonBody.append(
+    h("label", { class: "brow" }, h("span", { class: "blab" }, T("Text")), lineInp),
+    h("div", { class: "brow" }, h("span", { class: "blab" }, T("Farbe")), swatches, pipette, colorInp, colorAuto),
+    h("div", { class: "brow" }, h("span", { class: "blab" }, T("Position der Zeile")), h("div", { class: "segs" }, posBelow, posFree)),
+    slider(T("Abstand zum Titel"), "gap", 0, 0.1, 0.002, pct), slider(T("Texthöhe"), "seasonY", 0.03, 0.97, 0.005, pct),
+    slider(T("Textgröße"), "seasonScale", 0.5, 2.4, 0.01, pct), slider(T("Laufweite"), "tracking", 0, 0.4, 0.005, pct));
   makeDropTarget(titleSec, logoFromFile);
   const compareBtn = multi && slots.length > 1 ? h("button", { class: "btn sm", type: "button", title: T("Alle Poster nebeneinander ansehen"), onclick: () => openCompare(slots, k => paint(k, true, false, 360), k => { selectSlot(k); zoom(k); }) }, icon("eye", 14), T("Vergleichen")) : null;
   const controls = h("div", { class: "bcontrols" },
@@ -757,11 +789,8 @@ function makeBuilder(opts) {
       slider(T("Stärke"), "blendAmount", 0.1, 1, 0.01, pct, true), slider(T("Höhe"), "blendHeight", 0.1, 0.8, 0.01, pct, true)),
     tintSec,
     h("div", { class: "bsec bseason" }, h("h4", {}, T("Staffeltext")),
-      h("label", { class: "brow" }, h("span", { class: "blab" }, T("Text")), lineInp),
-      h("div", { class: "brow" }, h("span", { class: "blab" }, T("Farbe")), swatches, pipette, colorInp, colorAuto),
-      h("div", { class: "brow" }, h("span", { class: "blab" }, T("Position der Zeile")), h("div", { class: "segs" }, posBelow, posFree)),
-      slider(T("Abstand zum Titel"), "gap", 0, 0.1, 0.002, pct), slider(T("Texthöhe"), "seasonY", 0.03, 0.97, 0.005, pct),
-      slider(T("Textgröße"), "seasonScale", 0.5, 2.4, 0.01, pct), slider(T("Laufweite"), "tracking", 0, 0.4, 0.005, pct)),
+      h("label", { class: "bchk" }, seasonChk, T("Staffeltext anzeigen")),
+      seasonBody),
     h("div", { class: "bsec" }, h("h4", {}, T("Vorlagen")),
       h("div", { class: "row wrap" }, presetSel, h("button", { class: "btn sm", type: "button", onclick: savePreset }, T("Als Vorlage speichern …")), h("button", { class: "btn sm ghost", type: "button", onclick: deletePreset }, T("Vorlage löschen …")),
         h("span", { class: "spacer" }), h("button", { class: "btn sm ghost", type: "button", title: T("Alle Einstellungen auf Standard, Hintergründe und Logo bleiben"), onclick: resetAll }, T("Alles zurücksetzen")))),
@@ -888,10 +917,13 @@ function openMovieBuilder(it, draw) {
 function openCollectionBuilder({ data, drawer, close, back, start }) {
   matrixSwap(() => {
     const slots = data.members.map(m => ({ key: m.id, season: null, label: m.year ? `${m.title} (${m.year})` : m.title, item: m }));
+    // the poster of the collection itself comes first (only when the world has a collections folder): the name of the collection as the title
+    if (data.poster) slots.unshift({ key: "__col", season: null, label: T("Collection-Poster"), item: data.members[0], title: data.title, colPoster: { cid: data.id, exists: data.poster.exists, v: data.poster.v } });
     const pseudo = { id: data.builder_key, title: data.title, type: "collection", slots: {} };
     const b = makeBuilder({ item: pseudo, builderKey: data.builder_key, collection: true, multi: true, start, slots, onSaved: () => back(), onCancel: () => back() });
     fill(drawer, h("header", {}, h("button", { class: "btn ghost", "aria-label": T("Schließen"), onclick: close }, "✕"),
-      h("div", { class: "grow" }, h("h2", {}, T("Poster bauen – {0}", data.title)), h("div", { class: "hint", style: "margin:2px 0" }, T("Alle Filme der Collection in einem Look: Hintergrund, Logo oder Titel")))),
+      h("div", { class: "grow" }, h("h2", {}, T("Poster bauen – {0}", data.title)), h("div", { class: "hint", style: "margin:2px 0" }, T("Alle Filme der Collection in einem Look: Hintergrund, Logo oder Titel"),
+        data.poster ? null : [" · ", T("Für das Poster der Collection selbst: Collection-Ordner unter Einstellungen → Welten angeben")]))),
       h("div", { class: "body" }, b));
     drawer.scrollTop = 0;
   });

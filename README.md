@@ -81,7 +81,7 @@ No suitable poster? Build one right in p5assets. It is saved like any other post
 - **Series:** one look for all posters, with a season line (“Season One”, “Specials”) in a colour taken from the picture. Settings apply to all posters, with exceptions per poster.
 - **Check:** compare all posters side by side, view each one large, switch between draft and existing poster.
 - **Remembered:** the look of each series is kept, so later you can swap only the logo on all posters or add a season in the same style. Looks can also be saved as presets.
-- **Where:** movies: “Build” in the hover menu. Series: “Build” in the detail view. Collections: “Build” builds all films of a collection in one look. Or “Build it myself” in the online search.
+- **Where:** movies: “Build” in the hover menu. Series: “Build” in the detail view. Collections: “Build” builds all films of a collection in one look, and the poster of the collection itself, saved as a Kometa asset (`<collections folder>/<name of the collection>/poster.jpg`). Or “Build it myself” in the online search.
 
 <img src="docs/images/poster-builder.png" alt="Poster builder for a series: all posters in one look" width="640">
 

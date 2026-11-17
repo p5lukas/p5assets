@@ -98,6 +98,44 @@ async def tmdb_posters(key: str, wanted: list[str], kind: str, tmdb_id: str, sea
     return out
 
 
+async def tmdb_collection_posters(key: str, wanted: list[str], movie_id: str) -> list[dict]:
+    """The posters TMDb holds for the collection a film belongs to (found through the film)."""
+    codes = ["null" if c == "xx" else c for c in dict.fromkeys([*wanted, "en", "xx"])]
+    info = await _tmdb_images(key, f"/movie/{movie_id}")
+    cid = (info.get("belongs_to_collection") or {}).get("id")
+    if not cid:
+        return []
+    data = await _tmdb_images(key, f"/collection/{cid}/images", include_image_language=",".join(codes))
+    return [{"source": "TMDb", "url": f"{TMDB_IMG}original{p['file_path']}", "preview": f"{TMDB_IMG}w342{p['file_path']}",
+             "lang": langs.norm_tmdb(p.get("iso_639_1")), "width": p.get("width"), "height": p.get("height"), "score": p.get("vote_average") or 0}
+            for p in data.get("posters", []) if p.get("file_path")]
+
+
+async def search_collection(apis: dict, movies: list[dict], order: list[str] | None = None) -> dict:
+    """Posters of a Plex collection from TMDb (same shape as ``search``); movies = [{ids, title, year}] of its films, the first one TMDb knows is used."""
+    order = order or langs.DEFAULT_ORDER
+    status = {"TMDb": {"name": "TMDb", "state": "nokey", "count": 0, "error": None}}
+    tasks: dict[str, object] = {}
+    if apis.get("tmdb"):
+        for m in movies:
+            try:
+                tid = await tmdb_find_id(apis["tmdb"], m["ids"], "movie", m["title"], m["year"])
+            except Exception as e:  # noqa: BLE001
+                status["TMDb"].update(state="error", error=short(e))
+                break
+            if tid:
+                tasks["TMDb"] = tmdb_collection_posters(apis["tmdb"], order, tid)
+                break
+        else:
+            status["TMDb"].update(state="ok")
+    results = await asyncio.gather(*tasks.values(), return_exceptions=True)
+    images = _collect(status, tasks, results, order)
+    catalogue = {l["code"]: l for l in langs.catalogue()}
+    return {"images": images, "providers": list(status.values()),
+            "languages": [{**catalogue.get(c, {"code": c, "name": c, "native": ""}), "rank": i} for i, c in enumerate(order)],
+            "errors": {n: s["error"] for n, s in status.items() if s["error"]}}
+
+
 async def tmdb_logos(key: str, wanted: list[str], kind: str, tmdb_id: str) -> list[dict]:
     codes = ["null" if c == "xx" else c for c in dict.fromkeys([*wanted, "en", "xx"])]
     data = await _tmdb_images(key, f"/{'movie' if kind == 'movie' else 'tv'}/{tmdb_id}/images", include_image_language=",".join(codes))

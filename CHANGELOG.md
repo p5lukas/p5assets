@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.7 – 2026-11-17
+
+**New**
+- Collection poster: the collection builder starts with a tile for the poster of the collection itself (its name as the title, the same look as the films; background from TMDb's collection posters or your own file). It is saved as `<collections folder>/<name of the collection>/poster.jpg` (the folder is named exactly like the collection in Plex, as Kometa creates it; a missing folder is only created after you confirm) and replaced posters go to the trash. Nothing is uploaded to Plex
+- Collections folder per world (Settings → Worlds): found by itself when the assets folder has a folder “Collections”, or given by hand. The tab and the collection view show “Collection poster ✓ / missing”
+- The folders of the collections are never offered as orphaned folders
+- Poster builder: logo or title can be switched off (“Off” next to “Logo” and “Text”), and the season text has a “Show season text” box; both for all posters or one by one, saved with the look
+
 ## 0.9.6 – 2026-11-17
 
 **New**

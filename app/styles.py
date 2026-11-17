@@ -25,6 +25,8 @@ def sanitize(style: object) -> dict:
     out: dict = {}
     if style.get("font") in FONTS:
         out["font"] = style["font"]
+    if isinstance(style.get("seasonOn"), bool):
+        out["seasonOn"] = style["seasonOn"]
     if isinstance(style.get("trim"), bool):
         out["trim"] = style["trim"]
     if isinstance(style.get("upper"), bool):
@@ -41,7 +43,7 @@ def sanitize(style: object) -> dict:
             out[key] = v.lower()
     if style.get("blend") in ("off", "dark", "light"):
         out["blend"] = style["blend"]
-    if style.get("mode") in ("logo", "text"):
+    if style.get("mode") in ("logo", "text", "none"):
         out["mode"] = style["mode"]
     for key, (lo, hi) in NUMBERS.items():
         v = style.get(key)

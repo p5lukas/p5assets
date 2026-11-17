@@ -78,7 +78,7 @@ Kein passendes Poster? Dann baust du eins direkt in p5assets. Es wird wie jedes 
 - **Serien:** ein Look für alle Poster, mit Staffelzeile („Season One“, „Specials“) in einer Farbe aus dem Bild. Einstellungen gelten für alle Poster, mit Ausnahmen pro Poster.
 - **Prüfen:** alle Poster nebeneinander vergleichen, jedes groß ansehen, zwischen Entwurf und vorhandenem Poster umschalten.
 - **Gemerkt:** der Look jeder Serie bleibt erhalten. Später tauschst du zum Beispiel nur das Logo für alle Poster oder baust eine neue Staffel passend nach. Looks lassen sich auch als Vorlagen speichern.
-- **Wo:** Filme: **Bauen** im Hover-Menü. Serien: **Bauen** in der Detailansicht. Collections: **Bauen** baut alle Filme einer Collection in einem Look. Oder **Selbst bauen** in der Online-Suche.
+- **Wo:** Filme: **Bauen** im Hover-Menü. Serien: **Bauen** in der Detailansicht. Collections: **Bauen** baut alle Filme einer Collection in einem Look und das Poster der Collection selbst, gespeichert als Kometa-Asset (`<Collection-Ordner>/<Name der Collection>/poster.jpg`). Oder **Selbst bauen** in der Online-Suche.
 
 <img src="docs/images/poster-builder.png" alt="Poster-Builder für eine Serie" width="640">
 

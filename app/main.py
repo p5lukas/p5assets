@@ -30,6 +30,7 @@ from . import arr as arrmod
 from . import (
     auth,
     builder_store,
+    collection_assets,
     config,
     history,
     i18n,
@@ -594,14 +595,76 @@ async def collection_detail(id: str):
         raise HTTPException(404, tr("Collection nicht gefunden – bitte neu scannen"))
     title = next(c["title"] for c in films[0]["collections"] if c["id"] == id)
     films.sort(key=lambda i: (i["year"] or 0, i["title"].casefold()))
+    world = next((w for w in config.get()["worlds"] if w["id"] == films[0]["world"]), None)
     return {"id": id, "title": title, "hidden": id in _hidden_collections(), "builder_key": builder_store.collection_key(id),
+            "poster": collection_assets.state(world, title) if world else None, "world": films[0]["world"],
             "members": [_public_item(i, True) for i in films]}
 
 
 @app.get("/api/collections")
 async def collections(world: str = "", q: str = ""):
     wid = _world(world)["id"]
-    return {"collections": collection_overview([i for i in scanner.STATE["items"] if i["world"] == wid and i["type"] == "movie"], q, _hidden_collections())}
+    world = _world(world)
+    groups = collection_overview([i for i in scanner.STATE["items"] if i["world"] == wid and i["type"] == "movie"], q, _hidden_collections())
+    for g in groups:
+        g["poster"] = collection_assets.state(world, g["title"])      # None = no collections folder for this world
+    return {"collections": groups}
+
+
+def _collection_films(cid: str) -> tuple[list[dict], dict, str]:
+    films = [i for i in scanner.STATE["items"] if any(c["id"] == cid for c in i.get("collections") or [])]
+    if not films:
+        raise HTTPException(404, tr("Collection nicht gefunden – bitte neu scannen"))
+    world = next((w for w in config.get()["worlds"] if w["id"] == films[0]["world"]), None)
+    if not world:
+        raise HTTPException(404, tr("Welt nicht gefunden"))
+    return films, world, next(c["title"] for c in films[0]["collections"] if c["id"] == cid)
+
+
+@app.get("/api/collections-dir")
+async def collections_dir(world: str = ""):
+    """Where the posters of the collections of a world go (None = no collections folder found)."""
+    w = _world(world)
+    root = await asyncio.to_thread(collection_assets.root_for, w)
+    return {"path": str(root) if root else None, "set": bool((w.get("collections_dir") or "").strip())}
+
+
+@app.get("/api/collection-poster")
+async def collection_poster(id: str):
+    _, world, title = _collection_films(id)
+    root = collection_assets.root_for(world)
+    folder = collection_assets.folder_of(root, title) if root else None
+    poster = collection_assets.poster_of(folder) if folder else None
+    if not poster:
+        raise HTTPException(404, tr("Datei nicht gefunden"))
+    return FileResponse(poster, headers={"Cache-Control": "no-cache"})
+
+
+@app.post("/api/collection-poster")
+async def collection_poster_upload(id: str, file: Annotated[UploadFile, File()], create: bool = False):
+    """Save the poster of a collection (the finished poster of the poster builder). The folder must exist unless create is set."""
+    _, world, title = _collection_films(id)
+    data = await file.read()
+    undo: dict = {}
+    try:
+        path, reason = await asyncio.to_thread(collection_assets.write_poster, world, title, data, create, undo)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    if path is None:
+        return JSONResponse({"detail": tr("Der Ordner „{0}“ existiert noch nicht.", title), "needs_folder": title, "reason": reason}, status_code=409)
+    log.info("Collection poster: %s → %s", title, path)
+    return {"ok": True, "path": str(path), "trash": undo.get("gid"), "poster": collection_assets.state(world, title)}
+
+
+@app.get("/api/collection-search")
+async def collection_search(id: str):
+    """Posters of a collection from TMDb (through its films), for the collection poster in the builder."""
+    films, world, _ = _collection_films(id)
+    apis = config.get()["apis"]
+    if not apis["tmdb"]:
+        raise HTTPException(400, tr("Keine API-Keys hinterlegt (Einstellungen → Quellen)"))
+    movies = [{"ids": f["ids"], "title": f["title"], "year": f["year"]} for f in films[:6]]
+    return await providers.search_collection(apis, movies, world.get("languages"))
 
 
 @app.get("/api/collections/hidden")
@@ -1087,13 +1150,14 @@ def _orphans(world_id: str) -> tuple[dict, list[dict], str]:
     if failed:   # an unreachable Sonarr/Radarr would make all its titles look like orphans
         return w, [], tr("{0} war beim letzten Scan nicht erreichbar – die Liste wäre unvollständig. Bitte erneut scannen.", ", ".join(failed))
     index = kometa.get_index(root, True, w.get("search_depth", 3))
+    col_root = collection_assets.root_for(w)          # the folders of the collections are never orphans
     known: set[str] = set()
     for it in scanner.STATE["items"]:
         if it["world"] == w["id"]:
             known.update(x.casefold() for x in [it["folder"], *(it.get("arr_folders") or []), *(it.get("mirror_folders") or [])] if x)
     out = []
     for key, d in index.dirs.items():
-        if key in known:
+        if key in known or (col_root and (d == col_root or col_root in d.parents)):
             continue
         try:
             files = [e for e in d.iterdir() if e.is_file() and e.suffix.lower() in kometa.IMAGE_EXTS

@@ -37,6 +37,13 @@ def test_sanitize_logo_colour():
     assert p["posters"]["poster"]["ov"] == {"logoColorMode": "color", "logoColor": "#000000"}
 
 
+def test_sanitize_title_off_and_season_text_switch():
+    assert styles.sanitize({"mode": "none", "seasonOn": False}) == {"mode": "none", "seasonOn": False}
+    assert styles.sanitize({"mode": "bogus", "seasonOn": "no"}) == {}
+    p = builder_store.sanitize("hd-abc", {"posters": {"poster": {"ov": {"mode": "none", "seasonOn": False}}}})
+    assert p["posters"]["poster"]["ov"] == {"mode": "none", "seasonOn": False}
+
+
 def test_presets_roundtrip_and_limits(tmp_path, monkeypatch):
     monkeypatch.setattr(styles.config, "CONFIG_DIR", tmp_path)
     assert styles.load() == {"presets": {}}
@@ -125,7 +132,7 @@ import io
 
 from PIL import Image
 
-from app import builder_store
+from app import builder_store, kometa
 
 
 def _png(color=(255, 0, 0, 255), size=(20, 10)) -> bytes:
@@ -348,3 +355,79 @@ def test_prune_keeps_collection_looks(store):
     old = time.time() - 40 * 86400
     os.utime(store / "builder" / key, (old, old))
     assert builder_store.prune({key}) == 0 and builder_store.prune({"hd-x"}) == 1
+
+
+# ------------------------------------------------- collection posters (assets) ---
+from app import collection_assets
+
+
+def _png_big():
+    b = io.BytesIO()
+    Image.new("RGB", (40, 60), (10, 80, 40)).save(b, "PNG")
+    return b.getvalue()
+
+
+def test_collection_root_state_and_write(tmp_path, monkeypatch):
+    base = tmp_path / "HD"
+    (base / "Filme").mkdir(parents=True)
+    (base / "Collections" / "Vaiana Filmreihe").mkdir(parents=True)
+    world = {"id": "hd", "assets_path": str(base), "collections_dir": ""}
+    assert collection_assets.root_for(world) == base / "Collections"                              # found by itself
+    assert collection_assets.root_for({**world, "collections_dir": "Nope"}) is None
+    assert collection_assets.root_for({**world, "collections_dir": str(base / "Collections")}) == base / "Collections"
+    assert collection_assets.state(world, "vaiana filmreihe") == {"folder": True, "exists": False, "v": 0}   # case does not matter
+    assert collection_assets.state({**world, "assets_path": str(tmp_path / "x")}, "A") is None
+    monkeypatch.setattr(collection_assets.config, "get", lambda: {"assets": {"convert_to_jpg": False}})
+    monkeypatch.setattr(collection_assets.trash, "_root", lambda: tmp_path / "trash")
+    undo = {}
+    path, why = collection_assets.write_poster(world, "The Vengeance Trilogy", _png_big(), False, undo)
+    assert path is None and why == "folder"                                                          # not created without a yes
+    path, why = collection_assets.write_poster(world, "Vaiana Filmreihe", _png_big(), False, undo)
+    assert path == base / "Collections" / "Vaiana Filmreihe" / "poster.png" and path.is_file() and undo["gid"]
+    again, _ = collection_assets.write_poster(world, "Vaiana Filmreihe", _png_big(), False, {})        # replaces, the old one goes to the trash
+    assert again == path and collection_assets.state(world, "Vaiana Filmreihe")["exists"]
+    made, _ = collection_assets.write_poster(world, "The Vengeance Trilogy", _png_big(), True, {})
+    assert made == base / "Collections" / "The Vengeance Trilogy" / "poster.png"
+    with pytest.raises(ValueError):
+        collection_assets.write_poster(world, "../evil", _png_big(), True, {})
+    assert not collection_assets.valid_name("a/b") and not collection_assets.valid_name("..") and collection_assets.valid_name("Odyssey: Part 2")
+
+
+def test_collection_poster_endpoints_and_orphans(tmp_path, monkeypatch):
+    base = tmp_path / "HD"
+    (base / "Collections" / "Odyssey Saga").mkdir(parents=True)
+    col = [{"id": "1:77", "title": "Odyssey Saga"}]
+    films = [_film(1, "Part One", 2001, col), _film(2, "Part Two", 2003, col)]
+    monkeypatch.setitem(scanner.STATE, "items", films)
+    world = {"id": "hd", "name": "HD", "assets_path": str(base), "collections_dir": "", "languages": ["xx", "en"]}
+    monkeypatch.setattr(main, "_world", lambda w=None: world)
+    monkeypatch.setattr(main.config, "get", lambda: {"worlds": [world], "apis": {"tmdb": "", "tvdb": "", "fanart": ""}, "assets": {"convert_to_jpg": False, "asset_folders": True}, "plex": {}})
+    monkeypatch.setattr(collection_assets.trash, "_root", lambda: tmp_path / "trash")
+    monkeypatch.setattr(main, "_hidden_collections", lambda: frozenset())
+    c = TestClient(main.app)
+    assert c.get("/api/collections-dir").json() == {"path": str(base / "Collections"), "set": False}
+    assert c.get("/api/collection-poster", params={"id": "1:77"}).status_code == 404
+    over = c.get("/api/collections").json()["collections"][0]
+    assert over["poster"] == {"folder": True, "exists": False, "v": 0}
+    up = c.post("/api/collection-poster", params={"id": "1:77"}, files={"file": ("p.png", _png_big(), "image/png")})
+    assert up.status_code == 200 and up.json()["poster"]["exists"]
+    assert c.get("/api/collection-poster", params={"id": "1:77"}).status_code == 200
+    assert c.get("/api/collection", params={"id": "1:77"}).json()["poster"]["exists"] is True
+    # a folder is created only after a yes
+    films2 = [_film(3, "A", 2001, [{"id": "2:5", "title": "New Saga"}]), _film(4, "B", 2002, [{"id": "2:5", "title": "New Saga"}])]
+    monkeypatch.setitem(scanner.STATE, "items", films + films2)
+    no = c.post("/api/collection-poster", params={"id": "2:5"}, files={"file": ("p.png", _png_big(), "image/png")})
+    assert no.status_code == 409 and no.json()["needs_folder"] == "New Saga"
+    yes = c.post("/api/collection-poster", params={"id": "2:5", "create": "true"}, files={"file": ("p.png", _png_big(), "image/png")})
+    assert yes.status_code == 200 and (base / "Collections" / "New Saga" / "poster.png").is_file()
+    # the folders of collections are never offered as orphans
+    monkeypatch.setitem(scanner.STATE, "scanned_at", 1)
+    monkeypatch.setitem(scanner.STATE, "error", None)
+    monkeypatch.setitem(scanner.STATE, "failed", {})
+    kometa.drop_indexes()
+    found = main._orphans("hd")[1]
+    assert [o["name"] for o in found] == []
+    (base / "Filme" / "Lost (1999)").mkdir(parents=True)
+    (base / "Filme" / "Lost (1999)" / "poster.jpg").write_bytes(b"x")
+    kometa.drop_indexes()
+    assert [o["name"] for o in main._orphans("hd")[1]] == ["Lost (1999)"]

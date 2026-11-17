@@ -132,7 +132,7 @@ async function api(path, opts = {}) {
   let data = null;
   try { data = await r.json(); } catch { /* not json */ }
   if (r.status === 401 && data && data.auth && !path.startsWith("/auth/")) { showLogin(); throw new Error(T("Anmeldung erforderlich")); }     // session expired or logged out elsewhere
-  if (!r.ok) throw new Error((data && data.detail) || T("Fehler {0}", r.status));
+  if (!r.ok) { const err = new Error((data && data.detail) || T("Fehler {0}", r.status)); err.status = r.status; err.data = data; throw err; }
   return data;
 }
 
@@ -1218,6 +1218,8 @@ function collectionTile(g) {
     h("div", { class: "colinfo" }, h("div", { class: "colname" }, g.title),
       h("div", { class: "colmeta" }, pl(g.total, "Film", "Filme"), " · ",
         h("span", { class: "pill " + (g.with_poster === g.total ? "ok" : "warn") }, g.with_poster === g.total ? T("vollständig ({0})", g.total) : T("{0} von {1} Postern", g.with_poster, g.total))),
+      g.poster ? h("div", { class: "colmeta" }, h("span", { class: "pill " + (g.poster.exists ? "ok" : "warn"), title: T("Das Poster der Collection selbst (Kometa-Asset im Collection-Ordner)") },
+        g.poster.exists ? T("Collection-Poster ✓") : T("Collection-Poster fehlt"))) : null,
       h("button", { class: "btn sm", type: "button", title: T("Alle Filme dieser Collection in einem Look bauen"), onclick: e => { e.stopPropagation(); openCollection(g.id, { build: true }); } }, icon("build", 14), T("Bauen"))));
 }
 
@@ -1269,7 +1271,8 @@ async function openCollection(cid, opts = {}) {
     refreshPill();
     fill(drawer,
       h("header", {}, h("button", { class: "btn ghost", "aria-label": T("Schließen"), onclick: close }, "✕"),
-        h("div", { class: "grow" }, h("h2", {}, data.title), h("div", { class: "hint", style: "margin:2px 0" }, T("Plex-Collection · "), pill))),
+        h("div", { class: "grow" }, h("h2", {}, data.title), h("div", { class: "hint", style: "margin:2px 0" }, T("Plex-Collection · "), pill,
+      data.poster ? [" · ", h("span", { class: "pill " + (data.poster.exists ? "ok" : "warn"), title: T("Das Poster der Collection selbst (Kometa-Asset im Collection-Ordner)") }, data.poster.exists ? T("Collection-Poster ✓") : T("Collection-Poster fehlt"))] : null))),
       h("div", { class: "body" },
         h("p", { class: "hint", style: "margin-top:0" }, T("Poster auf eine Kachel ziehen oder anklicken, um es zu ersetzen. Mehrere Dateien, Ordner oder eine ZIP lassen sich über „Poster hochladen“ den Filmen zuordnen.")),
         h("div", { class: "row wrap", style: "margin-bottom:16px" },
@@ -1372,7 +1375,7 @@ function modal(title, body, footer) {
 
 async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img): choose an image for something else (the poster builder) instead of saving it
   const body = h("div", {}, h("div", { class: "empty" }, h("span", { class: "spin" }), T(" Suche bei TMDb, TVDB und fanart.tv …")));
-  const m = modal(`${opts.title ? opts.title + " – " : ""}${it.title} – ${slotLabel(slot, it.type)}`, body);
+  const m = modal(opts.heading || `${opts.title ? opts.title + " – " : ""}${it.title} – ${slotLabel(slot, it.type)}`, body);
   // no luck with the search: build the poster instead (not while choosing a background inside the builder)
   const buildOpen = opts.pick ? null : it.type === "movie" ? () => openMovieBuilder(it, draw) : S.seriesBuild && S.seriesBuildItem === it.id ? () => S.seriesBuild(slot) : null;
   const buildBtn = (cls, label) => buildOpen ? h("button", { class: cls, type: "button", title: T("Poster selbst bauen: textloses Poster, Logo oder Titel und Staffeltext"), onclick: () => { m.close(); buildOpen(); } },
@@ -1383,7 +1386,7 @@ async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img):
   try {
     // Several posters can be searched at once (the poster builder: textless posters of a series are often filed under the series poster)
     const scopes = opts.scopes && opts.scopes.length > 1 ? opts.scopes : null, cache = {}, done = {};
-    const load = key => cache[key] ||= api(`/items/${it.id}/${key}/search`).then(res => (done[key] = res));
+    const load = key => cache[key] ||= api(opts.searchPath && key === slot ? opts.searchPath : `/items/${it.id}/${key}/search`).then(res => (done[key] = res));
     const chosen = new Set([slot, ...(scopes && scopes.some(x => x.key === "poster") ? ["poster"] : [])]);
     const loadSafe = key => load(key).catch(e => { toast(e.message, "bad"); done[key] = { images: [], providers: first.providers, languages: [] }; });
     const first = await load(slot);
@@ -2046,7 +2049,7 @@ function scanSig() {
   return JSON.stringify({
     plex: [c.plex.url, c.plex.server_name, c.plex.token],
     libs: c.libraries.map(l => [l.key, l.enabled, l.world]),
-    worlds: c.worlds.map(w => [w.id, w.assets_path, w.search_depth, w.mirror_coming_soon]),
+    worlds: c.worlds.map(w => [w.id, w.assets_path, w.search_depth, w.mirror_coming_soon, w.collections_dir]),
     arr: c.arr.map(a => [a.id, a.kind, a.name, a.url, a.api_key, a.world, a.hide_unmonitored]),
     assets: [c.assets.asset_folders, c.assets.ignore_specials],
   });
@@ -2255,6 +2258,13 @@ function wWorlds(nav, c) {
       return r.exists && r.writable;
     };
     checks.push(async () => { w.assets_path = path.value; w.name = name.value; return check(); });
+    // where the posters of the Plex collections go (Kometa names a folder like the collection in it): found by itself, or given here
+    const colSt = h("div", { class: "hint", style: "margin:4px 0 0" });
+    const showCol = async () => {
+      try { const r = await api("/collections-dir?world=" + encodeURIComponent(w.id)); colSt.textContent = r.path ? T("Collection-Ordner: {0}", r.path) : T("Kein Collection-Ordner gefunden: Lege im Assets-Ordner einen Ordner „Collections“ an oder gib den Pfad an."); } catch { colSt.textContent = ""; }
+    };
+    const colDir = h("input", { type: "text", value: w.collections_dir || "", placeholder: T("leer = Ordner „Collections“ im Assets-Ordner"), onchange: async e => { w.collections_dir = e.target.value.trim(); await persist(); showCol(); } });
+    setTimeout(showCol, 0);
     const browse = async p => {
       try {
         const r = await api("/fs?path=" + encodeURIComponent(p));
@@ -2272,6 +2282,7 @@ function wWorlds(nav, c) {
       h("label", { class: "f" }, T("Assets-Ordner (im Container)")),
       h("div", { class: "row" }, h("div", { class: "grow" }, path), h("button", { class: "btn", onclick: () => browse(path.value || "/") }, icon("folder", 16), T(" Durchsuchen"))),
       fsBox, st,
+      h("label", { class: "f" }, T("Collection-Ordner (Poster der Plex-Collections)")), colDir, colSt,
       h("label", { class: "opt", style: "margin-top:14px" }, h("input", { type: "checkbox", checked: w.mirror_coming_soon !== false, onchange: e => { w.mirror_coming_soon = e.target.checked; persist(); } }),
         h("div", {}, T("Coming-Soon-Poster auch im echten Film-Ordner ablegen"), h("small", {}, T("Gilt nur für Ordner mit {edition-Coming Soon}. Andere Editionen wie {edition-black&white} bleiben getrennt.")))),
       h("label", { class: "f" }, T("Bevorzugte Sprache der Poster (Reihenfolge = Priorität)")), langList(w, persist));
