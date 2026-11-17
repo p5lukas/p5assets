@@ -656,6 +656,37 @@ async def collection_poster_upload(id: str, file: Annotated[UploadFile, File()],
     return {"ok": True, "path": str(path), "trash": undo.get("gid"), "poster": collection_assets.state(world, title)}
 
 
+@app.delete("/api/collection-poster")
+async def collection_poster_delete(id: str):
+    _, world, title = _collection_films(id)
+    undo: dict = {}
+    if not await asyncio.to_thread(collection_assets.delete_poster, world, title, undo):
+        raise HTTPException(404, tr("Datei nicht gefunden"))
+    log.info("Collection poster deleted: %s", title)
+    return {"ok": True, "trash": undo.get("gid"), "poster": collection_assets.state(world, title)}
+
+
+class CollectionUrlBody(BaseModel):
+    id: str
+    url: str
+    create: bool = False
+
+
+@app.post("/api/collection-poster/url")
+async def collection_poster_from_url(body: CollectionUrlBody):
+    """Take a picture from the online search (TMDb) as the poster of a collection."""
+    _, world, title = _collection_films(body.id)
+    data = await _download(body.url)
+    undo: dict = {}
+    try:
+        path, reason = await asyncio.to_thread(collection_assets.write_poster, world, title, data, body.create, undo)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    if path is None:
+        return JSONResponse({"detail": tr("Der Ordner „{0}“ existiert noch nicht.", title), "needs_folder": title, "reason": reason}, status_code=409)
+    return {"ok": True, "path": str(path), "trash": undo.get("gid"), "poster": collection_assets.state(world, title)}
+
+
 @app.get("/api/collection-search")
 async def collection_search(id: str):
     """Posters of a collection from TMDb (through its films), for the collection poster in the builder."""
@@ -1227,11 +1258,27 @@ async def coverage_history(world: str = "", days: int = 90):
 
 # ----------------------------------------------------------- import ---
 
-def _suggest(entry: dict, fixed: dict | None, pool: list[dict], index: dict | None = None) -> dict:
+def _collection_for(entry: dict, cols: list[dict]) -> dict | None:
+    """The Plex collection a file is the poster of: named like the collection (or "<collection> Collection"), or "poster" inside a folder of that name."""
+    path = Path(entry["name"])
+    stem = path.parent.name if path.stem.casefold() in ("poster", "folder", "cover") and path.parent.name else path.stem
+    n = kometa.normalize(re.sub(r"[_.]+", " ", stem))
+    for g in cols:
+        gn = kometa.normalize(g["title"])
+        if gn and n in (gn, gn + "collection"):
+            return g
+    return None
+
+
+def _suggest(entry: dict, fixed: dict | None, pool: list[dict], index: dict | None = None, cols: list[dict] | None = None) -> dict:
     out = dict(entry)
     out["item_id"] = None
     out["slot"] = None
     if entry["kind"] == "ignore":
+        return out
+    g = _collection_for(entry, cols or []) if entry["kind"] == "poster" and not fixed else None
+    if g:                                              # the poster of a whole Plex collection
+        out["collection_id"], out["collection_title"], out["slot"], out["collection"] = g["id"], g["title"], "collection", True
         return out
     if kometa.is_collection_name(entry["name"]):          # a poster for a whole collection: the user decides where it belongs
         out["collection"] = True
@@ -1252,8 +1299,14 @@ async def import_files(request: Request):
     form = await request.form(max_files=5000, max_fields=5000)
     fixed_id = form.get("item_id")
     fixed = _item(str(fixed_id)) if fixed_id else None
-    world = fixed["world"] if fixed else _world(form.get("world") or None)["id"]
-    pool = [i for i in scanner.STATE["items"] if i["world"] == world]
+    drop_col = str(form.get("collection_id") or "")      # files dropped on a collection tile: its films are the titles to match
+    col_films = _collection_films(drop_col)[0] if drop_col else None
+    world = fixed["world"] if fixed else col_films[0]["world"] if col_films else _world(form.get("world") or None)["id"]
+    pool = col_films if col_films else [i for i in scanner.STATE["items"] if i["world"] == world]
+    cols = [g for g in collection_overview([i for i in scanner.STATE["items"] if i["world"] == world and i["type"] == "movie"], "", _hidden_collections()) if not g["hidden"]]
+    if drop_col:
+        cols = [g for g in cols if g["id"] == drop_col]
+    wcfg = next((w for w in config.get()["worlds"] if w["id"] == world), None)
     sid = uploads.new_session()
     entries, errors = [], []
     for f in form.getlist("files"):
@@ -1263,7 +1316,7 @@ async def import_files(request: Request):
         except ValueError as e:
             errors.append(str(e))
     match_index = kometa.index_items(pool) if not fixed else None
-    suggestions = [_suggest(e, fixed, pool, match_index) for e in entries]
+    suggestions = [_suggest(e, fixed, pool, match_index, cols) for e in entries]
     if fixed:
         # files dropped on a title belong to that title, whatever they are called
         for s in suggestions:
@@ -1277,7 +1330,9 @@ async def import_files(request: Request):
         by_id[fixed["id"]] = fixed
     # what the review dialog needs to check a set for completeness: the known seasons (Plex/Sonarr) and which tiles already exist
     targets = {e["item_id"]: _public_item(by_id[e["item_id"]], True) for e in suggestions if e.get("item_id") in by_id}
-    return {"session": sid, "entries": suggestions, "errors": errors, "world": world, "targets": targets}
+    used_cols = {e["collection_id"] for e in suggestions if e.get("collection_id")}
+    colinfo = {g["id"]: {"id": g["id"], "title": g["title"], "total": g["total"], "poster": collection_assets.state(wcfg, g["title"]) if wcfg else None} for g in cols if g["id"] in used_cols}
+    return {"session": sid, "entries": suggestions, "errors": errors, "world": world, "targets": targets, "collections": colinfo}
 
 
 @app.get("/api/import/{sid}/{fid}")
@@ -1305,13 +1360,22 @@ async def slot_options(world: str = "", q: str = "", limit: int = 30):
                         "slots": [{"slot": k, "label": kometa.slot_label(kometa.parse_slot_key(k))} for k in keys]})
             if len(out) >= limit:
                 break
+    if nq:                                              # the collections of the world: a poster can be the poster of a collection
+        world = _world(world)
+        movies = [i for i in scanner.STATE["items"] if i["world"] == wid and i["type"] == "movie"]
+        for g in collection_overview(movies, "", _hidden_collections()):
+            if not g["hidden"] and nq in kometa.normalize(g["title"]):
+                out.append({"id": "col:" + g["id"], "collection": True, "collection_id": g["id"], "title": g["title"], "year": None, "type": "collection", "total": g["total"],
+                            "poster": collection_assets.state(world, g["title"]), "slots": [{"slot": "collection", "label": tr("Collection-Poster")}]})
     return out
 
 
 class Assignment(BaseModel):
     file: str
-    item_id: str
-    slot: str
+    item_id: str | None = None
+    slot: str = "poster"
+    collection_id: str | None = None         # the poster of a Plex collection (instead of a film / series tile)
+    create_folder: bool = False
 
 
 class ApplyBody(BaseModel):
@@ -1323,6 +1387,13 @@ async def import_apply(sid: str, body: ApplyBody):
     done, failed = [], []
     for a in body.assignments:
         try:
+            if a.collection_id:
+                _, world, title = _collection_films(a.collection_id)
+                path, _reason = await asyncio.to_thread(collection_assets.write_poster, world, title, uploads.staged_bytes(sid, a.file), a.create_folder, {})
+                if path is None:
+                    raise ValueError(tr("Der Ordner „{0}“ existiert noch nicht.", title))
+                done.append({"item": title, "slot": "collection", "warning": None})
+                continue
             it = _item(a.item_id)
             _slot_check(it, a.slot)
             data = uploads.staged_bytes(sid, a.file)

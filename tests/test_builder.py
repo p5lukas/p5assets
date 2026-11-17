@@ -431,3 +431,38 @@ def test_collection_poster_endpoints_and_orphans(tmp_path, monkeypatch):
     (base / "Filme" / "Lost (1999)" / "poster.jpg").write_bytes(b"x")
     kometa.drop_indexes()
     assert [o["name"] for o in main._orphans("hd")[1]] == ["Lost (1999)"]
+
+
+def test_import_recognises_collection_posters_and_applies_them(tmp_path, monkeypatch):
+    base = tmp_path / "HD"
+    (base / "Collections" / "Odyssey Saga").mkdir(parents=True)
+    col = [{"id": "1:77", "title": "Odyssey Saga"}]
+    films = [_film(1, "Part One", 2001, col), _film(2, "Part Two", 2003, col)]
+    monkeypatch.setitem(scanner.STATE, "items", films)
+    world = {"id": "hd", "name": "HD", "assets_path": str(base), "collections_dir": "", "languages": ["xx", "en"]}
+    monkeypatch.setattr(main, "_world", lambda w=None: world)
+    monkeypatch.setattr(main.config, "get", lambda: {"worlds": [world], "apis": {"tmdb": "", "tvdb": "", "fanart": ""}, "assets": {"convert_to_jpg": False, "asset_folders": True}, "plex": {}})
+    monkeypatch.setattr(collection_assets.trash, "_root", lambda: tmp_path / "trash")
+    monkeypatch.setattr(main, "_hidden_collections", lambda: frozenset())
+    c = TestClient(main.app)
+    png = _png_big()
+    res = c.post("/api/import", files=[("files", ("Odyssey Saga Collection.png", png, "image/png")), ("files", ("odyssey saga.png", png, "image/png")),
+                                       ("files", ("Something Else Collection.png", png, "image/png"))]).json()
+    names = {e["name"]: e for e in res["entries"]}
+    assert names["Odyssey Saga Collection.png"]["collection_id"] == "1:77" and names["odyssey saga.png"]["collection_id"] == "1:77"      # either spelling, any case
+    assert "collection_id" not in names["Something Else Collection.png"] and names["Something Else Collection.png"]["collection"] is True          # unknown: the user decides
+    assert res["collections"]["1:77"]["poster"] == {"folder": True, "exists": False, "v": 0}
+    # the autocomplete of the review dialog offers the collection
+    hit = [o for o in c.get("/api/slots", params={"q": "odyssey"}).json() if o.get("collection")]
+    assert hit and hit[0]["collection_id"] == "1:77" and hit[0]["slots"][0]["slot"] == "collection"
+    # applied as the poster of the collection
+    fid = names["Odyssey Saga Collection.png"]["id"]
+    done = c.post(f"/api/import/{res['session']}/apply", json={"assignments": [{"file": fid, "collection_id": "1:77"}]}).json()
+    assert done["failed"] == [] and done["done"][0]["slot"] == "collection" and (base / "Collections" / "Odyssey Saga" / "poster.png").is_file()
+    # files dropped on a collection tile: only that collection's films are the titles to match
+    drop = c.post("/api/import", data={"collection_id": "1:77"}, files=[("files", ("Part Two (2003).png", png, "image/png"))]).json()
+    assert drop["entries"][0]["item_id"] == "hd-2"
+    # delete and restore the collection poster
+    gone = c.delete("/api/collection-poster", params={"id": "1:77"}).json()
+    assert gone["ok"] and gone["poster"]["exists"] is False and gone["trash"]
+    assert c.delete("/api/collection-poster", params={"id": "1:77"}).status_code == 404

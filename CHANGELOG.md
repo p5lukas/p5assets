@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.8 – 2026-11-17
+
+**New**
+- Collections tab: each collection shows its own poster in front (a dashed card when it is missing), four of its films fanned out behind. “Upload” sets the collection poster, and a picture dropped right onto the tile does too (several files or a ZIP go through the import review)
+- Collection view: the poster of the collection is the first tile (replace by click or drop, search online at TMDb, build, delete with undo)
+- Import: files can be assigned to a collection (“Collection poster” group in the review); typing a collection name in the title field suggests collections; file names like “Vaiana Collection” are recognised automatically. A missing collection folder is only created after you confirm
+
 ## 0.9.7 – 2026-11-17
 
 **New**

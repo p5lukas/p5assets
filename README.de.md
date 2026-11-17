@@ -59,7 +59,7 @@ und welche vorhandenen Bilder ersetzt würden.
 
 - Kacheln für das Poster und **Season00 – Season50**, auch für Staffeln, die es noch nicht gibt
 - Poster per Drag & Drop auf eine andere Kachel **kopieren** oder mit **„Auf alle …“** auf mehrere Kacheln übertragen
-- **Plex-Collections:** Der Reiter **Collections** zeigt jede Collection als Fächer ihrer Poster (fehlende als gestrichelte Karten). Filme zeigen in der Vorschau ihre Collection; ein Klick öffnet deren Detailansicht mit allen Postern (ersetzen, hochladen, Set-Upload). Beim Import gruppiert p5assets die Filme nach Plex-Collection und sagt dir, welche Filme der Collection danach noch kein Poster haben. Dateien wie „… Collection“ ordnet der Import nicht automatisch einem Film zu. Große Sammel-Collections, die keine Filmreihen sind, kannst du ausblenden (unter Einstellungen → Bibliotheken siehst du sie und holst sie zurück)
+- **Plex-Collections:** Der Reiter **Collections** zeigt jede Collection als Fächer ihrer Poster (fehlende als gestrichelte Karten). Filme zeigen in der Vorschau ihre Collection; ein Klick öffnet deren Detailansicht mit allen Postern (ersetzen, hochladen, Set-Upload). Beim Import gruppiert p5assets die Filme nach Plex-Collection und sagt dir, welche Filme der Collection danach noch kein Poster haben. Jede Collection-Kachel zeigt vorn ihr eigenes Poster: hochladen oder ein Bild direkt auf die Kachel ziehen (es landet als Kometa-Asset im Collection-Ordner); im Import-Dialog lassen sich Dateien einer Collection zuordnen, Dateien wie „… Collection“ werden ihr per Namen zugeordnet, nie einem einzelnen Film. Große Sammel-Collections, die keine Filmreihen sind, kannst du ausblenden (unter Einstellungen → Bibliotheken siehst du sie und holst sie zurück)
 
 <table>
 <tr>

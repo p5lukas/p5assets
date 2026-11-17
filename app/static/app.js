@@ -1206,21 +1206,99 @@ function openPreview(it, key, draw) {
   document.body.append(wrap);
 }
 
-/** A Plex collection as a fan of overlapping posters (missing ones as dashed cards), with its name and state; a click opens the collection, "Bauen" its builder. */
+/** Save a picture as the poster of a collection; asks before it creates the folder. Returns the new state of the poster, or null (cancelled). */
+async function saveCollectionPoster(cid, title, send) {
+  let r;
+  try { r = await send(false); }
+  catch (e) {
+    if (!(e.status === 409 && e.data && e.data.needs_folder)) throw e;
+    if (!confirm(T("Der Ordner „{0}“ existiert noch nicht im Collection-Ordner. Jetzt anlegen?", e.data.needs_folder))) return null;
+    r = await send(true);
+  }
+  S.rain.add("colposter|" + cid);
+  undoToast(T("Collection-Poster gespeichert ✓"), r, () => {});
+  return r.poster;
+}
+const uploadCollectionPoster = (cid, title, file) => saveCollectionPoster(cid, title, create => {
+  const fd = new FormData(); fd.append("file", file, file.name);
+  return api(`/collection-poster?id=${encodeURIComponent(cid)}${create ? "&create=true" : ""}`, { method: "POST", body: fd });
+});
+const collectionPosterFromUrl = (cid, title, url) => saveCollectionPoster(cid, title, create => api("/collection-poster/url", { json: { id: cid, url, create } }));
+/** Pick a picture file; a single image becomes the poster of the collection. */
+function chooseCollectionPoster(cid, title, done) {
+  pickFiles(async files => {
+    const imgs = files.filter(f => /\.(jpe?g|png|webp|gif|bmp|tiff?|avif)$/i.test(f.path));
+    try {
+      if (imgs.length === 1 && files.length === 1) { const p = await uploadCollectionPoster(cid, title, imgs[0].file); if (p) done(p); }
+      else importFiles(files, null, () => done(null), null, null, { collection: cid });
+    } catch (e) { toast(e.message, "bad"); }
+  }, false);
+}
+const COLPOSTER_NO_DIR = () => T("Für diese Welt ist kein Collection-Ordner bekannt (Einstellungen → Welten)");
+
+/** A Plex collection: its own poster in front (a dashed card when missing), four of its films behind; click opens it, "Hochladen" / a dropped picture sets the collection poster, "Bauen" its builder. */
 function collectionTile(g) {
-  const shown = g.members.slice(0, 5), mid = (shown.length - 1) / 2;
+  const shown = g.members.filter(m => m.has_poster).concat(g.members.filter(m => !m.has_poster)).slice(0, 4), mid = (shown.length - 1) / 2;
+  const front = h("div", { class: "colfront" });
+  const drawFront = () => {
+    const p = g.poster;
+    front.className = "colfront" + (p && p.exists ? "" : " empty");
+    fill(front, p && p.exists ? h("img", { loading: "lazy", alt: "", src: `/api/collection-poster?id=${encodeURIComponent(g.id)}&v=${p.v}` }) : h("span", { class: "plus" }, p ? "＋" : "–"),
+      p && p.exists ? null : h("small", {}, p ? T("Collection-Poster fehlt") : T("kein Collection-Ordner")));
+  };
+  drawFront();
   const fan = h("div", { class: "colfan" }, shown.map((m, i) => h("div", { class: "colp" + (m.has_poster ? "" : " empty"), style: `--o:${(i - mid).toFixed(2)};--z:${Math.round(10 - Math.abs(i - mid) * 2)}`, title: m.title },
-    m.has_poster ? h("img", { loading: "lazy", alt: "", src: `/api/thumb/${m.id}/poster?v=${m.v}` }) : h("span", {}, "＋"))),
+    m.has_poster ? h("img", { loading: "lazy", alt: "", src: `/api/thumb/${m.id}/poster?v=${m.v}` }) : h("span", {}, "＋"))), front,
     g.total > shown.length ? h("span", { class: "colmore" }, "+" + (g.total - shown.length)) : null);
   const open = () => openCollection(g.id);
-  return h("div", { class: "colcard", tabindex: "0", role: "button", "aria-label": g.title, onclick: open, onkeydown: e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } } },
+  const set = p => { if (p) { g.poster = p; drawFront(); fill(meta, metaPills()); } };
+  const metaPills = () => g.poster ? h("span", { class: "pill " + (g.poster.exists ? "ok" : "warn"), title: T("Das Poster der Collection selbst (Kometa-Asset im Collection-Ordner)") },
+    g.poster.exists ? T("Collection-Poster ✓") : T("Collection-Poster fehlt")) : null;
+  const meta = h("div", { class: "colmeta" }, metaPills());
+  const card = h("div", { class: "colcard", tabindex: "0", role: "button", "aria-label": g.title, onclick: open, onkeydown: e => { if (e.key === "Enter" && e.target === card || e.key === " " && e.target === card) { e.preventDefault(); open(); } } },
     fan,
     h("div", { class: "colinfo" }, h("div", { class: "colname" }, g.title),
       h("div", { class: "colmeta" }, pl(g.total, "Film", "Filme"), " · ",
         h("span", { class: "pill " + (g.with_poster === g.total ? "ok" : "warn") }, g.with_poster === g.total ? T("vollständig ({0})", g.total) : T("{0} von {1} Postern", g.with_poster, g.total))),
-      g.poster ? h("div", { class: "colmeta" }, h("span", { class: "pill " + (g.poster.exists ? "ok" : "warn"), title: T("Das Poster der Collection selbst (Kometa-Asset im Collection-Ordner)") },
-        g.poster.exists ? T("Collection-Poster ✓") : T("Collection-Poster fehlt"))) : null,
-      h("button", { class: "btn sm", type: "button", title: T("Alle Filme dieser Collection in einem Look bauen"), onclick: e => { e.stopPropagation(); openCollection(g.id, { build: true }); } }, icon("build", 14), T("Bauen"))));
+      meta,
+      h("div", { class: "row wrap" },
+        g.poster ? h("button", { class: "btn sm", type: "button", title: T("Ein Bild als Poster der Collection wählen (oder einfach auf die Kachel ziehen)"), onclick: e => { e.stopPropagation(); chooseCollectionPoster(g.id, g.title, set); } }, icon("upload", 14), T("Hochladen")) : null,
+        h("button", { class: "btn sm", type: "button", title: T("Alle Filme dieser Collection in einem Look bauen"), onclick: e => { e.stopPropagation(); openCollection(g.id, { build: true }); } }, icon("build", 14), T("Bauen")))));
+  makeDropTarget(card, async files => {
+    const imgs = files.filter(f => /\.(jpe?g|png|webp|gif|bmp|tiff?|avif)$/i.test(f.path));
+    try {
+      if (g.poster && imgs.length === 1 && files.length === 1) { const p = await uploadCollectionPoster(g.id, g.title, imgs[0].file); set(p); }
+      else importFiles(files, null, () => {}, null, null, { collection: g.id });
+    } catch (e) { toast(e.message, "bad"); }
+  });
+  return card;
+}
+
+/** The poster of the collection itself as the first tile of its detail view: replace (click / drop), search online, build, delete. */
+function collectionPosterCard(data, reload) {
+  const p = data.poster, cid = data.id;
+  if (!p) return h("div", { class: "card colposter nodir" }, h("div", { class: "empty" }, COLPOSTER_NO_DIR()));
+  const send = fn => async (...a) => { try { const r = await fn(...a); if (r !== null) reload(); } catch (e) { toast(e.message, "bad"); } };
+  const el = h("div", { class: "card colposter" + (p.exists ? "" : " missing") },
+    h("div", { class: "poster", onclick: () => chooseCollectionPoster(cid, data.title, () => reload()) },
+      p.exists ? h("img", { alt: "", class: "loaded", src: `/api/collection-poster?id=${encodeURIComponent(cid)}&v=${p.v}` }) : h("div", { class: "colfront empty" }, h("span", { class: "plus" }, "＋"), h("small", {}, T("Collection-Poster fehlt")))),
+    h("div", { class: "info pmeta" }, h("div", { class: "t" }, T("Collection-Poster")),
+      h("div", { class: "row wrap" },
+        h("button", { class: "btn sm", onclick: () => chooseCollectionPoster(cid, data.title, () => reload()) }, icon("upload", 14), p.exists ? T("Ersetzen") : T("Hochladen")),
+        h("button", { class: "btn sm", onclick: () => searchOnline(data.members[0], "poster", null, { searchPath: `/collection-search?id=${encodeURIComponent(cid)}`, heading: `${data.title} – ${T("Collection-Poster")}`, apply: send(img => collectionPosterFromUrl(cid, data.title, img.url)) }) }, icon("search", 14), T("Online suchen")),
+        h("button", { class: "btn sm", onclick: () => openCollection(cid, { build: true }) }, icon("build", 14), T("Bauen")),
+        p.exists ? h("button", { class: "btn sm danger", onclick: async () => {
+          if (!confirm(T("{0} wirklich löschen?", T("Collection-Poster")))) return;
+          try { const r = await api(`/collection-poster?id=${encodeURIComponent(cid)}`, { method: "DELETE" }); undoToast(T("Gelöscht"), r, reload); reload(); } catch (e) { toast(e.message, "bad"); }
+        } }, T("Löschen")) : null)));
+  makeDropTarget(el, async files => {
+    const imgs = files.filter(f => /\.(jpe?g|png|webp|gif|bmp|tiff?|avif)$/i.test(f.path));
+    try {
+      if (imgs.length === 1 && files.length === 1) { if (await uploadCollectionPoster(cid, data.title, imgs[0].file)) reload(); }
+      else importFiles(files, null, reload, null, null, { collection: cid });
+    } catch (e) { toast(e.message, "bad"); }
+  });
+  return el;
 }
 
 /** In the preview of a film: its Plex collections; a click opens the detail view of the collection (all its posters). */
@@ -1280,7 +1358,7 @@ async function openCollection(cid, opts = {}) {
           h("button", { class: "btn sm", title: T("Alle Filme dieser Collection in einem Look bauen"), onclick: () => startBuilder() }, icon("build", 14), T("Bauen")),
           h("button", { class: "btn sm", title: T("Diese Collection nicht mehr anzeigen (z. B. eine Sammel-Collection, die keine Filmreihe ist). Wieder einblenden: Einstellungen → Bibliotheken"),
             onclick: async () => { try { await api("/collections/hidden", { json: { id: cid, hidden: true, title: data.title, count: total } }); S.st.config.hidden_collections = [...(S.st.config.hidden_collections || []), { id: cid, title: data.title, count: total }]; toast(T("Collection ausgeblendet"), "ok"); close(); } catch (e) { toast(e.message, "bad"); } } }, T("Ausblenden"))),
-        h("div", { class: "grid colgrid" }, data.members.map(m => card(m, onChange)))));
+        h("div", { class: "grid colgrid" }, [collectionPosterCard(data, reload), ...data.members.map(m => card(m, onChange))])));
   }
   draw();
   if (opts.build) startBuilder(opts.start);
@@ -1425,6 +1503,7 @@ async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img):
     const pick = img => {
       const p = h("div", { class: "pick", title: T("Übernehmen"), onclick: async () => {
         if (opts.pick) { opts.pick(img); m.close(); return; }
+        if (opts.apply) { p.classList.add("busy"); try { await opts.apply(img); m.close(); } catch (e) { p.classList.remove("busy"); toast(e.message, "bad"); } return; }      // e.g. the poster of a collection
         p.classList.add("busy");
         try { const res = await api(`/items/${it.id}/${slot}/url`, { json: { url: img.url } }); undoToast(T("Übernommen ✓"), res, draw); m.close(); S.rain.add(it.id + "|" + slot); draw(res.item); }
         catch (e) { p.classList.remove("busy"); toast(e.message, "bad"); }
@@ -1451,7 +1530,7 @@ async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img):
           h("button", { class: "tab" + (allOn ? " on" : ""), type: "button", onclick: () => toggleScope(allOn ? [slot, ...(scopes.some(x => x.key === "poster") && slot !== "poster" ? ["poster"] : [])] : scopes.map(x => x.key)) }, T("Alle")));
       } else if (scopes) fill(scopeBar);
       scopeBar.hidden = !(scopes && kind === "poster");
-      fill(tabs, [{ name: "*", label: T("Alle"), state: "ok", count: r.images.length }, ...r.providers, ...(kind === "poster" ? [{ name: "ThePosterDB", state: "ok", tpdb: true }, { name: "MediUX", state: "ok", tpdb: true }] : [])].map(pv => h("button", {
+      fill(tabs, [{ name: "*", label: T("Alle"), state: "ok", count: r.images.length }, ...r.providers, ...(kind === "poster" && !opts.apply ? [{ name: "ThePosterDB", state: "ok", tpdb: true }, { name: "MediUX", state: "ok", tpdb: true }] : [])].map(pv => h("button", {
         class: "tab" + (tab === pv.name ? " on" : "") + (pv.state !== "ok" ? " off" : ""), disabled: pv.state === "nokey",
         title: pv.state === "nokey" ? T("Kein API-Key hinterlegt (Einstellungen → Quellen)") : pv.state === "error" ? pv.error : "",
         onclick: () => { tab = pv.name; render(); } },
@@ -1647,10 +1726,11 @@ function pickSet(cb) {
 }
 
 /* ------------------------------------------------------------ import --- */
-async function importFiles(files, itemId, onDone, item, review) {
+async function importFiles(files, itemId, onDone, item, review, opts = {}) {      // opts.collection: files dropped on a collection tile
   if (!files || !files.length) return;
   const fd = new FormData();
   if (itemId) fd.append("item_id", itemId); else fd.append("world", S.world);
+  if (opts.collection) fd.append("collection_id", opts.collection);
   files.forEach(f => fd.append("files", f.file, f.path));
   const bar = h("i", { style: "width:0%" });
   const m = modal(T("Lade hoch …"), h("div", {}, h("p", {}, TP(files.length, "Eine Datei wird übertragen", "{0} Dateien werden übertragen")), h("div", { class: "progress" }, bar)));
@@ -1668,7 +1748,7 @@ async function importFiles(files, itemId, onDone, item, review) {
   m.close();
   res.errors.forEach(e => toast(e, "bad"));
   if (!res.entries.length) { toast(T("Keine Bilder gefunden"), "bad"); return; }
-  const allSet = res.entries.every(e => e.kind === "ignore" || e.item_id);
+  const allSet = res.entries.every(e => e.kind === "ignore" || e.item_id || e.collection_id);
   const used = res.entries.filter(e => e.item_id && e.slot && e.kind !== "ignore").map(e => e.slot);
   const twice = used.length !== new Set(used).size;      // two files for the same tile: let the user decide in the review
   if (review && item) return reviewImport(res, onDone, item);   // "Set hochladen": always the review dialog, series fixed
@@ -1683,20 +1763,27 @@ async function importFiles(files, itemId, onDone, item, review) {
   reviewImport(res, onDone);
 }
 
-async function applyImport(sid, entries, onDone) {
-  const assignments = entries.filter(e => e.item_id && e.slot).map(e => ({ file: e.id, item_id: e.item_id, slot: e.slot }));
+async function applyImport(sid, entries, onDone, colInfo = {}) {
+  let assignments = entries.filter(e => (e.item_id && e.slot) || e.collection_id).map(e => e.collection_id ? { file: e.id, collection_id: e.collection_id } : { file: e.id, item_id: e.item_id, slot: e.slot });
+  // posters of collections whose folder does not exist yet: ask once before the folders are created
+  const noFolder = [...new Set(assignments.filter(x => x.collection_id && colInfo[x.collection_id] && colInfo[x.collection_id].poster && !colInfo[x.collection_id].poster.folder).map(x => x.collection_id))];
+  if (noFolder.length) {
+    if (confirm(T("Für diese Collections gibt es im Collection-Ordner noch keinen Ordner: {0}. Jetzt anlegen?", noFolder.map(id => colInfo[id].title).join(", ")))) assignments.forEach(x => { if (noFolder.includes(x.collection_id)) x.create_folder = true; });
+    else assignments = assignments.filter(x => !noFolder.includes(x.collection_id));
+  }
   if (!assignments.length) { api("/import/" + sid, { method: "DELETE" }); return; }
-  assignments.forEach(a => busyTile(a.item_id + "|" + a.slot, true));
+  const items = assignments.filter(x => x.item_id);
+  items.forEach(x => busyTile(x.item_id + "|" + x.slot, true));
   try {
     const r = await api(`/import/${sid}/apply`, { json: { assignments } });
     if (r.done.length) toast(T("{0} gespeichert ✓", pl(r.done.length, "Asset", "Assets")), "ok");
     r.failed.forEach(f => toast(f.error, "bad"));
     r.done.filter(d => d.warning).forEach(d => toast(T("Plex: ") + d.warning, "bad"));
-    assignments.forEach(a => S.rain.add(a.item_id + "|" + a.slot));
+    items.forEach(x => S.rain.add(x.item_id + "|" + x.slot));
     S.st.summary = r.summary; updateHero();
-    if (onDone) onDone(await api("/items/" + assignments[0].item_id));
+    if (onDone) onDone(items.length ? await api("/items/" + items[0].item_id) : undefined);
     await loadItems(); renderGrid();
-  } catch (e) { toast(e.message, "bad"); } finally { assignments.forEach(a => busyTile(a.item_id + "|" + a.slot, false)); }
+  } catch (e) { toast(e.message, "bad"); } finally { items.forEach(x => busyTile(x.item_id + "|" + x.slot, false)); }
 }
 
 /** "Staffeln 1–3, 5" / "Staffel 3" / "Specials, Staffel 2": readable list of season numbers (0 = Specials). */
@@ -1748,10 +1835,13 @@ function checkSet(t, rows) {
 }
 
 function reviewImport(res, onDone, fixed) {
-  const rows = res.entries.map(e => ({ ...e, use: !!e.item_id && e.kind !== "ignore" }));
+  const rows = res.entries.map(e => ({ ...e, use: !!(e.item_id || e.collection_id) && e.kind !== "ignore" }));
+  const colInfo = { ...(res.collections || {}) };          // collections some file is assigned to: { id, title, total, poster: { folder, exists } }
+  const keyOf = r => r.collection_id ? "col:" + r.collection_id : r.item_id + "|" + r.slot;       // what a file occupies: a tile, or the poster of a collection
+  const assigned = r => !!(r.item_id || r.collection_id);
   // two files for one tile: prefer the one named exactly "Title (Year)" (the other is probably a collection poster) and untick the rest
   const byTile = new Map();
-  rows.filter(r => r.use).forEach(r => { const k = r.item_id + "|" + r.slot; byTile.set(k, [...(byTile.get(k) || []), r]); });
+  rows.filter(r => r.use && r.item_id).forEach(r => { const k = r.item_id + "|" + r.slot; byTile.set(k, [...(byTile.get(k) || []), r]); });
   const norm = t => normText(t).replace(/[^a-z0-9]+/g, " ").trim();
   byTile.forEach(rs => {
     if (rs.length < 2) return;
@@ -1765,7 +1855,7 @@ function reviewImport(res, onDone, fixed) {
   if (Object.values(targets).some(t => (t.collections || []).length)) {
     api(`/collections?world=${res.world}`).then(r => { colMap = Object.fromEntries(r.collections.map(g => [g.id, g])); draw(); }).catch(() => {});
   }
-  const count = () => rows.filter(r => r.use && r.item_id).length;
+  const count = () => rows.filter(r => r.use && assigned(r)).length;
   const apply = h("button", { class: "btn primary" });
   let dupBlock = false;     // two files for the same tile: the review must be fixed first (a tile holds one image)
   const refreshBtn = () => {
@@ -1779,12 +1869,13 @@ function reviewImport(res, onDone, fixed) {
   const dupSlots = () => { const c = {}; rows.filter(r => r.use && r.item_id).forEach(r => { c[r.slot] = (c[r.slot] || 0) + 1; }); return c; };
 
   function buildRow(r, dups) {
-    const t = r.item_id ? targets[r.item_id] : null;
+    const t = r.item_id ? targets[r.item_id] : null, ci = r.collection_id ? colInfo[r.collection_id] : null;
     const sel = h("select", { onchange: e => { r.slot = e.target.value; draw(); } });
     const fillSlots = opts => fill(sel, opts.map(o => h("option", { value: o.slot, selected: o.slot === r.slot }, o.label)));
-    const input = h("input", { type: "text", placeholder: T("Titel suchen …"), value: r.item_id ? `${r.item_title}${r.item_year ? " (" + r.item_year + ")" : ""}` : "" });
+    const input = h("input", { type: "text", placeholder: T("Titel suchen …"), value: r.collection_id ? r.collection_title : r.item_id ? `${r.item_title}${r.item_year ? " (" + r.item_year + ")" : ""}` : "" });
     const list2 = h("div", { class: "list", hidden: true });
-    if (fixed && r.item_id) fillSlots(fixedSlots());
+    if (r.collection_id) fillSlots([{ slot: "collection", label: T("Collection-Poster") }]);
+    else if (fixed && r.item_id) fillSlots(fixedSlots());
     else if (r.item_id) {
       fillSlots([{ slot: r.slot, label: slotLabel(r.slot, t ? t.type : "show") }]);
       api(`/slots?world=${res.world}&q=` + encodeURIComponent(r.item_title || "")).then(os => { const o = os.find(x => x.id === r.item_id); if (o) fillSlots(o.slots); });
@@ -1793,18 +1884,26 @@ function reviewImport(res, onDone, fixed) {
       const opts = await api(`/slots?world=${res.world}&q=` + encodeURIComponent(input.value));
       list2.hidden = !opts.length;
       fill(list2, opts.map(o => h("div", { onclick: async () => {
+        if (o.collection) {                                       // the poster of a Plex collection
+          colInfo[o.collection_id] = { id: o.collection_id, title: o.title, total: o.total, poster: o.poster };
+          r.collection_id = o.collection_id; r.collection_title = o.title; r.item_id = null; r.slot = "collection"; r.use = true; list2.hidden = true; draw(); return;
+        }
+        r.collection_id = null; r.collection_title = null;
         r.item_id = o.id; r.item_title = o.title; r.item_year = o.year; r.use = true;
         const want = r.kind === "poster" ? "poster" : r.season != null ? "season-" + r.season : "poster";
         r.slot = o.slots.some(s => s.slot === want) ? want : "poster";
         list2.hidden = true; await ensureTarget(o.id); draw();
-      } }, `${o.title}${o.year ? " (" + o.year + ")" : ""} `, h("span", { class: "pill" }, o.type === "movie" ? T("Film") : T("Serie")))));
+      } }, `${o.title}${o.year ? " (" + o.year + ")" : ""} `, h("span", { class: "pill" }, o.collection ? T("Collection") : o.type === "movie" ? T("Film") : T("Serie")))));
     }, 200);
     input.onblur = () => setTimeout(() => (list2.hidden = true), 150);
     const chk = h("input", { type: "checkbox", checked: r.use, title: T("Übernehmen"), onchange: e => { r.use = e.target.checked; draw(); } });
     const pills = [];
+    if (r.use && ci && ci.poster && ci.poster.exists) pills.push(h("span", { class: "pill warn", title: T("Das Collection-Poster ist schon da und wird ersetzt") }, T("ersetzt vorhandenes Bild")));
+    if (r.use && ci && ci.poster && !ci.poster.folder) pills.push(h("span", { class: "pill warn", title: T("Der Ordner der Collection wird nach Rückfrage angelegt") }, T("Ordner fehlt noch")));
+    if (r.use && ci && !ci.poster) pills.push(h("span", { class: "pill bad", title: T("Für diese Welt ist kein Collection-Ordner bekannt (Einstellungen → Welten)") }, T("kein Collection-Ordner")));
     if (r.use && t && t.slots[r.slot] && t.slots[r.slot].exists) pills.push(h("span", { class: "pill warn", title: T("Für diese Kachel gibt es schon ein Bild") }, T("ersetzt vorhandenes Bild")));
-    if (r.collection && !r.item_id) pills.push(h("span", { class: "pill warn", title: T("Der Dateiname deutet auf ein Collection-/Sammlungs-Poster hin – bitte selbst einen Titel wählen oder das Bild nicht übernehmen") }, T("vermutlich Collection-Poster")));
-    if (r.use && r.item_id && dups[r.item_id + "|" + r.slot] > 1) pills.push(h("span", { class: "pill bad", title: T("Mehrere Dateien für dieselbe Kachel – nur die letzte bleibt") }, T("doppelt belegt")));
+    if (r.collection && !r.item_id && !r.collection_id) pills.push(h("span", { class: "pill warn", title: T("Der Dateiname deutet auf ein Collection-/Sammlungs-Poster hin – bitte selbst einen Titel wählen oder das Bild nicht übernehmen") }, T("vermutlich Collection-Poster")));
+    if (r.use && assigned(r) && dups[keyOf(r)] > 1) pills.push(h("span", { class: "pill bad", title: T("Mehrere Dateien für dieselbe Kachel – nur die letzte bleibt") }, T("doppelt belegt")));
     if (r.autoSkipped && !r.use) pills.push(h("span", { class: "pill warn", title: T("Für diese Kachel gibt es eine Datei, die genau „Titel (Jahr)“ heißt – sie wurde bevorzugt") }, T("abgewählt: genauer Treffer vorhanden")));
     return h("div", { class: "imp" + (r.use ? "" : " skip") },
       h("img", { src: `/api/import/${res.session}/${r.id}`, loading: "lazy" }),
@@ -1817,10 +1916,11 @@ function reviewImport(res, onDone, fixed) {
 
   function draw() {
     const dups = {};
-    rows.filter(r => r.use && r.item_id).forEach(r => { const k = r.item_id + "|" + r.slot; dups[k] = (dups[k] || 0) + 1; });
+    rows.filter(r => r.use && assigned(r)).forEach(r => { const k = keyOf(r); dups[k] = (dups[k] || 0) + 1; });
     // groups: one per series (with the completeness check), movies, and everything without a title
-    const series = new Map(), movies = [], loose = [], cols = new Map();
+    const series = new Map(), movies = [], loose = [], cols = new Map(), colPosters = [];
     for (const r of rows) {
+      if (r.collection_id) { colPosters.push(r); continue; }
       const t = r.item_id ? targets[r.item_id] : null;
       if (t && t.type === "show") { if (!series.has(r.item_id)) series.set(r.item_id, []); series.get(r.item_id).push(r); }
       else if (t) {
@@ -1832,7 +1932,7 @@ function reviewImport(res, onDone, fixed) {
     }
     const checks = [...series].map(([id, rs]) => ({ id, rs, t: targets[id], chk: checkSet(targets[id], rs.filter(r => r.use)) }));
     const dupN = checks.filter(c => c.chk.dups).length, okN = checks.filter(c => c.chk.ok).length, incN = checks.length - okN - dupN;
-    const movieDup = movies.some(r => r.use && dups[r.item_id + "|" + r.slot] > 1);
+    const movieDup = movies.some(r => r.use && dups[keyOf(r)] > 1);
     dupBlock = Object.values(dups).some(n => n > 1);
     fill(summary,
       checks.length > 1 ? h("div", { class: "setsum" }, h("b", {}, pl(checks.length, "Serie", "Serien") + ":"),
@@ -1849,7 +1949,7 @@ function reviewImport(res, onDone, fixed) {
       [...cols].sort((x, y) => colMap[x[0]].total - colMap[y[0]].total).map(([cid, rs]) => {
         const g = colMap[cid], used = new Set(rs.filter(r => r.use).map(r => r.item_id));
         const lacking = g.members.filter(mb => !mb.has_poster && !used.has(mb.id));
-        const dupC = rs.some(r => r.use && dups[r.item_id + "|" + r.slot] > 1);
+        const dupC = rs.some(r => r.use && dups[keyOf(r)] > 1);
         return group(`${g.title} · ${pl(rs.length, "Bild", "Bilder")}`,
           [h("span", { class: "pill " + (dupC ? "bad" : lacking.length ? "warn" : "ok") }, dupC ? T("doppelt belegt") : lacking.length ? T("{0} von {1} ohne Poster", lacking.length, g.total) : T("Collection vollständig")),
             h("button", { class: "btn ghost sm", title: T("Diese Collection ausblenden (gilt auch im Reiter „Collections“) – z. B. eine Sammel-Collection, die keine Filmreihe ist"),
@@ -1857,6 +1957,7 @@ function reviewImport(res, onDone, fixed) {
           true, rs.map(r => buildRow(r, dups)), [{ cls: lacking.length ? "warn" : "ok",
             text: lacking.length ? T("Plex-Collection „{0}“: es fehlt noch ein Poster für {1}", g.title, lacking.map(x => x.title + (x.year ? " (" + x.year + ")" : "")).join(", ")) : T("Plex-Collection „{0}“: alle {1} Filme haben ein Poster", g.title, g.total) }]);
       }),
+      colPosters.length ? group(T("Collection-Poster · {0}", pl(colPosters.length, "Bild", "Bilder")), colPosters.some(r => r.use && dups[keyOf(r)] > 1) ? h("span", { class: "pill bad" }, T("doppelt belegt")) : null, true, colPosters.map(r => buildRow(r, dups))) : null,
       movies.length ? group(T("Filme · {0}", pl(movies.length, "Bild", "Bilder")), movieDup ? h("span", { class: "pill bad" }, T("doppelt belegt")) : null, true, movies.map(r => buildRow(r, dups))) : null,
       loose.length ? group(`${checks.length || movies.length ? T("Nicht zugeordnet") : T("Bilder")} · ${pl(loose.length, "Bild", "Bilder")}`, loose.some(r => r.kind !== "ignore") ? h("span", { class: "pill warn" }, T("bitte Titel wählen")) : null, true, loose.map(r => buildRow(r, dups))) : null);
     refreshBtn();
@@ -1867,8 +1968,8 @@ function reviewImport(res, onDone, fixed) {
       : T("Zuordnung automatisch anhand von Datei- und Ordnernamen (nur Titel dieser Welt). Prüfe oder ändere sie – die Dateien werden Kometa-konform benannt (poster, Season01 …).")), summary, list),
     [apply, h("button", { class: "btn", onclick: () => { api("/import/" + res.session, { method: "DELETE" }); m.close(); } }, T("Abbrechen")),
       h("span", { class: "spacer" }),
-      h("span", { class: "hint" }, T("{0} von {1} zugeordnet", rows.filter(r => r.item_id).length, rows.length))]);
-  apply.onclick = async () => { m.close(); await applyImport(res.session, rows.filter(r => r.use && r.item_id), onDone); };
+      h("span", { class: "hint" }, T("{0} von {1} zugeordnet", rows.filter(assigned).length, rows.length))]);
+  apply.onclick = async () => { m.close(); await applyImport(res.session, rows.filter(r => r.use && assigned(r)), onDone, colInfo); };
 }
 
 /* ======================================================= wizard / setup === */

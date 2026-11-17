@@ -98,3 +98,16 @@ def write_poster(world: dict, name: str, data: bytes, create: bool, undo: dict) 
         if other != target and other.exists():
             other.unlink()
     return target, ""
+
+
+def delete_poster(world: dict, name: str, undo: dict) -> bool:
+    """Take the poster of a collection away (into the trash, so it can be restored). False when there is none."""
+    root = root_for(world)
+    folder = folder_of(root, name) if root else None
+    poster = poster_of(folder) if folder else None
+    if not poster:
+        return False
+    gid = trash.begin("delete", item_id=None, world=world.get("id"), title=name, slot="poster", type="collection")
+    undo["gid"] = gid
+    trash.stash(gid, poster, move=True, label="poster")
+    return True

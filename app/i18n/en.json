@@ -911,5 +911,16 @@
 "Der Ordner „{0}“ existiert noch nicht im Collection-Ordner. Jetzt anlegen?": "The folder “{0}” does not exist in the collections folder yet. Create it now?",
 "Das Collection-Poster wurde nicht gespeichert: Der Ordner fehlt.": "The collection poster was not saved: the folder is missing.",
 "Collection-Poster und Ausschalten von Logo und Staffeltext": "Collection poster, and switching off logo and season text",
-"Der Collection-Builder baut jetzt auch das Poster der Collection selbst und legt es als Kometa-Asset im Collection-Ordner ab. Logo oder Titel und der Staffeltext lassen sich im Builder ausschalten.": "The collection builder now also builds the poster of the collection itself and stores it as a Kometa asset in the collections folder. Logo or title and the season text can be switched off in the builder."
+"Der Collection-Builder baut jetzt auch das Poster der Collection selbst und legt es als Kometa-Asset im Collection-Ordner ab. Logo oder Titel und der Staffeltext lassen sich im Builder ausschalten.": "The collection builder now also builds the poster of the collection itself and stores it as a Kometa asset in the collections folder. Logo or title and the season text can be switched off in the builder.",
+"Collection-Poster gespeichert ✓": "Collection poster saved ✓",
+"Collection-Poster · {0}": "Collection posters · {0}",
+"Das Collection-Poster ist schon da und wird ersetzt": "The collection poster already exists and will be replaced",
+"Der Ordner der Collection wird nach Rückfrage angelegt": "The collection's folder will be created after asking",
+"Ein Bild als Poster der Collection wählen (oder einfach auf die Kachel ziehen)": "Choose a picture as the collection poster (or just drop it on the tile)",
+"Für diese Collections gibt es im Collection-Ordner noch keinen Ordner: {0}. Jetzt anlegen?": "These collections have no folder in the collections folder yet: {0}. Create it now?",
+"Ordner fehlt noch": "Folder missing",
+"kein Collection-Ordner": "no collections folder",
+"Collection": "Collection",
+"Collection-Poster hochladen und per Drag & Drop": "Upload collection posters, also by drag & drop",
+"Im Reiter Collections zeigt jede Collection ihr eigenes Poster vorn; es lässt sich hochladen oder direkt auf die Kachel ziehen. In der Collection-Ansicht ist es die erste Kachel. Beim Import lassen sich Dateien einer Collection zuordnen.": "In the Collections tab every collection shows its own poster in front; upload it or drop a picture right onto the tile. In the collection view it is the first tile. During import, files can be assigned to a collection."
 }
