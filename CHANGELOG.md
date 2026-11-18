@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.13 – 2026-11-18
+
+**Changed**
+- Poster builder: the default “Title height” is 85 % instead of 82 % (logo or title sits a little lower; the season line moves with it). Saved looks keep their value
+
 ## 0.9.12 – 2026-11-18
 
 **New**
