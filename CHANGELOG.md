@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.12 – 2026-11-18
+
+**New**
+- Collections tab: sorted by name, filter “Missing” (collection poster missing and/or film posters missing, each with a count) and the A–Z bar above and below like in “All” (from 12 collections on)
+- Builder: “Compare” has a switch Built / Current / Both (current above built; space or arrow keys flip through), also for the collection poster; the button is also there for a single poster (movies)
+
+**Fixed**
+- Pictures that changed could still show the old one: the version in picture addresses is now exact (nanoseconds instead of seconds), so two saves within one second no longer share a cached picture; after the collection builder the view waits until the server shows the new versions before it redraws (matrix rain included)
+
+**Changed**
+- Collection posters in tiles load the small cached preview (like film posters) with lazy loading and a fade-in; preview and download still use the original
+
 ## 0.9.11 – 2026-11-17
 
 **New**

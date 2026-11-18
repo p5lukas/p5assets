@@ -572,7 +572,7 @@ def collection_overview(items: list[dict], q: str = "", hidden: set | frozenset 
         for c in it.get("collections") or []:
             g = groups.setdefault(c["id"], {"id": c["id"], "title": c["title"], "members": []})
             sl = it["slots"].get("poster", {})
-            g["members"].append({"id": it["id"], "title": it["title"], "year": it["year"], "has_poster": bool(sl.get("exists")), "v": sl.get("mtime") or 0})
+            g["members"].append({"id": it["id"], "title": it["title"], "year": it["year"], "has_poster": bool(sl.get("exists")), "v": sl.get("ver") or sl.get("mtime") or 0})
     nq = kometa.normalize(q) if q else ""
     out = []
     for g in groups.values():
@@ -630,7 +630,7 @@ async def collections_dir(world: str = ""):
 
 
 @app.get("/api/collection-poster")
-async def collection_poster(id: str, download: bool = False):
+async def collection_poster(id: str, download: bool = False, thumb: bool = False, v: str = ""):
     _, world, title = _collection_films(id)
     root = collection_assets.root_for(world)
     folder = collection_assets.folder_of(root, title) if root else None
@@ -639,6 +639,9 @@ async def collection_poster(id: str, download: bool = False):
         raise HTTPException(404, tr("Datei nicht gefunden"))
     if download:                                      # the original file, named like the other downloads
         return FileResponse(poster, filename=f"{collection_assets.safe_name(title)} - Collection{poster.suffix.lower()}", headers={"Cache-Control": "no-store"})
+    if thumb:                                         # the small cached preview for tiles, like for films
+        out = await asyncio.to_thread(thumbs.get, poster)
+        return FileResponse(out, media_type="image/jpeg" if out != poster else None, headers={"Cache-Control": "public, max-age=31536000, immutable"})
     return FileResponse(poster, headers={"Cache-Control": "no-cache"})
 
 

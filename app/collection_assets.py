@@ -83,7 +83,7 @@ def state(world: dict, name: str) -> dict | None:
     folder = folder_of(root, name)
     poster = poster_of(folder) if folder else None
     st = poster.stat() if poster else None
-    return {"folder": bool(folder), "exists": bool(poster), "v": int(st.st_mtime) if st else 0, "dir": folder.name if folder else name,
+    return {"folder": bool(folder), "exists": bool(poster), "v": str(st.st_mtime_ns) if st else 0, "mtime": int(st.st_mtime) if st else 0, "dir": folder.name if folder else name,
             "file": poster.name if poster else None, "size": st.st_size if st else 0}
 
 

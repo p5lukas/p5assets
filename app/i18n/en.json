@@ -934,5 +934,19 @@
 "Suchbegriff (Name der Collection)": "Search term (name of the collection)",
 "Bereich": "Section",
 "Überall Bauen, Collection-Poster vollständig": "Build everywhere, collection posters complete",
-"ThePosterDB und MediUX gibt es jetzt auch bei Collection-Postern, dazu Matrix-Regen, volle Vorschau und Herunterladen. „Bauen“ steht in jedem Menü und jeder Vorschau, die Reihenfolge der Aktionen ist überall gleich.": "ThePosterDB and MediUX are now also there for collection posters, plus matrix rain, a full preview and download. “Build” is in every menu and every preview, and the order of the actions is the same everywhere."
+"ThePosterDB und MediUX gibt es jetzt auch bei Collection-Postern, dazu Matrix-Regen, volle Vorschau und Herunterladen. „Bauen“ steht in jedem Menü und jeder Vorschau, die Reihenfolge der Aktionen ist überall gleich.": "ThePosterDB and MediUX are now also there for collection posters, plus matrix rain, a full preview and download. “Build” is in every menu and every preview, and the order of the actions is the same everywhere.",
+"Aktuelle Poster – anklicken zum Vergrößern": "Current posters – click to enlarge",
+"Aktuelle und gebaute Poster nebeneinander ansehen": "View current and built posters side by side",
+"Alle Collections ({0})": "All collections ({0})",
+"Anzeige": "View",
+"Beides": "Both",
+"Fehlend": "Missing",
+"Filmposter fehlen": "Film posters missing",
+"Gebaut": "Built",
+"Keine Collection passt zu diesem Filter.": "No collection matches this filter.",
+"Oben aktuell, unten gebaut – anklicken zum Vergrößern": "Current above, built below – click to enlarge",
+"keine Collections": "no collections",
+"Aktuell": "Current",
+"Collections filtern, Vergleich Aktuell/Gebaut, zuverlässige Bilder": "Filter collections, compare current/built, reliable pictures",
+"Im Reiter Collections gibt es den Filter „Fehlend“ und die A–Z-Leiste. Im Builder vergleicht „Vergleichen“ jetzt gebaute und aktuelle Poster. Geänderte Bilder erscheinen verlässlich neu, Collection-Poster laden als kleine Vorschau schneller.": "The Collections tab has the filter “Missing” and the A–Z bar. In the builder “Compare” now compares built and current posters. Changed pictures reliably show up anew, and collection posters load faster as a small preview."
 }

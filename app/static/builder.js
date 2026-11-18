@@ -679,7 +679,7 @@ function makeBuilder(opts) {
     const cp = slotOf(key).colPoster;
     if (cp) return cp.exists ? `/api/collection-poster?id=${encodeURIComponent(cp.cid)}&v=${cp.v}` : null;
     const item = itemOf(key), k = apiSlot(key), sl = item.slots[k];
-    return !sl ? null : sl.exists ? `/api/asset/${item.id}/${k}?v=${sl.mtime}` : sl.plex_thumb ? `/api/season-thumb/${item.id}/${k}` : null;
+    return !sl ? null : sl.exists ? `/api/asset/${item.id}/${k}?v=${sl.ver || sl.mtime}` : sl.plex_thumb ? `/api/season-thumb/${item.id}/${k}` : null;
   };
   const zoom = key => openZoom(slots, key, k => paint(k, true), currentUrl);
   function makeCard(s) {
@@ -776,7 +776,7 @@ function makeBuilder(opts) {
     slider(T("Abstand zum Titel"), "gap", 0, 0.1, 0.002, pct), slider(T("Texthöhe"), "seasonY", 0.03, 0.97, 0.005, pct),
     slider(T("Textgröße"), "seasonScale", 0.5, 2.4, 0.01, pct), slider(T("Laufweite"), "tracking", 0, 0.4, 0.005, pct));
   makeDropTarget(titleSec, logoFromFile);
-  const compareBtn = multi && slots.length > 1 ? h("button", { class: "btn sm", type: "button", title: T("Alle Poster nebeneinander ansehen"), onclick: () => openCompare(slots, k => paint(k, true, false, 360), k => { selectSlot(k); zoom(k); }) }, icon("eye", 14), T("Vergleichen")) : null;
+  const compareBtn = slots.length >= 1 ? h("button", { class: "btn sm", type: "button", title: T("Aktuelle und gebaute Poster nebeneinander ansehen"), onclick: () => openCompare(slots, k => paint(k, true, false, 360), k => { selectSlot(k); zoom(k); }, currentUrl) }, icon("eye", 14), T("Vergleichen")) : null;
   const controls = h("div", { class: "bcontrols" },
     h("div", { class: "bhead" }, h("span", { class: "hint", style: "margin:0" }, T("Bearbeitet:")), h("b", { class: "bedit" }), h("span", { class: "spacer" }), compareBtn),
     lookNote,
@@ -875,20 +875,43 @@ function openZoom(slots, startKey, render, current) {
   document.body.append(wrap); show();
 }
 
-/** All posters of the series in one row, to check that they belong together; a click opens the large view of that poster. */
-function openCompare(slots, render, onPick) {
-  const row = h("div", { class: "cmprow" });
+/** All posters in one row, to check that they belong together; a click opens the large view of that poster.
+ *  A switch shows the posters as built, the ones that are there now (current), or both (current above built). */
+function openCompare(slots, render, onPick, currentUrl) {
+  let mode = "built";
+  const row = h("div", { class: "cmprow" }), built = {};
+  const title = h("div", { class: "zoomtitle" });
+  const MODES = [["built", T("Gebaut")], ["current", T("Aktuell")], ["both", T("Beides")]];
+  const seg = h("div", { class: "segs cmpseg", role: "group", "aria-label": T("Anzeige") });
   const wrap = h("div", { class: "zoomwrap cmpwrap", onclick: e => { if (e.target === wrap || e.target === row) close(); } },
-    h("button", { class: "btn zoomclose", type: "button", "aria-label": T("Schließen"), onclick: () => close() }, "✕"), row,
-    h("div", { class: "zoomtitle" }, T("Alle Poster nebeneinander – anklicken zum Vergrößern")));
-  function onKey(e) { if (e.key !== "Escape") return; e.stopImmediatePropagation(); e.preventDefault(); close(); }
-  function close() { wrap.remove(); document.removeEventListener("keydown", onKey, true); }
-  for (const s of slots) {
-    const cell = h("button", { class: "cmpcell", type: "button", onclick: () => { close(); onPick(s.key); } },
-      h("div", { class: "cmpph" }, h("span", { class: "spin" })), h("span", { class: "cmplabel" }, s.label));
-    row.append(cell);
-    render(s.key).then(cv => cell.querySelector(".cmpph").replaceWith(cv));
+    h("button", { class: "btn zoomclose", type: "button", "aria-label": T("Schließen"), onclick: () => close() }, "✕"), seg, row, title);
+  function onKey(e) {
+    if (e.key === "Escape") { e.stopImmediatePropagation(); e.preventDefault(); close(); }
+    else if (currentUrl && (e.key === " " || e.key === "ArrowLeft" || e.key === "ArrowRight")) {          // space / arrows flip through the three views
+      e.stopImmediatePropagation(); e.preventDefault();
+      const k = MODES.findIndex(m => m[0] === mode); set(MODES[(k + (e.key === "ArrowLeft" ? MODES.length - 1 : 1)) % MODES.length][0]);
+    }
   }
+  function close() { wrap.remove(); document.removeEventListener("keydown", onKey, true); }
+  const builtCanvas = s => {                                         // each poster is drawn once; the switch only copies it
+    const ph = h("div", { class: "cmpph" }, h("span", { class: "spin" }));
+    (built[s.key] ||= render(s.key)).then(cv => { const c = document.createElement("canvas"); c.width = cv.width; c.height = cv.height; c.getContext("2d").drawImage(cv, 0, 0); ph.replaceWith(c); });
+    return ph;
+  };
+  const currentEl = s => {
+    const url = currentUrl && currentUrl(s.key);
+    return url ? h("img", { class: "cmpimg", alt: "", src: url, loading: "lazy" }) : h("div", { class: "cmpph missing" }, T("fehlt"));
+  };
+  function draw() {
+    fill(seg, MODES.map(([m, label]) => h("button", { class: "seg" + (mode === m ? " on" : ""), type: "button", "aria-pressed": String(mode === m), onclick: () => set(m) }, label)));
+    seg.hidden = !currentUrl;
+    row.classList.toggle("both", mode === "both");
+    title.textContent = mode === "current" ? T("Aktuelle Poster – anklicken zum Vergrößern") : mode === "both" ? T("Oben aktuell, unten gebaut – anklicken zum Vergrößern") : T("Alle Poster nebeneinander – anklicken zum Vergrößern");
+    fill(row, slots.map(s => h("button", { class: "cmpcell", type: "button", onclick: () => { close(); onPick(s.key); } },
+      mode === "current" ? currentEl(s) : mode === "both" ? [currentEl(s), builtCanvas(s)] : builtCanvas(s), h("span", { class: "cmplabel" }, s.label))));
+  }
+  function set(m) { mode = m; draw(); }
+  draw();
   document.addEventListener("keydown", onKey, true);
   document.body.append(wrap);
 }
@@ -920,7 +943,7 @@ function openCollectionBuilder({ data, drawer, close, back, start }) {
     // the poster of the collection itself comes first (only when the world has a collections folder): the name of the collection as the title
     if (data.poster) slots.unshift({ key: "__col", season: null, label: T("Collection-Poster"), item: data.members[0], title: data.title, colPoster: { cid: data.id, exists: data.poster.exists, v: data.poster.v, members: data.members.map(m => ({ id: m.id, title: m.title })) } });
     const pseudo = { id: data.builder_key, title: data.title, type: "collection", slots: {} };
-    const b = makeBuilder({ item: pseudo, builderKey: data.builder_key, collection: true, multi: true, start, slots, onSaved: () => back(), onCancel: () => back() });
+    const b = makeBuilder({ item: pseudo, builderKey: data.builder_key, collection: true, multi: true, start, slots, onSaved: (last, keys) => back(keys), onCancel: () => back() });
     fill(drawer, h("header", {}, h("button", { class: "btn ghost", "aria-label": T("Schließen"), onclick: close }, "✕"),
       h("div", { class: "grow" }, h("h2", {}, T("Poster bauen – {0}", data.title)), h("div", { class: "hint", style: "margin:2px 0" }, T("Alle Filme der Collection in einem Look: Hintergrund, Logo oder Titel"),
         data.poster ? null : [" · ", T("Für das Poster der Collection selbst: Collection-Ordner unter Einstellungen → Welten angeben")]))),

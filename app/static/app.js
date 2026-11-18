@@ -195,7 +195,7 @@ function icon(name, size = 18) {
 
 /* ------------------------------------------------------------ state --- */
 const DEFAULT_FILTER = "plexmissing";   // what a Plex user sees first: titles that are in Plex but have no poster
-const S = { st: null, langs: [], items: [], total: 0, filter: DEFAULT_FILTER, q: "", lib: "", letter: null, letters: {}, allTotal: 0, req: 0, pending: 0, ctl: null, stats: null, nopost: false, io: null, hist: [], dimTries: 0, world: "", poll: null, step: "", reached: 0, rain: new Set(), view: "" };
+const S = { st: null, langs: [], items: [], total: 0, filter: DEFAULT_FILTER, q: "", lib: "", letter: null, letters: {}, allTotal: 0, req: 0, pending: 0, ctl: null, stats: null, nopost: false, io: null, hist: [], dimTries: 0, world: "", poll: null, step: "", reached: 0, rain: new Set(), view: "", colFilter: "all", colLetter: "" };
 const cfg = () => S.st.config;
 const curWorld = () => cfg().worlds.find(w => w.id === S.world) || cfg().worlds[0];
 const weakDefault = { wOn: true, w: 1000, rOn: true };
@@ -233,6 +233,7 @@ async function savePatch(patch) { const r = await api("/config", { json: { patch
 const weakParams = () => { const c = weakCfg(), p = {}; if (c.wOn) p.weak_w = c.w; if (c.rOn) p.weak_r = "1"; return p; };
 /** A search always covers ALL titles of the world, whatever tab is open (the tab only applies without a search). */
 const effFilter = () => S.q.trim() ? "all" : S.filter;
+const COL_AZ_MIN = 12;   // collections: the A–Z bar already helps with a dozen
 const AZ_MIN = 150;   // from this many titles on the list is split by first letter instead of one endless page
 async function loadItems(append = false) {
   // S.lib is "lib:<Plex library>" or "src:<Sonarr/Radarr instance>"
@@ -837,7 +838,35 @@ function setLetter(l, fromBottom) {
 }
 
 /** A–Z bar above and below the grid (only tab "Alle", only for big lists, hidden while a search is active). */
+/** Collections tab: sorted by name, filtered by state ("Fehlend": poster of the collection and/or posters of its films) and by first letter. */
+const colLetterOf = t => { const c = (t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().charAt(0).toUpperCase(); return /[A-Z]/.test(c) ? c : "#"; };
+const colMissingPoster = g => !!(g.poster && !g.poster.exists), colMissingFilms = g => g.with_poster < g.total;
+const COL_FILTERS = [["all", () => true], ["missing", g => colMissingPoster(g) || colMissingFilms(g)], ["poster", colMissingPoster], ["films", colMissingFilms]];
+function colView() {
+  const sorted = [...(S.collections || [])].sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: "base", numeric: true }));
+  const pass = (COL_FILTERS.find(f => f[0] === S.colFilter) || COL_FILTERS[0])[1];
+  const filtered = sorted.filter(pass), letters = {};
+  filtered.forEach(g => { const l = colLetterOf(g.title); letters[l] = (letters[l] || 0) + 1; });
+  const useLetters = filtered.length > COL_AZ_MIN && !S.q.trim();
+  const letter = useLetters && letters[S.colLetter] ? S.colLetter : "";
+  return { sorted, filtered, letters, useLetters, letter, list: letter ? filtered.filter(g => colLetterOf(g.title) === letter) : filtered };
+}
+function setColLetter(l, fromBottom) {
+  S.colLetter = l; renderAz(); renderGrid();
+  if (fromBottom) window.scrollTo({ top: Math.max(0, ($("#az").offsetTop || 0) - 80), behavior: "smooth" });
+}
 function renderAz() {
+  if (S.filter === "collections") {
+    const v = colView();
+    for (const [id, bottom] of [["#az", false], ["#az2", true]]) {
+      const el = $(id); if (!el) continue;
+      el.hidden = !v.useLetters;
+      if (!v.useLetters) { el.replaceChildren(); continue; }
+      const b = (label, l, n) => h("button", { class: "az" + (v.letter === l ? " on" : ""), disabled: l !== "" && !n, title: l === "" ? T("Alle Collections ({0})", v.filtered.length) : n ? pl(n, "Collection", "Collections") : T("keine Collections"), onclick: () => setColLetter(l, bottom) }, label);
+      fill(el, b(T("Alle"), "", v.filtered.length), b("#", "#", v.letters["#"]), "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").map(c => b(c, c, v.letters[c])));
+    }
+    return;
+  }
   const show = S.filter === "all" && !S.q.trim() && S.allTotal > AZ_MIN;   // letters only in the tab "Alle"
   for (const [id, bottom] of [["#az", false], ["#az2", true]]) {
     const el = $(id); if (!el) continue;
@@ -856,7 +885,12 @@ function renderGrid() {
   const g = $("#grid"); if (!g) return;
   if (S.filter === "collections") {
     S.cards = new Map();
-    fill(g, (S.collections || []).length ? h("div", { class: "colsgrid" }, S.collections.map(collectionTile))
+    const v = colView(), all = S.collections || [];
+    const names = { all: T("Alle"), missing: T("Fehlend"), poster: T("Collection-Poster fehlt"), films: T("Filmposter fehlen") };
+    const bar = all.length ? h("div", { class: "colfilters" }, COL_FILTERS.map(([k, f]) => h("button", { class: "chip" + (S.colFilter === k ? " on" : ""), type: "button",
+      onclick: () => { S.colFilter = k; S.colLetter = ""; renderAz(); renderGrid(); } }, names[k], h("small", {}, String(all.filter(f).length))))) : null;
+    fill(g, bar, v.list.length ? h("div", { class: "colsgrid" }, v.list.map(collectionTile))
+      : all.length ? h("div", { class: "empty" }, h("div", { class: "big term" }, T("[ OK ]")), h("h2", {}, T("Alles vollständig!")), T("Keine Collection passt zu diesem Filter."))
       : h("div", { class: "empty" }, h("h2", {}, T("Keine Collections gefunden.")), T("Es erscheinen nur Plex-Collections mit mindestens zwei Filmen. Ausgeblendete findest du unter Einstellungen → Bibliotheken.")));
     return;
   }
@@ -912,7 +946,7 @@ function posterBox(item, slot, known = true) {
   const wrap = h("div", { class: "poster" + (!exists && known ? " miss" : ""), "data-key": item.id + "|" + slot });
   const placeholder = txt => wrap.append(h("div", { class: "ph" }, h("div", {}, h("b", {}, "＋"), txt)));
   if (exists) {
-    wrap.append(h("img", { loading: "lazy", alt: "", draggable: false, src: `/api/thumb/${item.id}/${slot}?v=${sl.mtime}`, onload: e => e.target.classList.add("loaded"),
+    wrap.append(h("img", { loading: "lazy", alt: "", draggable: false, src: `/api/thumb/${item.id}/${slot}?v=${sl.ver || sl.mtime}`, onload: e => e.target.classList.add("loaded"),
       onerror: e => { e.target.remove(); placeholder(T("Bild defekt")); } }));
   } else if (item.in_plex && known && sl && sl.plex_thumb) {
     wrap.append(h("img", { loading: "lazy", alt: "", draggable: false, src: `/api/season-thumb/${item.id}/${slot}`, onload: e => { e.target.classList.add("loaded"); wrap.append(h("span", { class: "badge warn b", title: T("Nur Vorschau aus Plex (kann Overlays enthalten) – kein Kometa-Asset, nicht kopierbar") }, T("Plex-Vorschau"))); },
@@ -1154,7 +1188,7 @@ function slotActions(it, key, box, draw, extra) {
  *  (Plex preview or a placeholder, with "Ersetzen" / "Online suchen"). */
 function openPreview(it, key, draw) {
   const sl = it.slots[key] || {}, exists = !!sl.exists;
-  const src = exists ? `/api/asset/${it.id}/${key}?v=${sl.mtime}` : sl.plex_thumb ? `/api/season-thumb/${it.id}/${key}` : "";
+  const src = exists ? `/api/asset/${it.id}/${key}?v=${sl.ver || sl.mtime}` : sl.plex_thumb ? `/api/season-thumb/${it.id}/${key}` : "";
   const fmtSize = b => b >= 1048576 ? (b / 1048576).toFixed(2) + T(" MB") : Math.round(b / 1024) + T(" KB");
   const res = h("dd", {}, "…");
   const rows = [
@@ -1254,7 +1288,7 @@ function openCollectionPreview(g, change) {
   const fmtSize = b => b >= 1048576 ? (b / 1048576).toFixed(2) + T(" MB") : Math.round(b / 1024) + T(" KB");
   const res = h("dd", {}, "…");
   const rows = [[T("Titel"), g.title], [T("Slot"), T("Collection-Poster")], [T("Kometa-Ordner"), p.dir || "—"],
-    [T("Datei"), p.file || "—"], [T("Größe"), fmtSize(p.size || 0)], [T("Geändert"), new Date(p.v * 1000).toLocaleString(LOCALE)], [T("Format"), ((p.file || "").split(".").pop() || "").toUpperCase()]];
+    [T("Datei"), p.file || "—"], [T("Größe"), fmtSize(p.size || 0)], [T("Geändert"), new Date((p.mtime || 0) * 1000).toLocaleString(LOCALE)], [T("Format"), ((p.file || "").split(".").pop() || "").toUpperCase()]];
   const wrap = h("div", { class: "modalwrap lightbox", onclick: e => { if (e.target === wrap) close(); } },
     h("div", { class: "lbox" },
       h("header", { class: "lbhead" }, h("h2", { class: "grow" }, T("Vorschau")), h("button", { class: "btn ghost sm", "aria-label": T("Schließen"), onclick: () => close() }, "✕")),
@@ -1314,7 +1348,7 @@ function collectionTile(g) {
   function drawFront() {
     const p = g.poster;
     front.classList.toggle("empty", !(p && p.exists));
-    fill(front, p && p.exists ? h("img", { loading: "lazy", alt: "", class: "loaded", draggable: false, src: `/api/collection-poster?id=${encodeURIComponent(g.id)}&v=${p.v}` })
+    fill(front, p && p.exists ? h("img", { loading: "lazy", alt: "", draggable: false, src: `/api/collection-poster?id=${encodeURIComponent(g.id)}&v=${p.v}&thumb=1`, onload: e => e.target.classList.add("loaded") })
       : h("div", { class: "ph" }, h("div", {}, h("b", {}, "＋"), p ? T("Collection-Poster fehlt") : T("kein Collection-Ordner"))),
       p ? collectionActions(g, front, set) : null);
     if (S.rain.has("colposter|" + g.id)) { S.rain.delete("colposter|" + g.id); front.append(rainEl()); }
@@ -1350,7 +1384,7 @@ function collectionPosterCard(data, reload) {
   const p = data.poster, cid = data.id;
   if (!p) return h("div", { class: "card colposter nodir" }, h("div", { class: "poster miss" }, h("div", { class: "ph" }, h("div", {}, h("b", {}, "–"), T("kein Collection-Ordner")))), h("div", { class: "info" }, h("div", { class: "t" }, T("Collection-Poster")), h("div", { class: "s" }, COLPOSTER_NO_DIR())));
   const box = h("div", { class: "poster" + (p.exists ? "" : " miss") }, p.exists
-    ? h("img", { alt: "", class: "loaded", draggable: false, src: `/api/collection-poster?id=${encodeURIComponent(cid)}&v=${p.v}` })
+    ? h("img", { loading: "lazy", alt: "", draggable: false, src: `/api/collection-poster?id=${encodeURIComponent(cid)}&v=${p.v}&thumb=1`, onload: e => e.target.classList.add("loaded") })
     : h("div", { class: "ph" }, h("div", {}, h("b", {}, "＋"), T("fehlt"))));
   const g = { ...data, build: () => openCollection(cid, { build: true }) };
   if (S.rain.has("colposter|" + cid)) { S.rain.delete("colposter|" + cid); box.append(rainEl()); }
@@ -1403,8 +1437,21 @@ async function openCollection(cid, opts = {}) {
     api("/status").then(r => { S.st.summary = r; updateHero(); });
     loadItems().then(renderGrid);
   }
-  const reload = async () => { try { data = await api("/collection?id=" + encodeURIComponent(cid)); draw(); } catch { close(); } };
-  const startBuilder = start => openCollectionBuilder({ data, drawer, close, start, back: () => matrixSwap(reload) });
+  const verOf = (d, key) => key === "__col" ? d.poster && d.poster.v : ((d.members.find(m => m.id === key) || {}).slots || {}).poster?.ver;
+  // changed = tiles that were just saved: wait until the server shows their new version (never draw the old picture again)
+  const reload = async (changed = []) => {
+    changed = Array.isArray(changed) ? changed.filter(k => typeof k === "string") : [];
+    const was = Object.fromEntries(changed.map(k => [k, verOf(data, k)]));
+    try {
+      for (let n = 0; n < 5; n++) {
+        data = await api("/collection?id=" + encodeURIComponent(cid));
+        if (changed.every(k => verOf(data, k) !== was[k])) break;
+        await new Promise(r => setTimeout(r, 400));
+      }
+      draw();
+    } catch { close(); }
+  };
+  const startBuilder = start => openCollectionBuilder({ data, drawer, close, start, back: keys => matrixSwap(() => reload(Array.isArray(keys) ? keys : [])) });
   const pill = h("span", {});
   const refreshPill = () => {
     const have = data.members.filter(m => m.slots.poster && m.slots.poster.exists).length, total = data.members.length;
@@ -1468,7 +1515,7 @@ function openApplyAll(it, key, draw) {
   const allRow = h("label", { class: "opt" }, allRadio, h("div", {}, T("Alle Kacheln bis Season"), limitInput, allSub));
   const m = modal(T("„{0}“ für {1} auf andere Kacheln anwenden", label, it.title), h("div", {},
     h("div", { class: "row", style: "margin-bottom:6px" },
-      h("img", { src: `/api/thumb/${it.id}/${key}?v=${it.slots[key].mtime}`, alt: "", style: "width:64px;border-radius:6px;border:1px solid var(--line)" }),
+      h("img", { src: `/api/thumb/${it.id}/${key}?v=${it.slots[key].ver || it.slots[key].mtime}`, alt: "", style: "width:64px;border-radius:6px;border:1px solid var(--line)" }),
       h("div", { class: "hint" }, T("Das Bild wird kopiert und jede Kopie Kometa-konform benannt (poster, Season00, Season01 …). Das Original bleibt unverändert."))),
     h("label", { class: "f" }, T("Welche Kacheln?")),
     radio("range", "known", T("Nur vorhandene Kacheln dieser Serie"), T("{0} (Poster + bekannte Staffeln laut Plex/Sonarr)", pl(known, "weitere Kachel", "weitere Kacheln")), opt.range === "known", v => { opt.range = v; }),

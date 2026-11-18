@@ -58,7 +58,7 @@ def _rel(p: Path, root: Path) -> str:
 
 def _slot_info(f: Path, root: Path) -> dict:
     st = f.stat()
-    out = {"exists": True, "mtime": int(st.st_mtime), "size": st.st_size, "file": _rel(f, root), "path": str(f)}
+    out = {"exists": True, "mtime": int(st.st_mtime), "ver": f"{st.st_mtime_ns}", "size": st.st_size, "file": _rel(f, root), "path": str(f)}
     d = dims.peek(str(f), int(st.st_mtime), st.st_size)      # cached only: reading headers of thousands of files happens after the scan
     if d:
         out["w"], out["h"] = d
