@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.16 – 2026-11-25
+
+**Fixed**
+- Dropping files: the dashed frames and the text on a tile (“Release: …”) could stay on after the drag was over. The drag state is no longer counted from enter / leave events (they get lost on Esc, a drop outside the window, a redrawn view or in other browsers) but derived from the events that keep coming; it resets itself shortly after they stop, and at once on a mouse move, a key, losing focus or leaving the tab
+
+**Changed**
+- “Preview” is gone from the hover menus: click (or Enter) on the poster opens it. On touch screens the first tap shows the bar, the second tap on the picture opens the preview, a tap elsewhere hides the bar. The poster in the fan of the Collections tab keeps “Preview” in its menu (a click there opens the collection)
+
 ## 0.9.15 – 2026-11-25
 
 **New**

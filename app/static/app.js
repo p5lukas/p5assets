@@ -1066,8 +1066,9 @@ function card(item, local, extra) {
     box.addEventListener("pointerenter", ensure, { once: true });
     box.onclick = () => {
       ensure();
-      if (matchMedia("(hover: none)").matches) toggleActions(box); else openPreview(item, "poster", changed);
+      if (matchMedia("(hover: none)").matches) tapPoster(box, () => openPreview(item, "poster", changed)); else openPreview(item, "poster", changed);
     };
+    focusablePoster(box, item.title);
     makeDropTarget(el, files => uploadSlot(item, "poster", files, changed), T("Loslassen: Poster ersetzen"));
   } else if (movie) {
     box.onclick = () => openPreview(item, "poster", changed);
@@ -1161,8 +1162,9 @@ async function openItem(id) {
     // click on the picture itself: preview (existing) / file dialog (empty); touch screens have no hover, so a tap shows the buttons first
     box.onclick = () => {
       if (selMode) { if (!exists) return; sel.has(key) ? sel.delete(key) : sel.add(key); draw(it); return; }
-      if (matchMedia("(hover: none)").matches) toggleActions(box); else if (exists) openPreview(it, key, draw); else pick();
+      if (matchMedia("(hover: none)").matches) { if (exists) tapPoster(box, () => openPreview(it, key, draw)); else toggleActions(box); } else if (exists) openPreview(it, key, draw); else pick();
     };
+    focusablePoster(box, `${it.title} - ${slotLabel(key, it.type)}`);
     if (selMode && exists) { box.classList.add("selectable"); if (sel.has(key)) box.classList.add("selected"); box.append(h("span", { class: "selmark" }, sel.has(key) ? "✓" : "")); }
     makeDropTarget(el, files => uploadSlot(it, key, files, draw), T("Loslassen: {0} ersetzen", slotLabel(key, it.type)));
     // Kometa assets can be dragged onto other tiles of this title: the file is copied and renamed Kometa-conform
@@ -1197,8 +1199,19 @@ async function openItem(id) {
 
 /** Touch screens: a tap shows the action buttons of one poster at a time. */
 function toggleActions(box) {
-  document.querySelectorAll(".poster.show").forEach(p => { if (p !== box) p.classList.remove("show"); });
+  document.querySelectorAll(".poster.show").forEach(p => { if (p !== box) p.classList.remove("show", "menu"); });
   box.classList.toggle("show");
+}
+// touch: the first tap on a poster shows its bar, the second tap on the picture opens the preview; a tap anywhere else hides the bar
+function tapPoster(box, open) {
+  if (box.classList.contains("menu")) return;
+  if (box.classList.contains("show")) { box.classList.remove("show"); open(); } else toggleActions(box);
+}
+document.addEventListener("click", e => { if (!e.target.closest(".poster.show")) document.querySelectorAll(".poster.show").forEach(p => p.classList.remove("show", "menu")); });
+/** A poster the keyboard can reach: Enter / Space do what a click does (the preview). */
+function focusablePoster(box, label) {
+  box.tabIndex = 0; box.setAttribute("role", "button"); box.setAttribute("aria-label", label);
+  box.addEventListener("keydown", e => { if (e.target === box && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); box.click(); } });
 }
 
 /** Save an asset (original file, no re-encoding) or a ZIP with a normal download link (desktop).
@@ -1244,7 +1257,7 @@ function slotActions(it, key, box, draw, extra) {
   // [label, action, class, icon]: the entries with an icon are the three buttons of the bar, the others sit behind "⋯"
   return hoverBar(box, exists
     ? [[T("Ersetzen"), pick, "", "upload"], [T("Online suchen"), () => searchOnline(it, key, draw), "", "search"], build ? [T("Bauen"), build, "", "build"] : null,
-       seeNew, [T("Vorschau"), () => openPreview(it, key, draw)], col, [T("Herunterladen"), () => downloadSlot(it, key, draw)], later,
+       seeNew, col, [T("Herunterladen"), () => downloadSlot(it, key, draw)], later,
        it.type === "show" ? [T("Auf alle …"), () => openApplyAll(it, key, draw)] : null, [T("Löschen"), del, "danger"]]
     : [[T("Hochladen"), pick, "", "upload"], [T("Online suchen"), () => searchOnline(it, key, draw), "", "search"], build ? [T("Bauen"), build, "", "build"] : null, seeNew, plex, col, later]);
 }
@@ -1405,8 +1418,8 @@ function collectionButtons(g, change, close) {
     h("button", { class: "btn sm" + (n === 0 ? " primary" : "") + (cls ? " " + cls : ""), onclick: () => { close(); fn(); } }, label));
 }
 /** The hover menu of a collection poster, like on every other tile. */
-function collectionActions(g, box, change) {
-  const list = collectionActionList(g, change).map(([label, fn, cls = ""]) => [label, fn, cls, ({ [T("Ersetzen")]: "upload", [T("Hochladen")]: "upload", [T("Online suchen")]: "search", [T("Bauen")]: "build" })[label]]);
+function collectionActions(g, box, change, keepPreview) {
+  const list = collectionActionList(g, change).filter(([l]) => keepPreview || l !== T("Vorschau")).map(([label, fn, cls = ""]) => [label, fn, cls, ({ [T("Ersetzen")]: "upload", [T("Hochladen")]: "upload", [T("Online suchen")]: "search", [T("Bauen")]: "build" })[label]]);
   const el = hoverBar(box, list);
   el.preview = () => openCollectionPreview(g, change);
   return el;
@@ -1428,7 +1441,7 @@ function collectionTile(g) {
     front.classList.toggle("empty", !(p && p.exists));
     fill(front, p && p.exists ? h("img", { loading: "lazy", alt: "", draggable: false, src: `/api/collection-poster?id=${encodeURIComponent(g.id)}&v=${p.v}&thumb=1`, onload: e => e.target.classList.add("loaded") })
       : h("div", { class: "ph" }, h("div", {}, h("b", {}, "＋"), p ? T("Collection-Poster fehlt") : T("kein Collection-Ordner"))),
-      p ? collectionActions(g, front, set) : null);
+      p ? collectionActions(g, front, set, true) : null);
     if (S.rain.has("colposter|" + g.id)) { S.rain.delete("colposter|" + g.id); front.append(rainEl()); }
   }
   function metaPills() { return g.poster ? h("span", { class: "pill " + (g.poster.exists ? "ok" : "warn"), title: T("Das Poster der Collection selbst (Kometa-Asset im Collection-Ordner)") },
@@ -1468,7 +1481,8 @@ function collectionPosterCard(data, reload) {
   if (S.rain.has("colposter|" + cid)) { S.rain.delete("colposter|" + cid); box.append(rainEl()); }
   const act = collectionActions(g, box, () => reload());
   box.append(act);
-  box.onclick = () => { if (isTouch()) toggleActions(box); else if (p.exists) act.preview(); };
+  box.onclick = () => { if (isTouch()) { if (p.exists) tapPoster(box, () => act.preview()); else toggleActions(box); } else if (p.exists) act.preview(); };
+  focusablePoster(box, `${data.title} - ${T("Collection-Poster")}`);
   const el = h("div", { class: "card colposter" }, box, h("div", { class: "info" }, h("div", { class: "t" }, T("Collection-Poster")), h("div", { class: "s" }, data.title)));
   makeDropTarget(el, async files => {
     const imgs = files.filter(f => IMG_EXT.test(f.path) || isImageFile(f.file));
@@ -1918,37 +1932,46 @@ const hasLink = e => e.dataTransfer && [...e.dataTransfer.types].includes("text/
 const isDrag = e => hasFiles(e) || hasLink(e);
 const IMG_EXT = /\.(jpe?g|png|webp|gif|bmp|tiff?|avif)$/i;
 const isImageFile = f => !!f && (/^image\//.test(f.type) || IMG_EXT.test(f.name || ""));       // the type can be empty (e.g. .webp / .avif on some systems): then the ending decides
-const endDrag = () => { dragDepth = 0; $("#dropveil").classList.remove("on"); document.body.classList.remove("dragging"); };
-// while a file is dragged over the window every place that takes it shows a dashed frame (body.dragging); the one under the pointer lights up and says what happens
+// Dragging is not counted (enter / leave events get lost: Esc, a drop outside the window, a view that is redrawn, other browsers) but derived from the
+// events that keep coming while a file is over the window. When they stop, or the mouse moves (the browser sends no mouse events during a drag), all is reset.
+let dragWatch = 0;
+const endDrag = () => {
+  dragDepth = 0; clearTimeout(dragWatch);
+  $("#dropveil").classList.remove("on"); document.body.classList.remove("dragging");
+  document.querySelectorAll(".droptgt.dropping").forEach(el => el.classList.remove("dropping"));
+};
+const armDrag = () => { clearTimeout(dragWatch); dragWatch = setTimeout(endDrag, 700); };
 window.addEventListener("dragenter", e => {
   if (!isDrag(e)) return;
-  dragDepth++; document.body.classList.add("dragging");
+  document.body.classList.add("dragging"); armDrag();
   const open = !!document.querySelector(".scrim, .modalwrap");                    // with a detail view or a window open the tiles take the picture, no full-page drop area
   $("#dropveil").classList.toggle("on", hasFiles(e) && S.view === "dash" && !open && !(e.target.closest && e.target.closest(".droptgt")));
 });
-window.addEventListener("dragleave", e => { if (isDrag(e) && --dragDepth <= 0) endDrag(); });
 window.addEventListener("dragend", endDrag);
-window.addEventListener("dragover", e => { if (isDrag(e)) e.preventDefault(); });
+window.addEventListener("dragover", e => { if (isDrag(e)) { e.preventDefault(); document.body.classList.add("dragging"); armDrag(); } });
 window.addEventListener("drop", async e => {
   if (!isDrag(e)) return;
   e.preventDefault(); endDrag();
   if (hasFiles(e) && S.view === "dash" && !document.querySelector(".scrim, .modalwrap")) importFiles(await collectFiles(e.dataTransfer));
 });
+["pointermove", "mousemove", "keydown", "blur", "pointerdown"].forEach(t => window.addEventListener(t, () => { if (document.body.classList.contains("dragging") || dragDepth) endDrag(); }, true));
+document.addEventListener("visibilitychange", endDrag);
 
 /** Make an element take dropped files. label = what happens ("Loslassen: Poster ersetzen"), shown on the tile while a file is over it.
  *  A picture dragged out of a web page arrives as a link: pictures of TMDb, TVDB and fanart.tv are fetched, others get an explaining message. */
 function makeDropTarget(el, cb, label) {
-  let depth = 0, off = 0;
+  let off = 0;
   el.classList.add("droptgt");
   if (label) el.style.setProperty("--drop", JSON.stringify(label));
-  const on = () => { clearTimeout(off); el.classList.add("dropping"); };
-  const out = () => { clearTimeout(off); off = setTimeout(() => { depth = 0; el.classList.remove("dropping"); }, 70); };      // not at once: no flicker over buttons and text
-  el.addEventListener("dragenter", e => { if (isDrag(e)) { depth++; on(); } });
-  el.addEventListener("dragleave", () => { if (--depth <= 0) { depth = 0; out(); } });
+  // lit while events keep coming from the pointer over this element; it falls off by itself shortly after they stop (no counting of enter / leave)
+  const on = () => { clearTimeout(off); el.classList.add("dropping"); off = setTimeout(() => el.classList.remove("dropping"), 600); };
+  const out = () => { clearTimeout(off); off = setTimeout(() => el.classList.remove("dropping"), 70); };      // not at once: no flicker over buttons and text
+  el.addEventListener("dragenter", e => { if (isDrag(e)) on(); });
+  el.addEventListener("dragleave", () => out());
   el.addEventListener("dragover", e => { if (isDrag(e)) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; on(); } });
   el.addEventListener("drop", async e => {
     if (!isDrag(e)) return;
-    e.preventDefault(); e.stopPropagation(); depth = 0; clearTimeout(off); el.classList.remove("dropping"); endDrag();
+    e.preventDefault(); e.stopPropagation(); clearTimeout(off); el.classList.remove("dropping"); endDrag();
     if (hasFiles(e)) { cb(await collectFiles(e.dataTransfer)); return; }
     const url = (e.dataTransfer.getData("text/uri-list") || "").split(/\r?\n/).find(l => l && !l.startsWith("#")) || "";
     try {
