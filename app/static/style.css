@@ -297,7 +297,7 @@ details.more-seasons .slots{padding:6px 0 20px}
 .logcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px}
 .loghead{padding:14px 20px;border-bottom:1px solid var(--line)}
 .loghint{padding:10px 20px;border-bottom:1px solid var(--line);font-size:13px;color:var(--muted);background:color-mix(in srgb,var(--accent) 5%,transparent)}
-.logview{height:calc(100vh - 470px);min-height:320px;overflow:auto;background:var(--bg);padding:12px 18px;font-size:12.5px;line-height:1.55;border-radius:0 0 12px 12px}
+.logview{height:calc(100vh - 470px);height:calc(100dvh - 470px);min-height:320px;overflow:auto;background:var(--bg);padding:12px 18px;font-size:12.5px;line-height:1.55;border-radius:0 0 12px 12px}
 .ll{white-space:pre-wrap;word-break:break-word}
 .ll .ts{color:var(--muted)}.ll .src{color:var(--faint)}.ll .sep{color:var(--faint)}
 .ll.lv-DEBUG .lvl{color:#a78bfa}.ll.lv-INFO .lvl{color:var(--accent)}.ll.lv-WARNING .lvl,.ll.lv-WARNING .msg{color:var(--warn)}.ll.lv-ERROR .lvl,.ll.lv-ERROR .msg{color:var(--bad)}
@@ -664,7 +664,7 @@ body.glitching #app,body.glitching #foot{text-shadow:0 0 9px var(--glow);transit
 .pick.on{border-color:var(--accent)}
 .zoomwrap{position:fixed;inset:0;z-index:600;background:#000e;display:flex;align-items:center;justify-content:center;padding:56px 64px 44px}
 .zoomcv{display:flex;align-items:center;justify-content:center;max-width:100%;max-height:100%;min-height:0}
-.zoomcv canvas{max-width:100%;max-height:calc(100vh - 110px);width:auto;height:auto;aspect-ratio:2/3;border-radius:var(--r);box-shadow:0 0 40px var(--dim)}
+.zoomcv canvas{max-width:100%;max-height:calc(100vh - 110px);max-height:calc(100dvh - 110px);width:auto;height:auto;aspect-ratio:2/3;border-radius:var(--r);box-shadow:0 0 40px var(--dim)}
 .zoomclose{position:absolute;top:12px;right:12px}
 .zoomnav{position:absolute;top:50%;transform:translateY(-50%);font-size:28px;line-height:1;padding:6px 14px}
 .zoomprev{left:12px}.zoomnext{right:12px}
@@ -688,7 +688,7 @@ body.glitching #app,body.glitching #foot{text-shadow:0 0 9px var(--glow);transit
 .pipetip{position:fixed;z-index:700;transform:translateX(-50%);padding:4px 10px;border-radius:var(--r);border:1px solid #fff8;font-size:12px;font-family:monospace;pointer-events:none;white-space:nowrap}
 @media(min-width:761px){
   .drawer .builder{flex-direction:row;align-items:flex-start;gap:24px}
-  .drawer .builder .bgrid{flex:0 0 170px;grid-template-columns:1fr;position:sticky;top:100px;max-height:calc(100vh - 116px);overflow-y:auto;overflow-x:hidden;padding:6px 6px 6px 2px;margin:-6px 0}
+  .drawer .builder .bgrid{flex:0 0 170px;grid-template-columns:1fr;position:sticky;top:100px;max-height:calc(100vh - 116px);max-height:calc(100dvh - 116px);overflow-y:auto;overflow-x:hidden;padding:6px 6px 6px 2px;margin:-6px 0}
   .drawer .builder .bcontrols{flex:1;min-width:0}
 }
 /* poster builder 0.9: crop, look note, comparison, backdrops */
@@ -697,7 +697,7 @@ body.glitching #app,body.glitching #foot{text-shadow:0 0 9px var(--glow);transit
 .blook{display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap;padding:8px 12px;border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:var(--r);font-size:13px;color:var(--muted)}
 .blook[hidden]{display:none}
 .zoomtoggle{position:absolute;top:14px;left:50%;transform:translateX(-50%)}
-.zoomcv img{max-width:100%;max-height:calc(100vh - 110px);border-radius:var(--r);box-shadow:0 0 40px var(--dim)}
+.zoomcv img{max-width:100%;max-height:calc(100vh - 110px);max-height:calc(100dvh - 110px);border-radius:var(--r);box-shadow:0 0 40px var(--dim)}
 .cmpwrap{padding:64px 28px 48px}
 .cmprow{display:flex;gap:14px;justify-content:center;align-items:flex-start;max-width:100%;max-height:100%;overflow:auto;padding:8px}
 .cmpcell{flex:1 1 0;min-width:110px;max-width:240px;display:flex;flex-direction:column;gap:8px;background:none;border:0;padding:0;color:var(--muted);cursor:pointer;text-align:center;font-size:12.5px}
@@ -765,16 +765,27 @@ body.dragging .colcard.droptgt .colfront{outline:1px dashed color-mix(in srgb,va
 /* hover bar of a poster (0.9.15): three icon buttons at the bottom edge, "⋯" opens the other actions as a small menu; the picture stays visible */
 .poster .hover.bar{inset:auto 0 0 0;background:linear-gradient(transparent,color-mix(in srgb,var(--bg) 90%,transparent) 55%);padding:30px 8px 8px;flex-direction:row;justify-content:center;align-items:flex-end;gap:6px}
 .poster.menu .hover.bar{opacity:1;pointer-events:auto}
-.ovrow{display:flex;gap:6px;justify-content:center;align-items:center}
-.ovi{width:40px;height:40px;display:grid;place-items:center;background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);color:var(--text);font-size:18px;line-height:1;transition:.12s;padding:0}
+.ovrow{display:flex;gap:5px;justify-content:center;align-items:center;width:100%;min-width:0}
+.ovi{flex:1 1 0;min-width:0;max-width:44px;width:auto;height:auto;aspect-ratio:1/1;display:grid;place-items:center;background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);color:var(--text);font-size:18px;line-height:1;transition:.12s;padding:0}
 .ovi:hover,.ovi:focus-visible{border-color:var(--accent);color:var(--accent);box-shadow:0 0 12px var(--dim)}
 .ovmenu{position:absolute;right:8px;bottom:56px;max-height:calc(100% - 64px);overflow:auto;z-index:30;display:flex;flex-direction:column;gap:4px;background:var(--panel);border:1px solid var(--accent);border-radius:var(--r);padding:6px;min-width:150px;box-shadow:0 8px 24px #000b}
 .ovmenu[hidden]{display:none}.ovmenu .ov-btn{min-height:32px;text-align:left;white-space:nowrap}
-.colfront .hover.bar{padding:22px 3px 4px;gap:3px}.colfront .ovrow{gap:3px}.colfront .ovi{width:28px;height:28px;font-size:15px}.colfront .ovmenu{right:4px;bottom:36px;min-width:120px}
-@media(max-width:760px){.ovi{width:36px;height:36px}.ovmenu .ov-btn{min-height:40px}}
+.colfront .hover.bar{padding:22px 3px 4px;gap:3px}.colfront .ovrow{gap:3px}.colfront .ovi{font-size:15px}.colfront .ovi svg{width:15px;height:15px}.colfront .ovmenu{right:4px;bottom:36px;min-width:120px}
+@media(max-width:760px){.ovmenu .ov-btn{min-height:40px}}
 
 /* logs: grouped problems (0.9.15) */
 .logprob{padding:12px 18px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:6px}.logprob[hidden]{display:none}
 .probhead{display:flex;flex-wrap:wrap;gap:10px;align-items:baseline}
 .probrow{display:flex;gap:10px;align-items:baseline;text-align:left;background:transparent;border:1px solid var(--line);border-radius:var(--r);padding:6px 10px;color:var(--text);cursor:pointer;font-size:12.5px}
 .probrow:hover{border-color:var(--accent)}.probrow .probn{font-weight:700;min-width:44px}.probrow .msg{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* windows follow the screen (0.9.17): the preview poster is sized from the room that is left (JS measures it, see fitLightbox), the side column shrinks and wraps */
+.lbox{max-width:min(1250px,100%)}
+.lbody,.lbbody{min-width:0}
+.limg{min-width:0;flex:0 1 auto}
+.lbox .limg img{max-width:100%}
+.lside{min-width:0;flex:1 1 300px;max-width:560px}
+.lside dl{grid-template-columns:minmax(90px,auto) minmax(0,1fr)}
+.lside dd,.lside .metagroups{min-width:0;overflow-wrap:anywhere}
+.lside .row.wrap{gap:8px}
+@media(max-width:760px){.lbox .lside .row.wrap:last-child{position:sticky;bottom:0;background:var(--panel);padding:10px 0 2px;margin-top:12px;z-index:2}}

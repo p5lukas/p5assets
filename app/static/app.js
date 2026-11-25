@@ -176,6 +176,8 @@ const ICONS = {
   back: [{ d: "M19 12H5" }, { d: "M12 19l-7-7 7-7" }],
   file: [{ d: "M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" }, { d: "M14 2v6h6" }, { d: "M8 13h8" }, { d: "M8 17h6" }],
   search: [{ c: [11, 11, 8] }, { d: "M21 21l-4.3-4.3" }],
+  // two squares with swap arrows (replace)
+  replace: [{ d: "M4 2.5h6A1.5 1.5 0 0 1 11.5 4v6A1.5 1.5 0 0 1 10 11.5H4A1.5 1.5 0 0 1 2.5 10V4A1.5 1.5 0 0 1 4 2.5z" }, { d: "M14 12.5h6a1.5 1.5 0 0 1 1.5 1.5v6a1.5 1.5 0 0 1-1.5 1.5h-6a1.5 1.5 0 0 1-1.5-1.5v-6A1.5 1.5 0 0 1 14 12.5z" }, { d: "M15 6h4.5" }, { d: "M17.5 3.5L20 6l-2.5 2.5" }, { d: "M9 18H4.5" }, { d: "M6.5 15.5L4 18l2.5 2.5" }],
   download: [{ d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" }, { d: "M7 10l5 5 5-5" }, { d: "M12 15V3" }],
   undo: [{ d: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" }, { d: "M3 3v5h5" }],
   build: [{ d: "M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" }],
@@ -1256,7 +1258,7 @@ function slotActions(it, key, box, draw, extra) {
   const plex = it.slots[key] && it.slots[key].plex_thumb ? [T("Plex-Poster übernehmen"), () => takePlexPoster(it, key, draw)] : null;
   // [label, action, class, icon]: the entries with an icon are the three buttons of the bar, the others sit behind "⋯"
   return hoverBar(box, exists
-    ? [[T("Ersetzen"), pick, "", "upload"], [T("Online suchen"), () => searchOnline(it, key, draw), "", "search"], build ? [T("Bauen"), build, "", "build"] : null,
+    ? [[T("Ersetzen"), pick, "", "replace"], [T("Online suchen"), () => searchOnline(it, key, draw), "", "search"], build ? [T("Bauen"), build, "", "build"] : null,
        seeNew, col, [T("Herunterladen"), () => downloadSlot(it, key, draw)], later,
        it.type === "show" ? [T("Auf alle …"), () => openApplyAll(it, key, draw)] : null, [T("Löschen"), del, "danger"]]
     : [[T("Hochladen"), pick, "", "upload"], [T("Online suchen"), () => searchOnline(it, key, draw), "", "search"], build ? [T("Bauen"), build, "", "build"] : null, seeNew, plex, col, later]);
@@ -1273,6 +1275,30 @@ function hoverBar(box, list) {
       more.length ? h("button", { class: "ovi", type: "button", title: T("Mehr"), "aria-label": T("Mehr"), "aria-haspopup": "true", onclick: toggle }, "⋯") : null));
   if (more.length) box.addEventListener("mouseleave", () => { menu.hidden = true; box.classList.remove("menu"); });
   return bar;
+}
+
+/** Size the poster of a preview window from the room that is really left (window height, header, the note under the picture; width minus the side column),
+ *  not from guessed constants: iPad portrait and landscape, phones, Safari bars. Runs again when the screen turns or changes size. */
+function fitLightbox(wrap) {
+  const box = wrap.querySelector(".lbox"), body = wrap.querySelector(".lbbody"), head = wrap.querySelector(".lbhead"), lim = wrap.querySelector(".limg"), side = wrap.querySelector(".lside");
+  const img = lim && lim.querySelector("img");
+  if (!box || !body || !head || !img) return;
+  const fit = () => {
+    if (!wrap.isConnected) { window.removeEventListener("resize", fit); window.removeEventListener("orientationchange", fit); if (window.visualViewport) window.visualViewport.removeEventListener("resize", fit); return; }
+    img.style.maxHeight = ""; img.style.maxWidth = "";
+    const cs = getComputedStyle(body), pv = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom), ph = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+    const boxH = Math.min(parseFloat(getComputedStyle(box).maxHeight) || Infinity, window.visualViewport ? window.visualViewport.height : window.innerHeight);
+    const stacked = cs.flexDirection === "column";
+    let availH = boxH - head.offsetHeight - pv - (lim.offsetHeight - img.offsetHeight) - 4;
+    if (stacked) availH = Math.max(180, availH * 0.55);            // phone upright: the details need room below the poster
+    let availW = body.clientWidth - ph;
+    if (!stacked && side) availW -= 24 + Math.min(320, availW * 0.45);      // the side column keeps about 320 px (or 45 %)
+    img.style.maxHeight = Math.max(120, Math.floor(availH)) + "px"; img.style.maxWidth = Math.max(100, Math.floor(availW)) + "px";
+  };
+  fit(); requestAnimationFrame(fit);
+  img.addEventListener("load", fit);
+  window.addEventListener("resize", fit); window.addEventListener("orientationchange", fit);
+  if (window.visualViewport) window.visualViewport.addEventListener("resize", fit);
 }
 
 /** Enlarged view of a poster (always the original file) with its details and the actions. Works for empty slots too
@@ -1339,6 +1365,7 @@ function openPreview(it, key, draw) {
   function close() { wrap.remove(); document.removeEventListener("keydown", onKey); }
   document.addEventListener("keydown", onKey);
   document.body.append(wrap);
+  fitLightbox(wrap);
 }
 
 /** Save a picture as the poster of a collection; asks before it creates the folder. Returns the new state of the poster, or null (cancelled). */
@@ -1394,6 +1421,7 @@ function openCollectionPreview(g, change) {
   const onKey = e => { if (e.key === "Escape") close(); };
   document.addEventListener("keydown", onKey);
   document.body.append(wrap);
+  fitLightbox(wrap);
 }
 /** The actions of a collection poster as button descriptors, shared by the hover menu and the preview (same order as on every tile). */
 function collectionActionList(g, change) {
@@ -1419,7 +1447,7 @@ function collectionButtons(g, change, close) {
 }
 /** The hover menu of a collection poster, like on every other tile. */
 function collectionActions(g, box, change, keepPreview) {
-  const list = collectionActionList(g, change).filter(([l]) => keepPreview || l !== T("Vorschau")).map(([label, fn, cls = ""]) => [label, fn, cls, ({ [T("Ersetzen")]: "upload", [T("Hochladen")]: "upload", [T("Online suchen")]: "search", [T("Bauen")]: "build" })[label]]);
+  const list = collectionActionList(g, change).filter(([l]) => keepPreview || l !== T("Vorschau")).map(([label, fn, cls = ""]) => [label, fn, cls, ({ [T("Ersetzen")]: "replace", [T("Hochladen")]: "upload", [T("Online suchen")]: "search", [T("Bauen")]: "build" })[label]]);
   const el = hoverBar(box, list);
   el.preview = () => openCollectionPreview(g, change);
   return el;

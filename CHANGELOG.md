@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.17 – 2026-11-26
+
+**Changed**
+- Hover bar of a poster: the icons share the width of the poster (square, at most 44 px), so they always lie completely inside it – also on narrow posters (iPad landscape, the fan of the Collections tab, phones)
+- New icon for “Replace” (two squares with swap arrows); “Upload” on empty tiles keeps the arrow pointing up
+- Preview: the poster is sized from the room that is really left (window height, header, the note under the picture, and the width next to the side column) and again when the screen turns or changes size, so nothing is cut off on iPad (portrait and landscape) and phones; the side column shrinks and wraps; on phones in portrait the action buttons stay at the bottom edge while the details scroll
+- Windows use the visible screen height (`dvh`) instead of the full one: zoom, builder tiles, log view – no more cut-off bottoms behind Safari's bars
+
 ## 0.9.16 – 2026-11-25
 
 **Fixed**
