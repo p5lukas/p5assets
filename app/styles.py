@@ -65,7 +65,9 @@ def load() -> dict:
     except (OSError, ValueError):
         data = {}
     presets = data.get("presets") if isinstance(data.get("presets"), dict) else {}
-    return {"presets": {clean_name(k): sanitize(v) for k, v in presets.items() if clean_name(k)}}
+    clean = {clean_name(k): sanitize(v) for k, v in presets.items() if clean_name(k)}
+    default = clean_name(data.get("default") or "")
+    return {"presets": clean, "default": default if default in clean else None}      # default = the preset new looks start from (None = the built-in values)
 
 
 def _save(data: dict) -> None:
@@ -91,4 +93,18 @@ def delete_preset(name: str) -> None:
     with _lock:
         data = load()
         data["presets"].pop(clean_name(name), None)
+        if data.get("default") == clean_name(name):
+            data["default"] = None
         _save(data)
+
+
+def set_default(name: str | None) -> bool:
+    """Make a preset the starting look of new looks (None = back to the built-in values). False when there is no such preset."""
+    with _lock:
+        data = load()
+        name = clean_name(name or "") or None
+        if name is not None and name not in data["presets"]:
+            return False
+        data["default"] = name
+        _save(data)
+    return True

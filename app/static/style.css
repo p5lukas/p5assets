@@ -751,3 +751,5 @@ body.glitching #app,body.glitching #foot{text-shadow:0 0 9px var(--glow);transit
 @media(prefers-reduced-motion:reduce){.colp{transition:none}}
 .bnotes{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}.bnotes:empty{display:none}
 .bseasonbody{display:flex;flex-direction:column;gap:10px}.bseasonbody[hidden]{display:none}
+
+.pick.cur{outline:2px solid var(--accent);outline-offset:-2px}

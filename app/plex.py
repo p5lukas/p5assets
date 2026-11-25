@@ -117,6 +117,45 @@ class Plex:
             raise PlexError(f"HTTP {r.status_code}")
         return r.content
 
+    async def photos(self, rating_key: str, which: str = "posters") -> list[dict]:
+        """Every picture Plex holds for an entry (title, season or collection): the selected one, those of the agents and uploaded ones."""
+        mc = await self._get(f"/library/metadata/{rating_key}/{which}")
+        return mc.get("Metadata", []) or []
+
+    async def _fetch(self, path: str, **params) -> bytes:
+        try:
+            r = await self.client.get(path, params=params or None)
+        except httpx.HTTPError as e:
+            raise PlexError(short(e)) from e
+        if r.status_code >= 400 or not r.content:
+            raise PlexError(f"HTTP {r.status_code}")
+        return r.content
+
+    async def photo(self, entry: dict, preview: bool = False) -> bytes:
+        """One entry of ``photos``: the key can be a path on this server, a web address or an internal reference (upload://, media://, metadata://), so
+        every way is tried (directly, then through Plex's own image proxy) until one gives a picture."""
+        key, thumb = entry.get("key") or "", entry.get("thumb") or ""
+        tries: list[tuple] = []
+        w, h = (480, 720) if preview else (2000, 3000)
+        proxy = lambda u: ("/photo/:/transcode", {"url": u, "width": w, "height": h, "minSize": 1, "upscale": 0})
+        refs = [u for u in dict.fromkeys([thumb if preview else key, key if preview else thumb, key, thumb]) if u]
+        for u in refs:
+            if u.startswith("/"):
+                tries.append((u, {}))
+        for u in refs:
+            tries.append(proxy(u))
+        last = "no picture"
+        for path, params in tries:
+            try:
+                return await self._fetch(path, **params)
+            except PlexError as e:
+                last = str(e)
+        raise PlexError(last)
+
+    async def photo_at(self, path: str) -> bytes:
+        """A picture at a path of this server in full size (the poster Plex shows right now)."""
+        return await self._fetch(path)
+
     async def upload_poster(self, rating_key: str, data: bytes) -> None:
         r = await self.client.post(f"/library/metadata/{rating_key}/posters", content=data)
         if r.status_code >= 400:

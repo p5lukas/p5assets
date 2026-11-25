@@ -219,12 +219,12 @@ async def _plex_push(it: dict, slots: list[str], data: bytes) -> str | None:
     return None
 
 
-async def _store(it: dict, slot: str, data: bytes) -> dict:
+async def _store(it: dict, slot: str, data: bytes, push: bool = True) -> dict:
     undo: dict = {}
     path = (await asyncio.to_thread(uploads.write_assets, it, [slot], data, undo))[0]
     await asyncio.to_thread(scanner.refresh_item, it["id"])
     # the preview image is made while the optional Plex upload runs, so the new poster shows at once when the browser asks for it
-    _, warn = await asyncio.gather(asyncio.to_thread(thumbs.get, Path(path)), _plex_push(it, [slot], data))
+    _, warn = await asyncio.gather(asyncio.to_thread(thumbs.get, Path(path)), _plex_push(it, [slot], data) if push else asyncio.sleep(0, None))
     log.info("Saved: %s / %s → %s%s", it["title"], slot, path,
              f" (+ mirror: {', '.join(it['mirror_folders'])})" if it.get("mirror_folders") else "")
     if warn:
@@ -933,6 +933,131 @@ class UrlBody(BaseModel):
     url: str
 
 
+def _plex_rk(it: dict, slot: str) -> str | None:
+    season = kometa.parse_slot_key(slot)
+    return it.get("rating_key") if season is None else next((s["rating_key"] for s in it["seasons"] if s["number"] == season), None)
+
+
+def _plex_form(e: dict) -> str:
+    k = e.get("key") or ""
+    return "path" if k.startswith("/library/") else "url" if k.startswith(("http://", "https://")) else "reference" if "://" in k else "other"
+
+
+async def _plex_list(rk: str | None, what: str) -> dict:
+    """The pictures Plex holds for one entry, as {state, error, images: [{i, selected, source}]} (never silently empty: the state says why)."""
+    out: dict = {"state": "ok", "error": None, "images": [], "total": 0}
+    c = config.get()["plex"]
+    if not c["url"] or not c["token"]:
+        return {**out, "state": "nokey"}
+    if not rk:
+        return {**out, "state": "none", "error": tr("Plex kennt diesen Eintrag nicht")}
+    p = _plex()
+    try:
+        photos = await p.photos(rk)
+    except PlexError as e:
+        log.warning("Plex pictures of %s (%s): %s", what, rk, e)
+        return {**out, "state": "error", "error": str(e)}
+    finally:
+        await p.close()
+    forms = Counter(_plex_form(e) for e in photos)
+    log.info("Plex pictures of %s (%s): %d entries (%s)", what, rk, len(photos), ", ".join(f"{n} {k}" for k, n in forms.items()) or "none")
+    out["total"] = len(photos)
+    out["images"] = [{"i": n, "selected": bool(e.get("selected")), "provider": e.get("provider") or ""} for n, e in enumerate(photos)]
+    return out
+
+
+async def _plex_bytes(rk: str, i: int, preview: bool) -> bytes:
+    p = _plex()
+    try:
+        photos = await p.photos(rk)
+        if not 0 <= i < len(photos):
+            raise HTTPException(404, tr("Datei nicht gefunden"))
+        return await p.photo(photos[i], preview)
+    except PlexError as e:
+        raise HTTPException(502, str(e)) from e
+    finally:
+        await p.close()
+
+
+@app.get("/api/items/{item_id}/plex-posters")
+async def plex_posters(item_id: str, slot: str = "poster"):
+    it = _item(item_id)
+    _slot_check(it, slot)
+    return await _plex_list(_plex_rk(it, slot), f"{it['title']} / {slot}")
+
+
+@app.get("/api/items/{item_id}/plex-photo")
+async def plex_photo(item_id: str, i: int, slot: str = "poster", preview: bool = False):
+    it = _item(item_id)
+    _slot_check(it, slot)
+    rk = _plex_rk(it, slot)
+    if not rk:
+        raise HTTPException(404, tr("Plex kennt diesen Eintrag nicht"))
+    return Response(await _plex_bytes(rk, i, preview), media_type="image/jpeg", headers={"Cache-Control": "private, max-age=600"})
+
+
+class PlexImport(BaseModel):
+    i: int | None = None             # which of Plex's pictures; None = the one Plex shows right now
+
+
+@app.post("/api/items/{item_id}/{slot}/plex-import")
+async def plex_import(item_id: str, slot: str, body: PlexImport):
+    """Take the poster of Plex as the Kometa asset of this tile (nothing is sent back to Plex)."""
+    it = _item(item_id)
+    _slot_check(it, slot)
+    rk = _plex_rk(it, slot)
+    if not rk:
+        raise HTTPException(404, tr("Plex kennt diesen Eintrag nicht"))
+    if body.i is None:
+        season = kometa.parse_slot_key(slot)
+        path = it.get("thumb") if season is None else next((s["thumb"] for s in it["seasons"] if s["number"] == season), "")
+        if not path:
+            raise HTTPException(404, tr("Plex hat für diese Kachel kein Poster"))
+        p = _plex()
+        try:
+            data = await p.photo_at(path)
+        except PlexError as e:
+            raise HTTPException(502, str(e)) from e
+        finally:
+            await p.close()
+    else:
+        data = await _plex_bytes(rk, body.i, False)
+    log.info("Plex poster taken: %s / %s", it["title"], slot)
+    return await _store(it, slot, data, push=False)
+
+
+@app.get("/api/collection-plex-posters")
+async def collection_plex_posters(id: str):
+    _, _, title = _collection_films(id)
+    return await _plex_list(id.split(":", 1)[-1], f"collection {title}")
+
+
+@app.get("/api/collection-plex-photo")
+async def collection_plex_photo(id: str, i: int, preview: bool = False):
+    _collection_films(id)
+    return Response(await _plex_bytes(id.split(":", 1)[-1], i, preview), media_type="image/jpeg", headers={"Cache-Control": "private, max-age=600"})
+
+
+class CollectionPlexImport(BaseModel):
+    id: str
+    i: int
+    create: bool = False
+
+
+@app.post("/api/collection-poster/plex")
+async def collection_poster_from_plex(body: CollectionPlexImport):
+    _, world, title = _collection_films(body.id)
+    data = await _plex_bytes(body.id.split(":", 1)[-1], body.i, False)
+    undo: dict = {}
+    try:
+        path, reason = await asyncio.to_thread(collection_assets.write_poster, world, title, data, body.create, undo)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    if path is None:
+        return JSONResponse({"detail": tr("Der Ordner „{0}“ existiert noch nicht.", title), "needs_folder": title, "reason": reason}, status_code=409)
+    return {"ok": True, "path": str(path), "trash": undo.get("gid"), "poster": collection_assets.state(world, title)}
+
+
 async def _download(url: str) -> bytes:
     u = httpx.URL(url)
     if u.scheme != "https" or u.host not in providers.ALLOWED_HOSTS:
@@ -1099,6 +1224,17 @@ class StyleBody(BaseModel):
 async def put_style_preset(name: str, body: StyleBody):
     if not await asyncio.to_thread(styles.save_preset, name, body.style):
         raise HTTPException(400, tr("Name ungültig oder zu viele Vorlagen"))
+    return styles.load()
+
+
+class DefaultBody(BaseModel):
+    name: str | None = None
+
+
+@app.put("/api/styles/default")
+async def put_style_default(body: DefaultBody):
+    if not await asyncio.to_thread(styles.set_default, body.name):
+        raise HTTPException(404, tr("Vorlage nicht gefunden"))
     return styles.load()
 
 

@@ -7,6 +7,7 @@ const BW = 1000, BH = 1500;
 const BUILD_FONTS = [["montserrat", "Montserrat", 700], ["raleway", "Raleway", 700], ["oswald", "Oswald", 700], ["bebas-neue", "Bebas Neue", 400],
   ["anton", "Anton", 400], ["cinzel", "Cinzel", 700], ["playfair-display", "Playfair Display", 700], ["lato", "Lato", 700]];
 const BUILD_FIT = { zoom: 1, x: 0.5, y: 0.5, fill: "auto", color: "#12161c" };
+let LOOK_DEFAULT = {};                                              // the preset the user made the default for new looks (empty = the built-in values)
 const BUILD_DEFAULT = { seasonOn: true, edgeCut: 0, font: "montserrat", upper: true, mode: "logo", trim: true, logoColorMode: "off", logoColor: "#ffffff", tint: "off", tintA: "#101a2e", tintB: "#ffd9a0", tintAmount: 1, blend: "off", blendAmount: 0.7, blendHeight: 0.35, titleScale: 0.7, titleY: 0.85, seasonScale: 0.9, gap: 0.02, seasonPos: "below", seasonY: 0.92, tracking: 0.22, titleColor: "#ffffff" };     // same on all posters; only the colour of the season line is per poster
 
 /* ---------------------------------------------------------------- texts --- */
@@ -298,8 +299,9 @@ function makeBuilder(opts) {
   const col = !!opts.collection, projId = opts.builderKey || it.id;
   const tileKeyOf = key => { const cp = (slots.find(s => s.key === key) || {}).colPoster; return cp ? "colposter|" + cp.cid : itemOf(key).id + "|" + apiSlot(key); };
   const itemOf = key => (slots.find(s => s.key === key) || {}).item || it, apiSlot = key => col ? "poster" : key;
-  const G = { ...BUILD_DEFAULT };                                   // the look shared by all posters
-  let titleText = it.title, logo = null /* { url, preview, source } */, logoRes = null, logoNote = "", presets = {}, sel = opts.start && slots.some(s => s.key === opts.start) ? opts.start : slots[0].key, saving = false, allTitle = true;
+  const DEF = () => ({ ...BUILD_DEFAULT, ...LOOK_DEFAULT });
+  const G = DEF();                                   // the look shared by all posters
+  let titleText = it.title, logo = null /* { url, preview, source } */, logoRes = null, logoNote = "", presets = {}, defaultName = null, sel = opts.start && slots.some(s => s.key === opts.start) ? opts.start : slots[0].key, saving = false, allTitle = true;
   const newP = s => ({ title: s.title ?? (s.item ? s.item.title : ""), bg: null, line: s.season == null ? "" : seasonLine(s.season), color: null, auto: null, palette: [], autoSig: "", fit: { ...BUILD_FIT }, ov: {} });
   const P = Object.fromEntries(slots.map(s => [s.key, newP(s)]));
   const TITLE_OV = ["titleScale", "titleY", "mode", "logo", "trim", "blend", "blendAmount", "blendHeight", "tint", "tintA", "tintB", "tintAmount", "logoColorMode", "logoColor", "edgeCut", "seasonOn"];        // what a single poster may do differently (when "for all posters" is off)
@@ -439,13 +441,13 @@ function makeBuilder(opts) {
   /** A slider row: label, slider, value, "Default" button. Always the same layout, so the sliders keep the same length.
    *  perPoster = the value may differ per poster (size and height of the title, when "for all posters" is off). */
   function slider(label, attr, min, max, step, fmt, perPoster) {
-    const def = BUILD_DEFAULT[attr];
+    const def = () => DEF()[attr];
     const cur = () => perPoster ? val(sel, attr) : G[attr];
-    const show = v => { num.set(v); reset.classList.toggle("dim", Math.abs(v - def) < step / 2); };
+    const show = v => { num.set(v); reset.classList.toggle("dim", Math.abs(v - def()) < step / 2); };
     const put = v => { if (perPoster) setTitle(attr, v); else G[attr] = v; show(v); perPoster ? repaintTitle() : paintAll(); if (perPoster) syncCustom(); };
     const num = numField(min, max, v => { if (v == null) { show(cur()); return; } inp.value = v; put(v); });
     const inp = h("input", { type: "range", min, max, step, oninput: () => put(+inp.value) });
-    const reset = h("button", { class: "btn sm breset", type: "button", title: T("Auf Standard zurücksetzen"), onclick: () => { inp.value = def; put(def); } }, T("Standard"));
+    const reset = h("button", { class: "btn sm breset", type: "button", title: T("Auf Standard zurücksetzen"), onclick: () => { inp.value = def(); put(def()); } }, T("Standard"));
     const row = h("div", { class: "brow srow" }, h("span", { class: "blab" }, label), inp, num.el, reset);
     ctl[attr] = () => { inp.value = cur(); show(cur()); };
     ctl[attr].row = row;
@@ -551,7 +553,7 @@ function makeBuilder(opts) {
   function resetAll() {
     if (!confirm(T("Alle Einstellungen auf Standard zurücksetzen? Hintergründe und Logo bleiben."))) return;
     for (const k of Object.keys(G)) delete G[k];
-    Object.assign(G, BUILD_DEFAULT); if (!logo) G.mode = "text";
+    Object.assign(G, DEF()); if (!logo) G.mode = "text";
     allTitle = true; slots.forEach(s => { clearOv(s); P[s.key].color = null; P[s.key].autoSig = ""; });
     syncControls(); paintAll();
   }
@@ -580,7 +582,7 @@ function makeBuilder(opts) {
     await api(`/items/${projId}/builder`, { method: "PUT", json: { look: G, allTitle, titleText: col ? "" : titleText, logo: await stored(logo), posters } });
   }
   function applyProject(pr) {
-    Object.assign(G, BUILD_DEFAULT, pr.look); delete G.color;
+    Object.assign(G, DEF(), pr.look); delete G.color;
     allTitle = pr.allTitle; titleText = pr.titleText || it.title; logo = pr.logo || null;
     for (const [k, v] of Object.entries(pr.posters || {})) {
       const p = P[k]; if (!p) continue;
@@ -595,16 +597,34 @@ function makeBuilder(opts) {
       try { await api(`/items/${projId}/builder`, { method: "DELETE" }); lookNote.hidden = true; toast(T("Gespeicherter Look gelöscht"), "ok"); } catch (e) { toast(e.message, "bad"); }
     } }, T("Look löschen")));
   function applyPreset(p) {
-    Object.assign(G, BUILD_DEFAULT, p); delete G.color; if (!logo) G.mode = "text"; slots.forEach(clearOv);
+    Object.assign(G, DEF(), p); delete G.color; if (!logo) G.mode = "text"; slots.forEach(clearOv);
     syncControls(); paintAll();
   }
   function drawPresets() {
-    fill(presetSel, h("option", { value: "" }, T("Vorlage anwenden …")), Object.keys(presets).sort().map(n => h("option", { value: n }, n)));
+    fill(presetSel, h("option", { value: "" }, T("Vorlage anwenden …")), Object.keys(presets).sort().map(n => h("option", { value: n }, (n === defaultName ? "★ " : "") + n)));
   }
   async function savePreset() {
     const name = (prompt(T("Name der Vorlage")) || "").trim();
     if (!name) return;
     try { presets = (await api("/styles/presets/" + encodeURIComponent(name), { method: "PUT", json: { style: G } })).presets; drawPresets(); toast(T("Vorlage gespeichert"), "ok"); } catch (e) { toast(e.message, "bad"); }
+  }
+  /** Which look new looks start from: the built-in values or one of the saved presets (also what the "Standard" buttons of the sliders go back to). */
+  function chooseDefault() {
+    const names = Object.keys(presets).sort();
+    let choice = defaultName;
+    const radio = (value, label, hint) => h("label", { class: "opt" }, h("input", { type: "radio", name: "lookdef", checked: choice === value, onchange: () => { choice = value; } }), h("div", {}, label, hint ? h("small", {}, hint) : null));
+    const m = modal(T("Standard für neue Looks"), h("div", {},
+      h("p", { class: "hint", style: "margin-top:0" }, T("Neue Looks starten mit diesem Standard, und die „Standard“-Knöpfe der Regler setzen darauf zurück. Gespeicherte Looks einzelner Titel bleiben unverändert.")),
+      radio(null, T("Eingebaute Standardwerte"), null),
+      names.map(n => radio(n, n, null)),
+      names.length ? null : h("p", { class: "hint" }, T("Speichere zuerst einen Look über „Als Vorlage speichern …“, um ihn hier wählen zu können."))),
+      h("button", { class: "btn primary", onclick: async () => {
+        try {
+          const st = await api("/styles/default", { method: "PUT", json: { name: choice } });
+          presets = st.presets || {}; defaultName = st.default || null; LOOK_DEFAULT = defaultName && presets[defaultName] ? presets[defaultName] : {};
+          m.close(); drawPresets(); syncControls(); toast(defaultName ? T("Neue Looks starten jetzt mit „{0}“", defaultName) : T("Neue Looks starten wieder mit den eingebauten Werten"), "ok");
+        } catch (e) { toast(e.message, "bad"); }
+      } }, T("Speichern")));
   }
   async function deletePreset() {
     const name = presetSel.value || Object.keys(presets)[0];
@@ -612,7 +632,8 @@ function makeBuilder(opts) {
     if (!names.length) return;
     const pick = prompt(T("Welche Vorlage löschen?\n{0}", names.join(", ")), name) || "";
     if (!presets[pick]) return;
-    presets = (await api("/styles/presets/" + encodeURIComponent(pick), { method: "DELETE" })).presets; drawPresets();
+    const st = await api("/styles/presets/" + encodeURIComponent(pick), { method: "DELETE" });
+    presets = st.presets || {}; defaultName = st.default || null; LOOK_DEFAULT = defaultName && presets[defaultName] ? presets[defaultName] : {}; drawPresets(); syncControls();
   }
   function syncCustom() {
     slots.forEach(s => { cards[s.key].classList.toggle("custom", custom(s.key)); });
@@ -793,12 +814,14 @@ function makeBuilder(opts) {
       seasonBody),
     h("div", { class: "bsec" }, h("h4", {}, T("Vorlagen")),
       h("div", { class: "row wrap" }, presetSel, h("button", { class: "btn sm", type: "button", onclick: savePreset }, T("Als Vorlage speichern …")), h("button", { class: "btn sm ghost", type: "button", onclick: deletePreset }, T("Vorlage löschen …")),
+        h("button", { class: "btn sm", type: "button", title: T("Mit welchem Look neue Looks starten"), onclick: chooseDefault }, T("Standard wählen …")),
         h("span", { class: "spacer" }), h("button", { class: "btn sm ghost", type: "button", title: T("Alle Einstellungen auf Standard, Hintergründe und Logo bleiben"), onclick: resetAll }, T("Alles zurücksetzen")))),
     h("div", { class: "row wrap bfoot" }, saveBtn, opts.onCancel ? h("button", { class: "btn", type: "button", onclick: opts.onCancel }, T("Abbrechen")) : null, status));
   root.append(grid, controls);
 
   (async () => {
-    try { presets = (await api("/styles")).presets || {}; } catch { /* optional */ }
+    try { const st = await api("/styles"); presets = st.presets || {}; defaultName = st.default || null; LOOK_DEFAULT = defaultName && presets[defaultName] ? presets[defaultName] : {}; } catch { /* optional */ }
+    Object.assign(G, DEF());                                                    // a new look starts from the default (the built-in values or the preset chosen as default)
     try { const pr = (await api(`/items/${projId}/builder`)).project; if (pr) { applyProject(pr); lookNote.hidden = false; } } catch { /* optional */ }
     drawPresets(); syncControls(); paintAll(); loadLogos();
     if (cards[sel]) cards[sel].scrollIntoView({ block: "nearest" });

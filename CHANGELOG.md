@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.14 – 2026-11-25
+
+**New**
+- Default for new looks: “Choose default …” in the poster builder makes one of your saved presets the starting look of new looks (and what the “Default” buttons of the sliders go back to); “Built-in default values” goes back. Saved looks of single titles stay unchanged. The default is marked with ★ in the list of presets
+- Plex posters as a source: a tab “Plex” in the online search lists every poster Plex holds for the title, season or collection (the one Plex shows now is marked); a click takes it as the Kometa asset (nothing is sent back to Plex). The tab always says what it found, also when that is nothing or an error, and the log notes how many entries Plex returned and in which forms (path, web address, internal reference); every form is tried until one loads
+- Empty tiles that Plex has a poster for get “Take Plex poster” in the menu and in the preview (the poster Plex shows right now). A note warns that a poster with a Kometa overlay would be overlaid again
+
+**Fixed**
+- The “Default” button of a slider went back to an empty value (since the defaults can be changed now, it reads the default when it is clicked)
+
 ## 0.9.13 – 2026-11-18
 
 **Changed**

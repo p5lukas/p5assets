@@ -1162,6 +1162,15 @@ const downloadSlot = (it, key, draw) => isTouch() ? openPreview(it, key, draw) :
 
 /** Hover/tap overlay of a poster tile with its actions (series tiles in the detail view, movie posters on the dashboard). */
 /** Open the poster builder for a title / tile; null when there is none (a series builder is only there while its detail view is open). */
+/** The poster Plex shows right now becomes the Kometa asset of an empty tile (nothing is sent back to Plex). */
+async function takePlexPoster(it, key, draw) {
+  const k = it.id + "|" + key;
+  busyTile(k, true);
+  try {
+    const res = await api(`/items/${it.id}/${key}/plex-import`, { json: {} });
+    undoToast(T("Aus Plex übernommen ✓"), res, draw); S.rain.add(k); draw(res.item);
+  } catch (e) { toast(e.message, "bad"); } finally { busyTile(k, false); }
+}
 function builderOpener(it, key, draw, extra) {
   if (extra && extra.build) return extra.build;
   if (it.type === "movie") return () => openMovieBuilder(it, draw);
@@ -1180,7 +1189,8 @@ function slotActions(it, key, box, draw, extra) {
          build ? ob(T("Bauen"), build) : null, extra && extra.collectionBuild ? ob(T("Collection bauen"), extra.collectionBuild) : null,
          ob(T("Herunterladen"), () => downloadSlot(it, key, draw)),
          it.type === "show" ? ob(T("Auf alle …"), () => openApplyAll(it, key, draw)) : null, ob(T("Löschen"), del, "danger")]
-      : [ob(T("Hochladen"), pick), ob(T("Online suchen"), () => searchOnline(it, key, draw)), build ? ob(T("Bauen"), build) : null, extra && extra.collectionBuild ? ob(T("Collection bauen"), extra.collectionBuild) : null]),
+      : [ob(T("Hochladen"), pick), ob(T("Online suchen"), () => searchOnline(it, key, draw)), build ? ob(T("Bauen"), build) : null,
+         it.slots[key] && it.slots[key].plex_thumb ? ob(T("Plex-Poster übernehmen"), () => takePlexPoster(it, key, draw)) : null, extra && extra.collectionBuild ? ob(T("Collection bauen"), extra.collectionBuild) : null]),
     h("div", { class: "ovhint" }, T("oder Bild hierher ziehen")));
 }
 
@@ -1231,6 +1241,7 @@ function openPreview(it, key, draw) {
         h("dl", {}, rows.map(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]), src ? [h("dt", {}, T("Auflösung")), res] : null),
         h("div", { class: "row wrap", style: "margin-top:20px" },
           it.folder ? h("button", { class: "btn sm primary", onclick: pick }, exists ? T("Ersetzen") : T("Hochladen")) : null,
+          draw && it.folder && !exists && sl.plex_thumb ? h("button", { class: "btn sm", onclick: () => { close(); takePlexPoster(it, key, draw); } }, T("Plex-Poster übernehmen")) : null,
           draw && it.folder ? h("button", { class: "btn sm", onclick: () => { close(); searchOnline(it, key, draw); } }, T("Online suchen")) : null,
           draw && it.folder && builderOpener(it, key, draw) ? h("button", { class: "btn sm", title: T("Poster selbst bauen: textloses Poster, Logo oder Titel und Staffeltext"), onclick: () => { const b = builderOpener(it, key, draw); close(); b(); } }, icon("build", 14), T("Bauen")) : null,
           exists && !touch ? h("button", { class: "btn sm", onclick: () => downloadSlot(it, key) }, icon("download", 14), T("Herunterladen")) : null,
@@ -1644,11 +1655,12 @@ async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img):
           h("button", { class: "tab" + (allOn ? " on" : ""), type: "button", onclick: () => toggleScope(allOn ? [slot, ...(scopes.some(x => x.key === "poster") && slot !== "poster" ? ["poster"] : [])] : scopes.map(x => x.key)) }, T("Alle")));
       } else if (scopes) fill(scopeBar);
       scopeBar.hidden = !(scopes && kind === "poster");
-      fill(tabs, [{ name: "*", label: T("Alle"), state: "ok", count: r.images.length }, ...r.providers, ...(kind === "poster" ? [{ name: "ThePosterDB", state: "ok", tpdb: true }, { name: "MediUX", state: "ok", tpdb: true }] : [])].map(pv => h("button", {
+      fill(tabs, [{ name: "*", label: T("Alle"), state: "ok", count: r.images.length }, ...r.providers, ...(kind === "poster" ? [...(opts.pick ? [] : [{ name: "Plex", state: "ok", tpdb: true }]), { name: "ThePosterDB", state: "ok", tpdb: true }, { name: "MediUX", state: "ok", tpdb: true }] : [])].map(pv => h("button", {
         class: "tab" + (tab === pv.name ? " on" : "") + (pv.state !== "ok" ? " off" : ""), disabled: pv.state === "nokey",
         title: pv.state === "nokey" ? T("Kein API-Key hinterlegt (Einstellungen → Quellen)") : pv.state === "error" ? pv.error : "",
         onclick: () => { tab = pv.name; render(); } },
         pv.label || pv.name, pv.tpdb ? null : h("small", {}, pv.state === "nokey" ? T("kein Key") : pv.state === "error" ? T("Fehler") : pv.count))));
+      if (tab === "Plex") { fill(content, plexPanel(opts.collection || it, slot, draw, () => m.close())); return; }
       if (tab === "ThePosterDB") { fill(content, posterDbPanel(opts.collection || it, slot, draw, () => m.close(), opts.pick)); return; }
       if (tab === "MediUX") { fill(content, mediuxPanel(opts.collection || it, slot, draw, () => m.close(), opts.pick)); return; }
       const prov = r.providers.find(p => p.name === tab);
@@ -1674,6 +1686,43 @@ async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img):
     }
     fill(body, buildRow, kindBar, scopes ? scopeBar : null, tabs, content); render();
   } catch (e) { fill(body, buildRow, h("div", { class: "status bad" }, e.message), [h("h4", { style: "margin:18px 0 0;color:var(--accent)" }, T("ThePosterDB")), posterDbPanel(opts.collection || it, slot, draw, () => m.close(), opts.pick)]); }
+}
+
+/* ------------------------------------------------------------- Plex --- */
+/** Every poster Plex holds for a title, season or collection (the one it shows now is marked): choose one to take it as the Kometa asset.
+ *  Nothing goes back to Plex. The panel always says what it found, also when that is nothing or an error. */
+function plexPanel(it, slot, draw, done) {
+  const coll = it.type === "collection", enc = encodeURIComponent;
+  const box = h("div", {}, h("div", { class: "empty" }, h("span", { class: "spin" }), T(" Frage Plex …")));
+  const src = (i, preview) => coll ? `/api/collection-plex-photo?id=${enc(it.id)}&i=${i}${preview ? "&preview=1" : ""}` : `/api/items/${it.id}/plex-photo?slot=${enc(slot)}&i=${i}${preview ? "&preview=1" : ""}`;
+  const take = async (i, el) => {
+    el.classList.add("busy");
+    try {
+      if (coll) { const np = await saveCollectionPoster(it.id, it.title, create => api("/collection-poster/plex", { json: { id: it.id, i, create } })); if (!np) { el.classList.remove("busy"); return; } if (draw) draw(np); }
+      else { const res = await api(`/items/${it.id}/${slot}/plex-import`, { json: { i } }); undoToast(T("Übernommen ✓"), res, draw); S.rain.add(it.id + "|" + slot); if (draw) draw(res.item); }
+      done();
+    } catch (e) { el.classList.remove("busy"); toast(e.message, "bad"); }
+  };
+  (async () => {
+    await null;
+    let r;
+    try { r = await api(coll ? `/collection-plex-posters?id=${enc(it.id)}` : `/items/${it.id}/plex-posters?slot=${enc(slot)}`); }
+    catch (e) { fill(box, h("div", { class: "status bad" }, `[ !! ] Plex: ${e.message}`)); return; }
+    if (r.state === "nokey") { fill(box, h("div", { class: "empty" }, T("Plex ist nicht verbunden (Einstellungen → Plex)."))); return; }
+    if (r.state !== "ok") { fill(box, h("div", { class: "status bad" }, `[ !! ] Plex: ${r.error}`)); return; }
+    if (!r.images.length) { fill(box, h("div", { class: "empty" }, T("Plex hat dafür kein Poster gespeichert."))); return; }
+    let bad = 0;
+    const note = h("div", { class: "hint", style: "margin:0 0 10px" });
+    const showNote = () => { note.textContent = TP(r.images.length, "Plex kennt ein Poster.", "Plex kennt {0} Poster.") + (bad ? " " + T("{0} davon ließen sich nicht laden.", bad) : "") + " " + T("Das markierte zeigt Plex gerade. Trägt es schon ein Overlay (z. B. von Kometa), würde Kometa es beim nächsten Lauf noch einmal überlagern."); };
+    showNote();
+    fill(box, note, h("div", { class: "picks" }, r.images.map(img => {
+      const p = h("div", { class: "pick" + (img.selected ? " cur" : ""), title: T("Übernehmen"), onclick: () => take(img.i, p) },
+        h("img", { loading: "lazy", alt: "", src: src(img.i, true), onerror: e => { e.target.replaceWith(h("div", { class: "cmpph missing" }, T("nicht ladbar"))); bad++; showNote(); p.onclick = null; } }),
+        h("span", {}, img.selected ? T("Aktuell in Plex") : img.provider || "Plex"));
+      return p;
+    })));
+  })();
+  return h("div", { class: "tpdb" }, box);
 }
 
 /* -------------------------------------------------------- ThePosterDB --- */

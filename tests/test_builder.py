@@ -46,7 +46,7 @@ def test_sanitize_title_off_and_season_text_switch():
 
 def test_presets_roundtrip_and_limits(tmp_path, monkeypatch):
     monkeypatch.setattr(styles.config, "CONFIG_DIR", tmp_path)
-    assert styles.load() == {"presets": {}}
+    assert styles.load() == {"presets": {}, "default": None}
     assert styles.save_preset("  Dark  ", {"font": "anton"})
     assert styles.load()["presets"] == {"Dark": {"font": "anton"}}
     assert not styles.save_preset("   ", {})
@@ -99,12 +99,16 @@ def client(tmp_path, monkeypatch):
 
 
 def test_style_endpoints(client):
-    assert client.get("/api/styles").json() == {"presets": {}}
+    assert client.get("/api/styles").json() == {"presets": {}, "default": None}
     r = client.put("/api/styles/presets/Mine", json={"style": {"font": "cinzel", "titleY": 0.4, "x": 1}})
     assert r.status_code == 200 and r.json()["presets"] == {"Mine": {"font": "cinzel", "titleY": 0.4}}
     assert client.put("/api/styles/presets/%20", json={"style": {}}).status_code in (400, 404)
     assert client.put("/api/styles/last", json={"style": {"mode": "text"}}).status_code in (404, 405)      # no global "last look" any more
-    assert client.delete("/api/styles/presets/Mine").json()["presets"] == {}
+    assert client.put("/api/styles/default", json={"name": "nope"}).status_code == 404
+    assert client.put("/api/styles/default", json={"name": "Mine"}).json()["default"] == "Mine"
+    assert client.get("/api/styles").json()["default"] == "Mine"
+    gone = client.delete("/api/styles/presets/Mine").json()
+    assert gone["presets"] == {} and gone["default"] is None           # deleting the default preset brings back the built-in values
 
 
 def test_logos_endpoint_needs_keys_and_returns_result(client, monkeypatch):
@@ -289,7 +293,7 @@ def test_sources_endpoint(store, monkeypatch):
     for gone in ("bogus", "plex", "cast", "figures"):
         assert c.get(f"/api/items/hd-abc/sources/{gone}").status_code == 404
     assert c.get("/api/items/hd-abc/sources/stills", params={"slot": "poster"}).status_code == 400      # no API keys
-    assert c.get("/api/items/hd-abc/plex-photo", params={"path": "/library/metadata/1/art/1"}).status_code in (404, 405)
+    assert c.get("/api/items/hd-abc/plex-photo", params={"path": "/library/metadata/1/art/1"}).status_code in (404, 405, 422)
 
 
 def test_sanitize_edge_cut():
@@ -500,3 +504,29 @@ def test_collection_poster_download_and_tmdb_number(tmp_path, monkeypatch):
     monkeypatch.setattr(main.providers, "tmdb_collection_id", fake_cid)
     monkeypatch.setattr(main.providers, "tmdb_find_id", fake_find)
     assert c.get("/api/collection-tmdb-id", params={"id": "1:77"}).json() == {"id": "4242", "film": "99"}
+
+
+def test_plex_pictures_in_every_form(tmp_path, monkeypatch):
+    """The pictures Plex lists come as paths, web addresses and internal references; each is tried until one loads, and the list says what it found."""
+    from app import plex
+    seen: list[str] = []
+
+    class Fake(plex.Plex):
+        def __init__(self):
+            pass
+
+        async def _fetch(self, path, **params):
+            seen.append(params.get("url") or path)
+            if (params.get("url") or path).endswith("bad"):
+                raise plex.PlexError("HTTP 404")
+            if path.startswith("/library/") or params.get("url"):
+                return b"img"
+            raise plex.PlexError("HTTP 404")
+    f = Fake()
+    assert asyncio.run(f.photo({"key": "/library/metadata/1/thumb/5"})) == b"img"
+    assert asyncio.run(f.photo({"key": "https://image.tmdb.org/x.jpg", "thumb": "/library/metadata/1/thumb/6"}, preview=True)) == b"img"
+    assert asyncio.run(f.photo({"key": "upload://posters/abc"})) == b"img"
+    assert seen[-1] == "upload://posters/abc"                           # only Plex's own image proxy can read this form
+    with pytest.raises(plex.PlexError):
+        asyncio.run(f.photo({"key": "metadata://posters/bad"}))
+    assert [main._plex_form({"key": k}) for k in ("/library/metadata/1/thumb/2", "https://a/b.jpg", "upload://x", "x")] == ["path", "url", "reference", "other"]
