@@ -116,6 +116,10 @@ die Bildgrößen liest p5assets im Hintergrund.
 
 <img src="docs/images/weak.png" alt="Schwache Poster" width="560">
 
+### Verlauf und „Später suchen“
+Der Reiter **Verlauf** neben dem Papierkorb listet jede Änderung eines Posters mit kleinem Vorher/Nachher-Bild, der Art der Änderung und „Wiederherstellen“ (solange der Papierkorb die alte Version hat).
+**Später suchen** merkt eine Kachel, für die du ein besseres Poster erwartest (z. B. ein Textless-Poster): p5assets schaut einmal am Tag nach, zeigt „Neu“ und benachrichtigt dich. Nichts wird von selbst übernommen.
+
 ### Papierkorb & Aufräumen
 Ersetzte oder gelöschte Poster bleiben **30 Tage im Papierkorb** (höchstens 2 GB). Nach jeder Aktion bietet ein Hinweis
 „Rückgängig“ an; das Papierkorb-Symbol in der Kopfzeile öffnet die ganze Liste. **Verwaiste Ordner** (Poster ohne Titel in Plex,

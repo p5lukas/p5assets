@@ -156,11 +156,6 @@ class Plex:
         """A picture at a path of this server in full size (the poster Plex shows right now)."""
         return await self._fetch(path)
 
-    async def upload_poster(self, rating_key: str, data: bytes) -> None:
-        r = await self.client.post(f"/library/metadata/{rating_key}/posters", content=data)
-        if r.status_code >= 400:
-            raise PlexError(tr("Upload zu Plex fehlgeschlagen (HTTP {0})", r.status_code))
-
 
 # ------------------------------------------------------------ plex.tv ---
 

@@ -30,6 +30,7 @@ from . import arr as arrmod
 from . import (
     auth,
     builder_store,
+    changes,
     collection_assets,
     config,
     history,
@@ -44,6 +45,7 @@ from . import (
     trash,
     uploads,
     version,
+    watch,
 )
 from . import languages as langmod
 from . import plex as plexmod
@@ -65,8 +67,10 @@ async def lifespan(app: FastAPI):
     log.info("p5assets %s started (branch %s, commit %s)", v["version"], v["branch"] or "-", v["commit_short"] or "-")
     await asyncio.to_thread(thumbs.cleanup_old)
     task = asyncio.create_task(scanner.loop())
+    watch_task = asyncio.create_task(_watch_loop())
     yield
     task.cancel()
+    watch_task.cancel()
 
 
 app = FastAPI(title="p5assets", lifespan=lifespan)
@@ -147,10 +151,15 @@ def _item(item_id: str) -> dict:
     return it
 
 
+def _marks_for(item_id: str) -> list[dict]:
+    return [m for m in watch.marks().values() if m["item_id"] == item_id]
+
+
 def _public_item(it: dict, full: bool = False) -> dict:
     out = {k: it[k] for k in ("id", "world", "type", "title", "year", "folder", "library_title", "missing",
                               "updated", "in_plex", "sources", "dupes")}
     out["mirror_folders"] = it.get("mirror_folders") or []
+    out["watch"] = {m["slot"]: len(m["new"]) for m in _marks_for(it["id"])}      # tiles marked "Später suchen": slot -> how many new textless pictures
     out["collections"] = it.get("collections") or []
     out["coming_soon"] = bool(it.get("coming_soon"))
     out["missing_plex"] = it.get("missing_plex", 0)
@@ -194,42 +203,16 @@ def _slot_check(it: dict, slot: str) -> int | None:
     return season
 
 
-async def _plex_push(it: dict, slots: list[str], data: bytes) -> str | None:
-    """Optionally also set the poster(s) in Plex. Returns a warning text on problems."""
-    if not config.get()["plex"].get("upload_to_plex"):
-        return None
-    targets = []
-    for slot in slots:
-        season = kometa.parse_slot_key(slot)
-        rk = it.get("rating_key") if season is None else next(
-            (s["rating_key"] for s in it["seasons"] if s["number"] == season), None)
-        if rk:
-            targets.append(rk)
-    if not targets:
-        return None
-    p = _plex()
-    try:
-        body, _ = await asyncio.to_thread(uploads.normalize_image, data, True)
-        for rk in targets:
-            await p.upload_poster(rk, body)
-    except PlexError as e:
-        return str(e)
-    finally:
-        await p.close()
-    return None
-
-
-async def _store(it: dict, slot: str, data: bytes, push: bool = True) -> dict:
+async def _store(it: dict, slot: str, data: bytes, source: str = "upload") -> dict:
     undo: dict = {}
     path = (await asyncio.to_thread(uploads.write_assets, it, [slot], data, undo))[0]
     await asyncio.to_thread(scanner.refresh_item, it["id"])
-    # the preview image is made while the optional Plex upload runs, so the new poster shows at once when the browser asks for it
-    _, warn = await asyncio.gather(asyncio.to_thread(thumbs.get, Path(path)), _plex_push(it, [slot], data) if push else asyncio.sleep(0, None))
+    await asyncio.to_thread(thumbs.get, Path(path))                 # the preview image is ready when the browser asks for it
+    await asyncio.to_thread(watch.unmark, it["id"], slot)           # a poster was chosen: "Später suchen" is done for this tile
+    await asyncio.to_thread(changes.record, source=source, world=it["world"], item_id=it["id"], title=it["title"], slot=slot, type_=it["type"], gid=undo.get("gid"), path=path)
     log.info("Saved: %s / %s → %s%s", it["title"], slot, path,
              f" (+ mirror: {', '.join(it['mirror_folders'])})" if it.get("mirror_folders") else "")
-    if warn:
-        log.warning("Plex upload for %s / %s: %s", it["title"], slot, warn)
-    return {"ok": True, "path": str(path), "warning": warn, "trash": undo.get("gid"), "item": _public_item(_item(it["id"]), True)}
+    return {"ok": True, "path": str(path), "trash": undo.get("gid"), "item": _public_item(_item(it["id"]), True)}
 
 
 # --------------------------------------------------------------- state ---
@@ -499,6 +482,7 @@ def _is_weak(it: dict, min_w: int, ratio: bool) -> bool:
 def _scope_stats(items: list[dict], weak_w: int = 0, weak_r: bool = False) -> dict:
     """Numbers for the statistic block and the tab counters of one source selection."""
     c = Counter()
+    marked = {m["item_id"] for m in watch.marks().values()}
     for i in items:
         for sl in i["slots"].values():
             if sl.get("exists") and not sl.get("extra"):
@@ -515,7 +499,7 @@ def _scope_stats(items: list[dict], weak_w: int = 0, weak_r: bool = False) -> di
         c["plexmissing"] += 1 if i.get("missing_plex") else 0
     return {"items": c["items"], "slots": c["slots"], "missing": c["missing_slots"], "complete_items": c["complete"],
             "counts": {"all": c["items"], "missing": c["missing"],
-                       "comingsoon": c["comingsoon"], "plexmissing": c["plexmissing"], "weak": c["weak"],
+                       "comingsoon": c["comingsoon"], "plexmissing": c["plexmissing"], "weak": c["weak"], "watch": sum(1 for i in items if i["id"] in marked),
                        "collections": sum(1 for g in collection_overview([i for i in items if i["type"] == "movie"], "", _hidden_collections()) if not g["hidden"])},
             "dims": {"known": c["dims_known"], "total": c["dims_total"]}}
 
@@ -542,6 +526,9 @@ async def items(world: str = "", q: str = "", filter: str = "all", library: str 
         if nopost:
             res = [i for i in res if not i["slots"].get("poster", {}).get("exists")]
         res.sort(key=lambda i: (bool(i["slots"].get("poster", {}).get("exists")), i["title"].casefold()))
+    elif filter == "watch":           # marked "Später suchen"
+        marked = {m["item_id"] for m in watch.marks().values()}
+        res = [i for i in res if i["id"] in marked]
     elif filter == "weak":            # quality check: too small and/or not 2:3, thresholds chosen by the user
         res = [i for i in res if _is_weak(i, weak_w, weak_r)]
     if q:  # the search always looks at ALL titles of the world/filter, the A-Z letter does not apply
@@ -646,7 +633,7 @@ async def collection_poster(id: str, download: bool = False, thumb: bool = False
 
 
 @app.post("/api/collection-poster")
-async def collection_poster_upload(id: str, file: Annotated[UploadFile, File()], create: bool = False):
+async def collection_poster_upload(id: str, file: Annotated[UploadFile, File()], create: bool = False, source: str = "upload"):
     """Save the poster of a collection (the finished poster of the poster builder). The folder must exist unless create is set."""
     _, world, title = _collection_films(id)
     data = await file.read()
@@ -658,6 +645,7 @@ async def collection_poster_upload(id: str, file: Annotated[UploadFile, File()],
     if path is None:
         return JSONResponse({"detail": tr("Der Ordner „{0}“ existiert noch nicht.", title), "needs_folder": title, "reason": reason}, status_code=409)
     log.info("Collection poster: %s → %s", title, path)
+    await asyncio.to_thread(changes.record, source="builder" if source == "builder" else "upload", world=world["id"], item_id=None, title=title, slot="collection", type_="collection", gid=undo.get("gid"), path=path)
     return {"ok": True, "path": str(path), "trash": undo.get("gid"), "poster": collection_assets.state(world, title)}
 
 
@@ -668,6 +656,7 @@ async def collection_poster_delete(id: str):
     if not await asyncio.to_thread(collection_assets.delete_poster, world, title, undo):
         raise HTTPException(404, tr("Datei nicht gefunden"))
     log.info("Collection poster deleted: %s", title)
+    await asyncio.to_thread(changes.record, source="delete", world=world["id"], item_id=None, title=title, slot="collection", type_="collection", gid=undo.get("gid"))
     return {"ok": True, "trash": undo.get("gid"), "poster": collection_assets.state(world, title)}
 
 
@@ -689,6 +678,7 @@ async def collection_poster_from_url(body: CollectionUrlBody):
         raise HTTPException(400, str(e)) from e
     if path is None:
         return JSONResponse({"detail": tr("Der Ordner „{0}“ existiert noch nicht.", title), "needs_folder": title, "reason": reason}, status_code=409)
+    await asyncio.to_thread(changes.record, source="online", world=world["id"], item_id=None, title=title, slot="collection", type_="collection", gid=undo.get("gid"), path=path)
     return {"ok": True, "path": str(path), "trash": undo.get("gid"), "poster": collection_assets.state(world, title)}
 
 
@@ -868,11 +858,11 @@ async def season_thumb(item_id: str, slot: str):
 
 
 @app.post("/api/items/{item_id}/{slot}/upload")
-async def upload_slot(item_id: str, slot: str, file: Annotated[UploadFile, File()]):
+async def upload_slot(item_id: str, slot: str, file: Annotated[UploadFile, File()], source: str = "upload"):
     it = _item(item_id)
     _slot_check(it, slot)
     data = await file.read()
-    return await _store(it, slot, data)
+    return await _store(it, slot, data, "builder" if source == "builder" else "upload")
 
 
 class CopyBody(BaseModel):
@@ -890,7 +880,7 @@ async def copy_slot(item_id: str, slot: str, body: CopyBody):
     if not src or not Path(src).is_file():
         raise HTTPException(404, tr("Das Quellbild wurde im Assets-Ordner nicht gefunden"))
     log.info("Copy: %s / %s → %s", it["title"], body.source, slot)
-    return await _store(it, slot, Path(src).read_bytes())
+    return await _store(it, slot, Path(src).read_bytes(), "copy")
 
 
 class CopyAllBody(BaseModel):
@@ -919,14 +909,15 @@ async def copy_all(item_id: str, body: CopyAllBody):
             continue
         targets.append(t)
     if not targets:
-        return {"ok": True, "written": [], "skipped": skipped, "warning": None, "item": _public_item(it, True)}
+        return {"ok": True, "written": [], "skipped": skipped, "item": _public_item(it, True)}
     data = Path(src).read_bytes()
     undo: dict = {}
     await asyncio.to_thread(uploads.write_assets, it, targets, data, undo)
     log.info("Apply to all: %s / %s → %d tiles (%d skipped)", it["title"], body.source, len(targets), len(skipped))
     await asyncio.to_thread(scanner.refresh_item, it["id"])
-    warn = await _plex_push(it, targets, data)
-    return {"ok": True, "written": targets, "skipped": skipped, "warning": warn, "trash": undo.get("gid"), "item": _public_item(_item(it["id"]), True)}
+    for t in targets:
+        await asyncio.to_thread(changes.record, source="all", world=it["world"], item_id=it["id"], title=it["title"], slot=t, type_=it["type"], gid=undo.get("gid"), path=(it["slots"].get(t) or {}).get("path"))
+    return {"ok": True, "written": targets, "skipped": skipped, "trash": undo.get("gid"), "item": _public_item(_item(it["id"]), True)}
 
 
 class UrlBody(BaseModel):
@@ -1023,7 +1014,7 @@ async def plex_import(item_id: str, slot: str, body: PlexImport):
     else:
         data = await _plex_bytes(rk, body.i, False)
     log.info("Plex poster taken: %s / %s", it["title"], slot)
-    return await _store(it, slot, data, push=False)
+    return await _store(it, slot, data, "plex")
 
 
 @app.get("/api/collection-plex-posters")
@@ -1055,6 +1046,7 @@ async def collection_poster_from_plex(body: CollectionPlexImport):
         raise HTTPException(400, str(e)) from e
     if path is None:
         return JSONResponse({"detail": tr("Der Ordner „{0}“ existiert noch nicht.", title), "needs_folder": title, "reason": reason}, status_code=409)
+    await asyncio.to_thread(changes.record, source="plex", world=world["id"], item_id=None, title=title, slot="collection", type_="collection", gid=undo.get("gid"), path=path)
     return {"ok": True, "path": str(path), "trash": undo.get("gid"), "poster": collection_assets.state(world, title)}
 
 
@@ -1075,7 +1067,7 @@ async def upload_from_url(item_id: str, slot: str, body: UrlBody):
     it = _item(item_id)
     _slot_check(it, slot)
     data = await _download(body.url)
-    return await _store(it, slot, data)
+    return await _store(it, slot, data, "online")
 
 
 @app.get("/api/items/{item_id}/{slot}/search")
@@ -1220,6 +1212,19 @@ class StyleBody(BaseModel):
     style: dict
 
 
+@app.get("/api/styles/export")
+async def export_styles(name: str = ""):
+    """The presets as a file (one by name, or all) to keep or to share."""
+    data = styles.load()["presets"]
+    if name:
+        if name not in data:
+            raise HTTPException(404, tr("Vorlage nicht gefunden"))
+        data = {name: data[name]}
+    body = json.dumps({"format": "p5assets-presets", "version": 1, "presets": data}, ensure_ascii=False, indent=1)
+    fname = f"p5assets-{_safe_name(name) if name else 'presets'}.json"
+    return Response(body, media_type="application/json", headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(fname)}", "Cache-Control": "no-store"})
+
+
 @app.put("/api/styles/presets/{name}")
 async def put_style_preset(name: str, body: StyleBody):
     if not await asyncio.to_thread(styles.save_preset, name, body.style):
@@ -1270,6 +1275,7 @@ async def delete_slot(item_id: str, slot: str):
             log.info("Deleted (mirror): %s / %s (%s)", it["title"], slot, extra)
         trash.stash(gid, Path(path), move=True, label=slot)      # moved to the trash: can be undone for 30 days
         log.info("Deleted: %s / %s (%s)", it["title"], slot, path)
+        await asyncio.to_thread(changes.record, source="delete", world=it["world"], item_id=it["id"], title=it["title"], slot=slot, type_=it["type"], gid=gid)
     await asyncio.to_thread(scanner.refresh_item, item_id)
     return {"ok": True, "trash": gid, "item": _public_item(_item(item_id), True)}
 
@@ -1279,6 +1285,19 @@ async def delete_slot(item_id: str, slot: str):
 @app.get("/api/trash")
 async def trash_list():
     return {"keep_days": trash.KEEP_DAYS, "groups": await asyncio.to_thread(trash.listing)}
+
+
+@app.get("/api/changes")
+async def changes_list(world: str = "", q: str = "", source: str = "", limit: int = 60, offset: int = 0):
+    return await asyncio.to_thread(changes.listing, world, q, source, min(max(limit, 1), 200), max(offset, 0))
+
+
+@app.get("/api/changes/{eid}/picture")
+async def changes_picture(eid: str):
+    p = changes.picture(eid)
+    if not p:
+        raise HTTPException(404)
+    return FileResponse(p, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=31536000, immutable"})
 
 
 @app.post("/api/trash/{gid}/restore")
@@ -1291,6 +1310,8 @@ async def trash_restore(gid: str):
     item = next((i for i in scanner.STATE["items"] if i["id"] == meta.get("item_id")), None)
     if item:
         await asyncio.to_thread(scanner.refresh_item, item["id"])
+        slot = meta.get("slot") or "poster"
+        await asyncio.to_thread(changes.record, source="restore", world=item["world"], item_id=item["id"], title=item["title"], slot=slot, type_=item["type"], path=(item["slots"].get(slot) or {}).get("path"))
     return {"ok": True, "item": _public_item(item, True) if item else None, "title": meta.get("title")}
 
 
@@ -1550,13 +1571,13 @@ async def import_apply(sid: str, body: ApplyBody):
                 path, _reason = await asyncio.to_thread(collection_assets.write_poster, world, title, uploads.staged_bytes(sid, a.file), a.create_folder, {})
                 if path is None:
                     raise ValueError(tr("Der Ordner „{0}“ existiert noch nicht.", title))
-                done.append({"item": title, "slot": "collection", "warning": None})
+                done.append({"item": title, "slot": "collection"})
                 continue
             it = _item(a.item_id)
             _slot_check(it, a.slot)
             data = uploads.staged_bytes(sid, a.file)
-            res = await _store(it, a.slot, data)
-            done.append({"item": it["title"], "slot": a.slot, "warning": res["warning"]})
+            await _store(it, a.slot, data, "import")
+            done.append({"item": it["title"], "slot": a.slot})
         except (ValueError, HTTPException, FileNotFoundError) as e:
             failed.append({"file": a.file, "error": getattr(e, "detail", None) or str(e)})
     uploads.drop_session(sid)
@@ -1668,3 +1689,79 @@ class _RevalidatingStatic(StaticFiles):
 
 
 app.mount("/static", _RevalidatingStatic(directory=STATIC), name="static")
+
+
+# ------------------------------------------------------- Später suchen ---
+
+class WatchBody(BaseModel):
+    on: bool = True
+
+
+async def _watch_look(it: dict, slot: str) -> list[dict] | None:
+    """One online search for a tile: the textless pictures it finds (None = the search failed)."""
+    try:
+        res = await search_posters(it["id"], slot)
+    except HTTPException:
+        return None
+    return watch.textless(res["images"])
+
+
+@app.post("/api/items/{item_id}/{slot}/watch")
+async def watch_set(item_id: str, slot: str, body: WatchBody):
+    """Mark a tile "Später suchen" (what is online now counts as known) or take the mark away."""
+    it = _item(item_id)
+    _slot_check(it, slot)
+    if not body.on:
+        await asyncio.to_thread(watch.unmark, item_id, slot)
+    else:
+        found = await _watch_look(it, slot)
+        if not await asyncio.to_thread(watch.mark, item_id, slot, [f["url"] for f in (found or [])]):
+            raise HTTPException(400, tr("Zu viele Markierungen – bitte erst einige aufheben"))
+        log.info("Marked 'search later': %s / %s (%d textless known)", it["title"], slot, len(found or []))
+    return {"ok": True, "item": _public_item(_item(item_id), True)}
+
+
+@app.post("/api/items/{item_id}/{slot}/watch/seen")
+async def watch_seen(item_id: str, slot: str):
+    _item(item_id)
+    await asyncio.to_thread(watch.dismiss, item_id, slot)
+    return {"ok": True, "item": _public_item(_item(item_id), True)}
+
+
+@app.post("/api/watch/check")
+async def watch_check_now():
+    """Look at every marked tile now (also done once a day by itself)."""
+    return await _watch_run(force=True)
+
+
+async def _watch_run(force: bool = False) -> dict:
+    todo = list(watch.marks().values()) if force else watch.due()
+    news = []
+    for m in todo[:40]:
+        it = next((i for i in scanner.STATE["items"] if i["id"] == m["item_id"]), None)
+        if not it:
+            continue
+        found = await _watch_look(it, m["slot"])
+        if found is None:
+            continue
+        fresh = await asyncio.to_thread(watch.record_check, m["item_id"], m["slot"], found)
+        if fresh:
+            news.append({"title": it["title"], "slot": m["slot"], "count": len(fresh)})
+    if news:
+        log.info("Search later: new textless pictures for %s", ", ".join(f"{n['title']} ({n['slot']})" for n in news))
+        if notify.channels(config.get()):
+            lines = [f"{n['title']} – {n['slot']}: {n['count']}" for n in news]
+            await notify.send_all("p5assets: " + tr("Neue Textless-Poster gefunden"), "\n".join(lines))
+    return {"checked": len(todo[:40]), "news": news}
+
+
+async def _watch_loop() -> None:
+    await asyncio.sleep(120)
+    while True:
+        try:
+            apis = config.get()["apis"]
+            if config.get()["onboarded"] and (apis["tmdb"] or apis["tvdb"] or apis["fanart"]):
+                await _watch_run()
+        except Exception as e:  # noqa: BLE001
+            log.warning("Search later: %s", short(e))
+        await asyncio.sleep(3600)

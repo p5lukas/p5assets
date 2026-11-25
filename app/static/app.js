@@ -398,7 +398,7 @@ function listSearch(onInput) {
 function openCleanup(initial = "trash") {
   let tab = initial;
   const body = h("div"), tabs = h("div", { class: "tabs", style: "position:static" });
-  const m = modal(T("Papierkorb & Aufräumen"), h("div", {}, tabs, body));
+  const m = modal(T("Papierkorb, Verlauf & Aufräumen"), h("div", {}, tabs, body));
   const slotNames = g => (g.slot || "").split(", ").filter(Boolean).map(k => { try { return slotLabel(k, g.type || "show"); } catch { return k; } }).join(", ");
   const refresh = () => { loadItems().then(renderGrid); api("/status").then(r => { S.st.summary = r; updateHero(); }); };
 
@@ -480,9 +480,37 @@ function openCleanup(initial = "trash") {
         : h("div", { class: "empty", style: "padding:30px" }, T("[ OK ] Keine verwaisten Ordner gefunden.")));
   }
 
+  /** History: every change of a poster with a small picture of the new version, the old one (while the trash still has it) and "Wiederherstellen". */
+  async function drawHistory() {
+    const SRC = { upload: T("Upload"), builder: T("Builder"), online: T("Online-Wahl"), plex: T("Plex"), import: T("Import"), copy: T("Kopiert"), all: T("Auf alle"), delete: T("Gelöscht"), restore: T("Wiederhergestellt") };
+    const list = h("div"), count = h("span", { class: "hint", style: "margin:0" }), moreBtn = h("button", { class: "btn sm", hidden: true }, T("Mehr laden"));
+    const st = { q: "", source: "", offset: 0 };
+    const q = h("input", { type: "text", placeholder: T("Titel suchen …"), "aria-label": T("Titel suchen …"), style: "flex:1;min-width:160px;width:auto", oninput: e => { clearTimeout(q.t); q.t = setTimeout(() => { st.q = e.target.value; load(true); }, 250); } });
+    const sel = h("select", { "aria-label": T("Quelle"), style: "width:auto", onchange: e => { st.source = e.target.value; load(true); } }, h("option", { value: "" }, T("Alle Quellen")), Object.entries(SRC).map(([k, v]) => h("option", { value: k }, v)));
+    const slotName = (e) => e.slot === "collection" ? T("Collection-Poster") : (() => { try { return slotLabel(e.slot, e.type || "show"); } catch { return e.slot; } })();
+    const rowEl = e => h("div", { class: "trow" },
+      e.before != null && e.gid ? h("img", { loading: "lazy", alt: "", title: T("Vorher"), src: `/api/trash/${e.gid}/file/${e.before}` }) : h("div", { class: "noth", title: T("Vorher: nichts") }, "＋"),
+      h("span", { class: "hint", style: "margin:0", "aria-hidden": "true" }, "→"),
+      e.pic ? h("img", { loading: "lazy", alt: "", title: T("Nachher"), src: `/api/changes/${e.id}/picture` }) : h("div", { class: "noth", title: T("Nachher: nichts") }, e.source === "delete" ? "✕" : "—"),
+      h("div", { class: "grow" }, h("b", {}, e.title || "—"), h("div", { class: "hint", style: "margin:0" }, [slotName(e), SRC[e.source] || e.source].join(" · ")), h("div", { class: "hint", style: "margin:0" }, fmtWhen(e.ts))),
+      h("button", { class: "btn sm", disabled: !e.can_restore, title: e.can_restore ? T("Den Stand vor dieser Änderung wiederherstellen") : T("Die alte Version ist nicht mehr im Papierkorb"),
+        onclick: async ev => { try { await busy(ev.currentTarget, () => api(`/trash/${e.gid}/restore`, { method: "POST" })); toast(T("Wiederhergestellt ✓"), "ok"); refresh(); load(true); } catch (err) { toast(err.message, "bad"); } } }, T("Wiederherstellen")));
+    async function load(reset) {
+      if (reset) { st.offset = 0; list.replaceChildren(); }
+      const r = await api("/changes?" + new URLSearchParams({ world: S.world, q: st.q, source: st.source, limit: 60, offset: st.offset }));
+      r.entries.forEach(e => list.append(rowEl(e)));
+      st.offset += r.entries.length; moreBtn.style.display = st.offset >= r.total ? "none" : "";
+      count.textContent = TP(r.total, "Ein Eintrag", "{0} Einträge");
+      if (!r.total) fill(list, h("div", { class: "empty", style: "padding:30px" }, T("Noch keine Änderungen aufgezeichnet.")));
+    }
+    moreBtn.onclick = () => load(false);
+    fill(body, h("div", { class: "row wrap", style: "margin-bottom:8px" }, q, sel, h("span", { class: "spacer" }), count), list, h("div", { style: "text-align:center;margin-top:10px" }, moreBtn));
+    await load(true);
+  }
+
   const draw = () => {
-    fill(tabs, [["trash", T("Papierkorb")], ["orphans", T("Verwaiste Ordner")]].map(([k, label]) => h("button", { class: "tab" + (tab === k ? " on" : ""), onclick: () => { tab = k; draw(); } }, label)));
-    (tab === "trash" ? drawTrash : drawOrphans)().catch(e => fill(body, h("div", { class: "status bad" }, e.message)));
+    fill(tabs, [["trash", T("Papierkorb")], ["history", T("Verlauf")], ["orphans", T("Verwaiste Ordner")]].map(([k, label]) => h("button", { class: "tab" + (tab === k ? " on" : ""), onclick: () => { tab = k; draw(); } }, label)));
+    (tab === "trash" ? drawTrash : tab === "history" ? drawHistory : drawOrphans)().catch(e => fill(body, h("div", { class: "status bad" }, e.message)));
   };
   draw();
 }
@@ -602,7 +630,25 @@ async function logsPage() {
   const toggle = h("input", { type: "checkbox", checked: true, onchange: e => { st.auto = e.target.checked; if (st.auto) view.scrollTop = view.scrollHeight; } });
 
   const visible = () => st.entries.filter(e => (st.level === "ALL" || e.level === st.level) && (!st.q || `${e.ts} ${e.level} ${e.src} ${e.msg}`.toLowerCase().includes(st.q.toLowerCase())));
+  // "Probleme": warnings and errors that repeat, grouped (numbers and quoted names count as the same) with how often and when last; a click filters the list
+  const problems = h("div", { class: "logprob", hidden: true });
+  const normMsg = m => m.replace(/„[^“]*“|"[^"]*"|'[^']*'/g, "…").replace(/\d+/g, "#").replace(/\s+/g, " ").trim().toLowerCase();
+  function renderProblems() {
+    const groups = new Map();
+    for (const e of st.entries) {
+      if (e.level !== "WARNING" && e.level !== "ERROR") continue;
+      const k = e.level + "|" + e.src + "|" + normMsg(e.msg), g = groups.get(k) || { level: e.level, src: e.src, msg: e.msg, n: 0, last: e.ts };
+      g.n++; g.last = e.ts || g.last; g.msg = e.msg; groups.set(k, g);
+    }
+    const top = [...groups.values()].filter(g => g.n > 1).sort((a, b) => b.n - a.n).slice(0, 6);
+    problems.hidden = !top.length;
+    if (!top.length) return;
+    fill(problems, h("div", { class: "probhead" }, h("b", {}, T("Probleme")), h("span", { class: "hint", style: "margin:0" }, T("Wiederholte Warnungen und Fehler, zusammengefasst. Ein Klick filtert die Liste."))),
+      top.map(g => h("button", { class: "probrow lv-" + g.level, type: "button", title: T("Nur diese Meldung zeigen"), onclick: () => { st.q = g.msg.slice(0, 40); q.value = st.q; renderLines(); } },
+        h("span", { class: "lvl" }, `[${g.level}]`), h("span", { class: "probn" }, `${g.n} ×`), h("span", { class: "msg" }, g.msg), h("span", { class: "hint", style: "margin:0" }, T("zuletzt {0}", g.last || "")))));
+  }
   function renderLines() {
+    renderProblems();
     const list = visible(), shown = list.slice(-5000);
     fill(view, shown.length ? shown.map(e => h("div", { class: "ll lv-" + e.level },
       e.ts ? h("span", { class: "ts" }, `[${e.ts}]`) : null, " ", h("span", { class: "lvl" }, `[${e.level}]`), " ",
@@ -664,6 +710,7 @@ async function logsPage() {
           h("div", { class: "grow", style: "min-width:240px" }, h("label", { class: "f", style: "margin-top:0" }, T("Logs durchsuchen")), h("div", { class: "clearwrap" }, q, clearBtn(q))),
           h("div", {}, h("label", { class: "f", style: "margin-top:0" }, T("Nach Level filtern")), chips))),
       h("div", { class: "logcard", style: "padding:0;margin-top:18px" },
+        problems,
         h("div", { class: "row loghead" }, title, h("div", { class: "spacer" }), count, liveBadge),
         h("div", { class: "loghint" }, h("b", {}, T("Tipp: ")), T("Mit der Suche und den Level-Filtern grenzt du die Anzeige ein. Warnungen und Fehler sind farbig markiert. Tokens und API-Keys werden nie ins Log geschrieben.")),
         view)));
@@ -824,8 +871,12 @@ function renderChips() {
     chip(T("Alle"), "all", cnt.all),
     chip(T("Alle fehlenden"), "missing", cnt.missing, T("Alles, was ein Poster oder eine Staffel braucht – auch Titel, die nur Sonarr/Radarr kennen und in Plex noch nicht sind")),
     chip(T("Schwache Poster"), "weak", cnt.weak, T("Bilder, die zu schmal sind oder nicht das Seitenverhältnis 2:3 haben (Schwellwerte wählst du selbst)")),
+    cnt.watch > 0 || S.filter === "watch" ? chip(T("Später suchen"), "watch", cnt.watch, T("Titel, bei denen du auf ein besseres Poster wartest (z. B. ein Textless-Poster): p5assets schaut täglich nach und meldet neue")) : null,
     cnt.collections > 0 || S.filter === "collections" ? chip(T("Collections"), "collections", cnt.collections, T("Alle Plex-Collections (Filmreihen) dieser Welt: ansehen, bearbeiten und alle Filme in einem Look bauen")) : null,
     S.filter === "weak" ? weakOptions() : null,
+    S.filter === "watch" ? h("button", { class: "chip", type: "button", title: T("Jetzt nach neuen Textless-Postern für alle markierten Titel suchen"), onclick: async e => {
+      try { const r = await busy(e.currentTarget, () => api("/watch/check", { method: "POST", json: {} })); toast(r.news.length ? TP(r.news.length, "Neue Textless-Poster bei einem Titel gefunden", "Neue Textless-Poster bei {0} Titeln gefunden") : T("Nichts Neues gefunden"), "ok"); await loadItems(); renderGrid(); renderChips(); }
+      catch (err) { toast(err.message, "bad"); } } }, T("Jetzt prüfen")) : null,
     S.filter === "comingsoon" ? h("label", { class: "chip" + (S.nopost ? " on" : ""), style: "display:inline-flex;gap:8px;align-items:center;cursor:pointer" },
       h("input", { type: "checkbox", checked: S.nopost, style: "accent-color:var(--accent)", onchange: async e => { S.nopost = e.target.checked; renderChips(); await loadItems(); renderGrid(); } }), T("nur ohne Poster")) : null,
   );
@@ -994,6 +1045,7 @@ function card(item, local, extra) {
   const bad = item.missing;
   if (bad) box.append(h("span", { class: "badge bad" }, TP(bad, "{0} fehlt", "{0} fehlen")));
   box.title = metaText(item);
+  if (Object.values(item.watch || {}).some(n => n > 0)) box.append(h("span", { class: "badge ok r", title: T("Für diesen Titel gibt es neue Textless-Poster") }, T("Neu")));
   if (!item.in_plex) box.append(h("span", { class: "badge warn b", title: T("Sonarr/Radarr kennen den Titel, in Plex fehlt er noch") }, NOT_IN_PLEX()));
   else if (item.coming_soon) box.append(h("span", { class: "badge warn b", title: T("In Plex als Coming-Soon-Platzhalter sichtbar") }, T("Coming Soon")));
   if (S.filter === "weak") { const wk = weakSlot(item); if (wk) box.append(h("span", { class: "badge warn r", title: T("{0}: {1} × {2} px", slotLabel(wk.key, item.type), wk.w, wk.h) }, `${wk.w}×${wk.h}`)); }
@@ -1016,11 +1068,11 @@ function card(item, local, extra) {
       ensure();
       if (matchMedia("(hover: none)").matches) toggleActions(box); else openPreview(item, "poster", changed);
     };
-    makeDropTarget(el, files => uploadSlot(item, "poster", files, changed));
+    makeDropTarget(el, files => uploadSlot(item, "poster", files, changed), T("Loslassen: Poster ersetzen"));
   } else if (movie) {
     box.onclick = () => openPreview(item, "poster", changed);
   } else {
-    makeDropTarget(el, files => importFiles(files, item.id));
+    makeDropTarget(el, files => importFiles(files, item.id), T("Loslassen: Bilder den Kacheln zuordnen"));
   }
   el.append(box, info);
   return el;
@@ -1112,7 +1164,7 @@ async function openItem(id) {
       if (matchMedia("(hover: none)").matches) toggleActions(box); else if (exists) openPreview(it, key, draw); else pick();
     };
     if (selMode && exists) { box.classList.add("selectable"); if (sel.has(key)) box.classList.add("selected"); box.append(h("span", { class: "selmark" }, sel.has(key) ? "✓" : "")); }
-    makeDropTarget(el, files => uploadSlot(it, key, files, draw));
+    makeDropTarget(el, files => uploadSlot(it, key, files, draw), T("Loslassen: {0} ersetzen", slotLabel(key, it.type)));
     // Kometa assets can be dragged onto other tiles of this title: the file is copied and renamed Kometa-conform
     if (exists) {
       // draggable everywhere on the poster, also over the overlay buttons (buttons are draggable too, the event bubbles up)
@@ -1134,7 +1186,6 @@ async function openItem(id) {
       try {
         const r = await api(`/items/${it.id}/${key}/copy`, { json: { source: src.slot } });
         undoToast(T("{0} → {1} kopiert ✓", slotLabel(src.slot, it.type), slotLabel(key, it.type)), r, draw);
-        if (r.warning) toast(T("Plex: ") + r.warning, "bad");
         S.rain.add(it.id + "|" + key); draw(r.item);
       } catch (err) { toast(err.message, "bad"); } finally { busyTile(it.id + "|" + key, false); }
     });
@@ -1182,16 +1233,33 @@ function slotActions(it, key, box, draw, extra) {
   const build = builderOpener(it, key, draw);
   const pick = () => pickFiles(files => uploadSlot(it, key, files, draw), false);
   const del = async () => { if (confirm(T("{0} wirklich löschen?", slotLabel(key, it.type)))) { const r = await api(`/items/${it.id}/${key}`, { method: "DELETE" }); draw(r.item); undoToast(T("Gelöscht"), r, draw); } };
-  const ob = (label, fn, cls = "") => h("button", { class: "ov-btn " + cls, onclick: e => { e.stopPropagation(); box.classList.remove("show"); fn(); } }, label);
-  return h("div", { class: "hover" },
-    h("div", { class: "ovbtns" }, exists
-      ? [ob(T("Ersetzen"), pick), ob(T("Vorschau"), () => openPreview(it, key, draw)), ob(T("Online suchen"), () => searchOnline(it, key, draw)),
-         build ? ob(T("Bauen"), build) : null, extra && extra.collectionBuild ? ob(T("Collection bauen"), extra.collectionBuild) : null,
-         ob(T("Herunterladen"), () => downloadSlot(it, key, draw)),
-         it.type === "show" ? ob(T("Auf alle …"), () => openApplyAll(it, key, draw)) : null, ob(T("Löschen"), del, "danger")]
-      : [ob(T("Hochladen"), pick), ob(T("Online suchen"), () => searchOnline(it, key, draw)), build ? ob(T("Bauen"), build) : null,
-         it.slots[key] && it.slots[key].plex_thumb ? ob(T("Plex-Poster übernehmen"), () => takePlexPoster(it, key, draw)) : null, extra && extra.collectionBuild ? ob(T("Collection bauen"), extra.collectionBuild) : null]),
-    h("div", { class: "ovhint" }, T("oder Bild hierher ziehen")));
+  const col = extra && extra.collectionBuild ? [T("Collection bauen"), extra.collectionBuild] : null;
+  const marked = key in (it.watch || {}), fresh = (it.watch || {})[key] || 0;
+  const later = [marked ? T("Nicht mehr suchen") : T("Später suchen"), async () => {
+    try { const r = await api(`/items/${it.id}/${key}/watch`, { json: { on: !marked } }); toast(marked ? T("Markierung entfernt") : T("Gemerkt: p5assets schaut täglich nach einem besseren Poster"), "ok"); draw(r.item); loadItems().then(renderGrid); }
+    catch (e) { toast(e.message, "bad"); }
+  }];
+  const seeNew = fresh ? [TP(fresh, "Neues Textless-Poster ansehen", "{0} neue Textless-Poster ansehen"), async () => { await api(`/items/${it.id}/${key}/watch/seen`, { json: {} }).catch(() => {}); searchOnline(it, key, draw); }] : null;
+  const plex = it.slots[key] && it.slots[key].plex_thumb ? [T("Plex-Poster übernehmen"), () => takePlexPoster(it, key, draw)] : null;
+  // [label, action, class, icon]: the entries with an icon are the three buttons of the bar, the others sit behind "⋯"
+  return hoverBar(box, exists
+    ? [[T("Ersetzen"), pick, "", "upload"], [T("Online suchen"), () => searchOnline(it, key, draw), "", "search"], build ? [T("Bauen"), build, "", "build"] : null,
+       seeNew, [T("Vorschau"), () => openPreview(it, key, draw)], col, [T("Herunterladen"), () => downloadSlot(it, key, draw)], later,
+       it.type === "show" ? [T("Auf alle …"), () => openApplyAll(it, key, draw)] : null, [T("Löschen"), del, "danger"]]
+    : [[T("Hochladen"), pick, "", "upload"], [T("Online suchen"), () => searchOnline(it, key, draw), "", "search"], build ? [T("Bauen"), build, "", "build"] : null, seeNew, plex, col, later]);
+}
+/** The hover bar of a poster: up to three icon buttons at the bottom edge (the picture stays visible) and "⋯" with the other actions as a small menu. */
+function hoverBar(box, list) {
+  list = list.filter(Boolean);
+  const primary = list.filter(x => x[3]), more = list.filter(x => !x[3]);
+  const run = fn => e => { e.stopPropagation(); box.classList.remove("show", "menu"); fn(); };
+  const menu = h("div", { class: "ovmenu", hidden: true }, more.map(([label, fn, cls = ""]) => h("button", { class: "ov-btn " + cls, onclick: run(fn) }, label)));
+  const toggle = e => { e.stopPropagation(); if (!menu.isConnected) box.append(menu); menu.hidden = !menu.hidden; box.classList.toggle("menu", !menu.hidden); };       // the menu sits on the poster itself (not in the bar), so it can use its whole height
+  const bar = h("div", { class: "hover bar" },
+    h("div", { class: "ovrow" }, primary.map(([label, fn, cls = "", ic]) => h("button", { class: "ovi " + cls, type: "button", title: label, "aria-label": label, onclick: run(fn) }, icon(ic, 18))),
+      more.length ? h("button", { class: "ovi", type: "button", title: T("Mehr"), "aria-label": T("Mehr"), "aria-haspopup": "true", onclick: toggle }, "⋯") : null));
+  if (more.length) box.addEventListener("mouseleave", () => { menu.hidden = true; box.classList.remove("menu"); });
+  return bar;
 }
 
 /** Enlarged view of a poster (always the original file) with its details and the actions. Works for empty slots too
@@ -1281,7 +1349,7 @@ const collectionPosterFromUrl = (cid, title, url) => saveCollectionPoster(cid, t
 /** Pick a picture file; a single image becomes the poster of the collection. */
 function chooseCollectionPoster(cid, title, done) {
   pickFiles(async files => {
-    const imgs = files.filter(f => /\.(jpe?g|png|webp|gif|bmp|tiff?|avif)$/i.test(f.path));
+    const imgs = files.filter(f => IMG_EXT.test(f.path) || isImageFile(f.file));
     try {
       if (imgs.length === 1 && files.length === 1) { const p = await uploadCollectionPoster(cid, title, imgs[0].file); if (p) done(p); }
       else importFiles(files, null, () => done(null), null, null, { collection: cid });
@@ -1338,9 +1406,8 @@ function collectionButtons(g, change, close) {
 }
 /** The hover menu of a collection poster, like on every other tile. */
 function collectionActions(g, box, change) {
-  const ob = ([label, fn, cls = ""]) => h("button", { class: "ov-btn " + cls, onclick: e => { e.stopPropagation(); box.classList.remove("show"); fn(); } }, label);
-  const list = collectionActionList(g, change);
-  const el = h("div", { class: "hover" }, h("div", { class: "ovbtns" }, list.map(ob)), h("div", { class: "ovhint" }, T("oder Bild hierher ziehen")));
+  const list = collectionActionList(g, change).map(([label, fn, cls = ""]) => [label, fn, cls, ({ [T("Ersetzen")]: "upload", [T("Hochladen")]: "upload", [T("Online suchen")]: "search", [T("Bauen")]: "build" })[label]]);
+  const el = hoverBar(box, list);
   el.preview = () => openCollectionPreview(g, change);
   return el;
 }
@@ -1381,12 +1448,12 @@ function collectionTile(g) {
         h("span", { class: "pill " + (g.with_poster === g.total ? "ok" : "warn") }, g.with_poster === g.total ? T("vollständig ({0})", g.total) : T("{0} von {1} Postern", g.with_poster, g.total))),
       meta));
   makeDropTarget(card, async files => {
-    const imgs = files.filter(f => /\.(jpe?g|png|webp|gif|bmp|tiff?|avif)$/i.test(f.path));
+    const imgs = files.filter(f => IMG_EXT.test(f.path) || isImageFile(f.file));
     try {
       if (g.poster && imgs.length === 1 && files.length === 1) { const p = await uploadCollectionPoster(g.id, g.title, imgs[0].file); set(p); }
       else importFiles(files, null, () => {}, null, null, { collection: g.id });
     } catch (e) { toast(e.message, "bad"); }
-  });
+  }, T("Loslassen: Collection-Poster ersetzen"));
   return card;
 }
 
@@ -1404,12 +1471,12 @@ function collectionPosterCard(data, reload) {
   box.onclick = () => { if (isTouch()) toggleActions(box); else if (p.exists) act.preview(); };
   const el = h("div", { class: "card colposter" }, box, h("div", { class: "info" }, h("div", { class: "t" }, T("Collection-Poster")), h("div", { class: "s" }, data.title)));
   makeDropTarget(el, async files => {
-    const imgs = files.filter(f => /\.(jpe?g|png|webp|gif|bmp|tiff?|avif)$/i.test(f.path));
+    const imgs = files.filter(f => IMG_EXT.test(f.path) || isImageFile(f.file));
     try {
       if (imgs.length === 1 && files.length === 1) { if (await uploadCollectionPoster(cid, data.title, imgs[0].file)) reload(); }
       else importFiles(files, null, reload, null, null, { collection: cid });
     } catch (e) { toast(e.message, "bad"); }
-  });
+  }, T("Loslassen: Collection-Poster ersetzen"));
   return el;
 }
 
@@ -1545,7 +1612,6 @@ function openApplyAll(it, key, draw) {
       const r = await busy(go, () => api(`/items/${it.id}/copy-all`, { json: { source: key, targets, overwrite: opt.overwrite } }));
       m.close();
       undoToast(T("{0} gesetzt ✓", pl(r.written.length, "Kachel", "Kacheln")), r, draw);
-      if (r.warning) toast(T("Plex: ") + r.warning, "bad");
       r.written.forEach(t => S.rain.add(it.id + "|" + t));
       draw(r.item);
     } catch (e) { toast(e.message, "bad"); }
@@ -1554,14 +1620,14 @@ function openApplyAll(it, key, draw) {
 }
 
 async function uploadSlot(it, slot, files, draw) {
-  const imgs = files.filter(f => /\.(jpe?g|png|webp|gif|bmp|tiff?|avif)$/i.test(f.path));
+  const imgs = files.filter(f => IMG_EXT.test(f.path) || isImageFile(f.file));
   if (imgs.length !== 1 || files.length !== 1) return importFiles(files, it.id, draw);
   const fd = new FormData(); fd.append("file", imgs[0].file, imgs[0].file.name);
   const key = it.id + "|" + slot;
   busyTile(key, true);
   try {
     const r = await api(`/items/${it.id}/${slot}/upload`, { method: "POST", body: fd });
-    undoToast(T("Ersetzt ✓"), r, draw); if (r.warning) toast(T("Plex: ") + r.warning, "bad");
+    undoToast(T("Ersetzt ✓"), r, draw);
     S.rain.add(key);
     draw(r.item);
   } catch (e) { toast(e.message, "bad"); } finally { busyTile(key, false); }
@@ -1583,7 +1649,13 @@ async function searchOnline(it, slot, draw, opts = {}) {      // opts.pick(img):
   const buildOpen = opts.pick ? null : opts.build ? opts.build : it.type === "movie" ? () => openMovieBuilder(it, draw) : S.seriesBuild && S.seriesBuildItem === it.id ? () => S.seriesBuild(slot) : null;
   const buildBtn = (cls, label) => buildOpen ? h("button", { class: cls, type: "button", title: T("Poster selbst bauen: textloses Poster, Logo oder Titel und Staffeltext"), onclick: () => { m.close(); buildOpen(); } },
     icon("build", 14), label) : null;
-  const buildRow = buildOpen ? h("div", { class: "row buildrow" }, h("span", { class: "grow" }), buildBtn("btn sm", T("Bauen"))) : null;
+  const canWatch = !opts.pick && !opts.apply && !opts.collection && it.watch !== undefined;
+  const watchBtn = canWatch ? h("button", { class: "btn sm", type: "button", title: T("p5assets schaut täglich nach einem besseren Poster (z. B. Textless) und meldet neue Treffer. Nichts wird von selbst übernommen."), onclick: async e => {
+    const on = !(slot in (it.watch || {}));
+    try { const r = await busy(e.currentTarget, () => api(`/items/${it.id}/${slot}/watch`, { json: { on } })); it.watch = r.item.watch; e.currentTarget.textContent = slot in it.watch ? T("Nicht mehr suchen") : T("Später suchen"); if (draw) draw(r.item); loadItems().then(renderGrid); toast(on ? T("Gemerkt: p5assets schaut täglich nach einem besseren Poster") : T("Markierung entfernt"), "ok"); }
+    catch (err) { toast(err.message, "bad"); }
+  } }, slot in (it.watch || {}) ? T("Nicht mehr suchen") : T("Später suchen")) : null;
+  const buildRow = buildOpen || watchBtn ? h("div", { class: "row buildrow" }, h("span", { class: "grow" }), watchBtn, buildOpen ? buildBtn("btn sm", T("Bauen")) : null) : null;
   const byCode = Object.fromEntries(S.langs.map(l => [l.code, l]));
   const langTitle = code => { const l = byCode[code]; const name = !l ? code : code === "xx" ? T("Textless (No Text)") : l.native && l.native !== l.name ? `${l.name} (${l.native})` : l.name; return `${code} • ${name}`; };
   try {
@@ -1738,7 +1810,7 @@ function posterDropZone(site, it, slot, draw, done, pick) {
       const u = URL.createObjectURL(f); done(); pick({ url: u, preview: u, source: site, name: f.name, file: f });
       return;
     }
-    const imgs = files.filter(f => /\.(jpe?g|png|webp|gif|bmp|tiff?|avif)$/i.test(f.path));
+    const imgs = files.filter(f => IMG_EXT.test(f.path) || isImageFile(f.file));
     done();
     if (coll) {                                                                              // the poster of a collection
       if (files.length === 1 && imgs.length === 1) uploadCollectionPoster(it.id, it.title, imgs[0].file).then(np => { if (np) draw(np); }).catch(e => toast(e.message, "bad"));
@@ -1842,26 +1914,52 @@ function openPosterDbSet(it, draw) {
 /* ================================================== files / drag & drop === */
 let dragDepth = 0;
 const hasFiles = e => e.dataTransfer && [...e.dataTransfer.types].includes("Files");
-window.addEventListener("dragenter", e => { if (hasFiles(e)) { dragDepth++; $("#dropveil").classList.toggle("on", S.view === "dash" && !(e.target.closest && e.target.closest(".droptgt, .modalwrap"))); } });
-window.addEventListener("dragleave", e => { if (hasFiles(e) && --dragDepth <= 0) { dragDepth = 0; $("#dropveil").classList.remove("on"); } });
-window.addEventListener("dragover", e => { if (hasFiles(e)) e.preventDefault(); });
+const hasLink = e => e.dataTransfer && [...e.dataTransfer.types].includes("text/uri-list");      // a picture dragged out of a web page: a link, no file
+const isDrag = e => hasFiles(e) || hasLink(e);
+const IMG_EXT = /\.(jpe?g|png|webp|gif|bmp|tiff?|avif)$/i;
+const isImageFile = f => !!f && (/^image\//.test(f.type) || IMG_EXT.test(f.name || ""));       // the type can be empty (e.g. .webp / .avif on some systems): then the ending decides
+const endDrag = () => { dragDepth = 0; $("#dropveil").classList.remove("on"); document.body.classList.remove("dragging"); };
+// while a file is dragged over the window every place that takes it shows a dashed frame (body.dragging); the one under the pointer lights up and says what happens
+window.addEventListener("dragenter", e => {
+  if (!isDrag(e)) return;
+  dragDepth++; document.body.classList.add("dragging");
+  const open = !!document.querySelector(".scrim, .modalwrap");                    // with a detail view or a window open the tiles take the picture, no full-page drop area
+  $("#dropveil").classList.toggle("on", hasFiles(e) && S.view === "dash" && !open && !(e.target.closest && e.target.closest(".droptgt")));
+});
+window.addEventListener("dragleave", e => { if (isDrag(e) && --dragDepth <= 0) endDrag(); });
+window.addEventListener("dragend", endDrag);
+window.addEventListener("dragover", e => { if (isDrag(e)) e.preventDefault(); });
 window.addEventListener("drop", async e => {
-  if (!hasFiles(e)) return;
-  e.preventDefault(); dragDepth = 0; $("#dropveil").classList.remove("on");
-  if (S.view === "dash") importFiles(await collectFiles(e.dataTransfer));
+  if (!isDrag(e)) return;
+  e.preventDefault(); endDrag();
+  if (hasFiles(e) && S.view === "dash" && !document.querySelector(".scrim, .modalwrap")) importFiles(await collectFiles(e.dataTransfer));
 });
 
-function makeDropTarget(el, cb) {
-  let depth = 0;
+/** Make an element take dropped files. label = what happens ("Loslassen: Poster ersetzen"), shown on the tile while a file is over it.
+ *  A picture dragged out of a web page arrives as a link: pictures of TMDb, TVDB and fanart.tv are fetched, others get an explaining message. */
+function makeDropTarget(el, cb, label) {
+  let depth = 0, off = 0;
   el.classList.add("droptgt");
-  el.addEventListener("dragenter", e => { if (hasFiles(e)) { depth++; el.classList.add("dropping"); } });
-  el.addEventListener("dragleave", () => { if (--depth <= 0) { depth = 0; el.classList.remove("dropping"); } });
-  el.addEventListener("dragover", e => { if (hasFiles(e)) e.preventDefault(); });
+  if (label) el.style.setProperty("--drop", JSON.stringify(label));
+  const on = () => { clearTimeout(off); el.classList.add("dropping"); };
+  const out = () => { clearTimeout(off); off = setTimeout(() => { depth = 0; el.classList.remove("dropping"); }, 70); };      // not at once: no flicker over buttons and text
+  el.addEventListener("dragenter", e => { if (isDrag(e)) { depth++; on(); } });
+  el.addEventListener("dragleave", () => { if (--depth <= 0) { depth = 0; out(); } });
+  el.addEventListener("dragover", e => { if (isDrag(e)) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; on(); } });
   el.addEventListener("drop", async e => {
-    if (!hasFiles(e)) return;
-    e.preventDefault(); e.stopPropagation(); depth = 0; el.classList.remove("dropping");
-    dragDepth = 0; $("#dropveil").classList.remove("on");
-    cb(await collectFiles(e.dataTransfer));
+    if (!isDrag(e)) return;
+    e.preventDefault(); e.stopPropagation(); depth = 0; clearTimeout(off); el.classList.remove("dropping"); endDrag();
+    if (hasFiles(e)) { cb(await collectFiles(e.dataTransfer)); return; }
+    const url = (e.dataTransfer.getData("text/uri-list") || "").split(/\r?\n/).find(l => l && !l.startsWith("#")) || "";
+    try {
+      if (!/^https?:\/\//i.test(url)) throw new Error("no link");
+      const r = await fetch("/api/proxy?url=" + encodeURIComponent(url));
+      if (!r.ok) throw new Error("blocked");
+      const blob = await r.blob();
+      let name = decodeURIComponent(url.split(/[?#]/)[0].split("/").pop() || "image");
+      if (!IMG_EXT.test(name)) name += ".jpg";
+      cb([{ file: new File([blob], name, { type: blob.type && blob.type !== "image/*" ? blob.type : "image/jpeg" }), path: name }]);
+    } catch { toast(T("Das war ein Link, keine Datei. p5assets lädt nur von TMDb, TVDB und fanart.tv selbst: Bild speichern und die Datei hier ablegen."), "bad"); }
   });
 }
 
@@ -1896,9 +1994,9 @@ function pickFiles(cb, multiple = true, directory = false) {
 }
 
 /** "Set hochladen": ask whether a folder or a ZIP/images is meant (a folder cannot be picked in the same dialog). */
-function pickSet(cb) {
-  const m = modal(T("Set hochladen"), h("div", {},
-    h("p", { class: "hint", style: "margin-top:0" }, T("Alle Bilder gehören zu dieser Serie. p5assets erkennt Poster und Staffeln an den Dateinamen und benennt sie Kometa-konform.")),
+function pickSet(cb, builder) {
+  const m = modal(builder ? T("Set laden") : T("Set hochladen"), h("div", {},
+    h("p", { class: "hint", style: "margin-top:0" }, builder ? T("p5assets erkennt Poster und Staffeln an den Dateinamen und setzt die Bilder als Hintergründe der Kacheln. Gespeichert wird erst mit „Poster speichern“.") : T("Alle Bilder gehören zu dieser Serie. p5assets erkennt Poster und Staffeln an den Dateinamen und benennt sie Kometa-konform.")),
     h("div", { class: "row wrap" },
       h("button", { class: "btn primary", onclick: () => { m.close(); pickFiles(cb, true, true); } }, icon("folder", 16), T("Ordner wählen")),
       h("button", { class: "btn", onclick: () => { m.close(); pickFiles(cb, true); } }, icon("upload", 16), T("ZIP / Bilder wählen")))));
@@ -1930,7 +2028,7 @@ async function importFiles(files, itemId, onDone, item, review, opts = {}) {    
   const allSet = res.entries.every(e => e.kind === "ignore" || e.item_id || e.collection_id);
   const used = res.entries.filter(e => e.item_id && e.slot && e.kind !== "ignore").map(e => e.slot);
   const twice = used.length !== new Set(used).size;      // two files for the same tile: let the user decide in the review
-  if (review && item) return reviewImport(res, onDone, item);   // "Set hochladen": always the review dialog, series fixed
+  if (review && item) return reviewImport(res, onDone, item, opts.builder);   // "Set hochladen": always the review dialog, series fixed
   if (itemId && allSet && !twice) {
     const clash = item ? [...new Set(used)].filter(k => item.slots[k] && item.slots[k].exists) : [];
     if (clash.length && !confirm(TP(clash.length, "Eine Kachel ist schon belegt ({1}{2}) und wird überschrieben. Fortfahren?", "{0} Kacheln sind schon belegt ({1}{2}) und werden überschrieben. Fortfahren?", clash.slice(0, 6).map(k => slotLabel(k, "show")).join(", "), clash.length > 6 ? " …" : ""))) {
@@ -1939,7 +2037,7 @@ async function importFiles(files, itemId, onDone, item, review, opts = {}) {    
     }
     return applyImport(res.session, res.entries, onDone);
   }
-  reviewImport(res, onDone);
+  reviewImport(res, onDone, null, opts.builder);
 }
 
 async function applyImport(sid, entries, onDone, colInfo = {}) {
@@ -1957,7 +2055,6 @@ async function applyImport(sid, entries, onDone, colInfo = {}) {
     const r = await api(`/import/${sid}/apply`, { json: { assignments } });
     if (r.done.length) toast(T("{0} gespeichert ✓", pl(r.done.length, "Asset", "Assets")), "ok");
     r.failed.forEach(f => toast(f.error, "bad"));
-    r.done.filter(d => d.warning).forEach(d => toast(T("Plex: ") + d.warning, "bad"));
     items.forEach(x => S.rain.add(x.item_id + "|" + x.slot));
     S.st.summary = r.summary; updateHero();
     if (onDone) onDone(items.length ? await api("/items/" + items[0].item_id) : undefined);
@@ -2013,7 +2110,8 @@ function checkSet(t, rows) {
   return { ok: !missing.length && !posterMissing && !dups.length, dups: dups.length, lines };
 }
 
-function reviewImport(res, onDone, fixed) {
+/** bo (the poster builder): { apply(sid, rows), hasBg(row) } – the pictures become backgrounds of builder tiles instead of Kometa assets. */
+function reviewImport(res, onDone, fixed, bo) {
   const rows = res.entries.map(e => ({ ...e, use: !!(e.item_id || e.collection_id) && e.kind !== "ignore" }));
   const colInfo = { ...(res.collections || {}) };          // collections some file is assigned to: { id, title, total, poster: { folder, exists } }
   const keyOf = r => r.collection_id ? "col:" + r.collection_id : r.item_id + "|" + r.slot;       // what a file occupies: a tile, or the poster of a collection
@@ -2038,7 +2136,7 @@ function reviewImport(res, onDone, fixed) {
   const apply = h("button", { class: "btn primary" });
   let dupBlock = false;     // two files for the same tile: the review must be fixed first (a tile holds one image)
   const refreshBtn = () => {
-    const n = count(); apply.textContent = T("{0} übernehmen", pl(n, "Asset", "Assets")); apply.disabled = !n || dupBlock;
+    const n = count(); apply.textContent = bo ? T("{0} als Hintergrund übernehmen", pl(n, "Bild", "Bilder")) : T("{0} übernehmen", pl(n, "Asset", "Assets")); apply.disabled = !n || dupBlock;
     apply.title = dupBlock ? T("Erst die doppelt belegten Kacheln auflösen: bei einem der Bilder das Häkchen entfernen") : "";
   };
   const ensureTarget = async id => { if (!targets[id]) { try { targets[id] = await api("/items/" + id); } catch { /* the check is optional */ } } };
@@ -2077,10 +2175,11 @@ function reviewImport(res, onDone, fixed) {
     input.onblur = () => setTimeout(() => (list2.hidden = true), 150);
     const chk = h("input", { type: "checkbox", checked: r.use, title: T("Übernehmen"), onchange: e => { r.use = e.target.checked; draw(); } });
     const pills = [];
-    if (r.use && ci && ci.poster && ci.poster.exists) pills.push(h("span", { class: "pill warn", title: T("Das Collection-Poster ist schon da und wird ersetzt") }, T("ersetzt vorhandenes Bild")));
+    if (bo) { if (r.use && bo.hasBg(r)) pills.push(h("span", { class: "pill warn", title: T("Diese Kachel hat schon einen Hintergrund") }, T("ersetzt Hintergrund"))); }
+    else if (r.use && ci && ci.poster && ci.poster.exists) pills.push(h("span", { class: "pill warn", title: T("Das Collection-Poster ist schon da und wird ersetzt") }, T("ersetzt vorhandenes Bild")));
     if (r.use && ci && ci.poster && !ci.poster.folder) pills.push(h("span", { class: "pill warn", title: T("Der Ordner der Collection wird nach Rückfrage angelegt") }, T("Ordner fehlt noch")));
     if (r.use && ci && !ci.poster) pills.push(h("span", { class: "pill bad", title: T("Für diese Welt ist kein Collection-Ordner bekannt (Einstellungen → Welten)") }, T("kein Collection-Ordner")));
-    if (r.use && t && t.slots[r.slot] && t.slots[r.slot].exists) pills.push(h("span", { class: "pill warn", title: T("Für diese Kachel gibt es schon ein Bild") }, T("ersetzt vorhandenes Bild")));
+    if (!bo && r.use && t && t.slots[r.slot] && t.slots[r.slot].exists) pills.push(h("span", { class: "pill warn", title: T("Für diese Kachel gibt es schon ein Bild") }, T("ersetzt vorhandenes Bild")));
     if (r.collection && !r.item_id && !r.collection_id) pills.push(h("span", { class: "pill warn", title: T("Der Dateiname deutet auf ein Collection-/Sammlungs-Poster hin – bitte selbst einen Titel wählen oder das Bild nicht übernehmen") }, T("vermutlich Collection-Poster")));
     if (r.use && assigned(r) && dups[keyOf(r)] > 1) pills.push(h("span", { class: "pill bad", title: T("Mehrere Dateien für dieselbe Kachel – nur die letzte bleibt") }, T("doppelt belegt")));
     if (r.autoSkipped && !r.use) pills.push(h("span", { class: "pill warn", title: T("Für diese Kachel gibt es eine Datei, die genau „Titel (Jahr)“ heißt – sie wurde bevorzugt") }, T("abgewählt: genauer Treffer vorhanden")));
@@ -2148,7 +2247,7 @@ function reviewImport(res, onDone, fixed) {
     [apply, h("button", { class: "btn", onclick: () => { api("/import/" + res.session, { method: "DELETE" }); m.close(); } }, T("Abbrechen")),
       h("span", { class: "spacer" }),
       h("span", { class: "hint" }, T("{0} von {1} zugeordnet", rows.filter(assigned).length, rows.length))]);
-  apply.onclick = async () => { m.close(); await applyImport(res.session, rows.filter(r => r.use && assigned(r)), onDone, colInfo); };
+  apply.onclick = async () => { m.close(); const picked = rows.filter(r => r.use && assigned(r)); if (bo) await bo.apply(res.session, picked); else await applyImport(res.session, picked, onDone, colInfo); };
 }
 
 /* ======================================================= wizard / setup === */
@@ -2443,8 +2542,6 @@ function wLibs(nav, c) {
   return h("div", {}, h("h1", {}, T("Bibliotheken")), h("p", { class: "lead" }, T("Welche Plex-Bibliotheken sollen überwacht werden?")),
     libs.length ? libs.map(l => h("label", { class: "opt" }, h("input", { type: "checkbox", checked: l.enabled, onchange: e => { l.enabled = e.target.checked; savePatch({ libraries: libs }); } }),
       h("div", {}, l.title, h("small", {}, l.type === "movie" ? T("Filme") : T("Serien"))))) : h("div", { class: "status bad" }, T("Keine Film-/Serienbibliotheken gefunden.")),
-    h("label", { class: "opt" }, h("input", { type: "checkbox", checked: c.plex.upload_to_plex, onchange: e => savePatch({ plex: { upload_to_plex: e.target.checked } }) }),
-      h("div", {}, T("Neue Poster zusätzlich direkt in Plex setzen"), h("small", {}, T("Kometa überschreibt sie beim nächsten Lauf ohnehin – nützlich für sofortige Anzeige")))),
     h("label", { class: "f" }, T("Automatischer Scan")),
     h("select", { onchange: e => savePatch({ scan_interval_minutes: +e.target.value }) },
       intervals.map(([v, l]) => h("option", { value: v, selected: c.scan_interval_minutes === v }, l))),

@@ -753,3 +753,28 @@ body.glitching #app,body.glitching #foot{text-shadow:0 0 9px var(--glow);transit
 .bseasonbody{display:flex;flex-direction:column;gap:10px}.bseasonbody[hidden]{display:none}
 
 .pick.cur{outline:2px solid var(--accent);outline-offset:-2px}
+
+/* dropping files (0.9.15): every place that takes a file shows a dashed frame while a file is dragged; the one under the pointer lights up and says what happens */
+body.dragging .card.droptgt .poster,body.dragging .slot.droptgt .poster,body.dragging .bcard.droptgt .bposter{outline:1px dashed color-mix(in srgb,var(--accent) 55%,transparent);outline-offset:3px}
+body.dragging .colcard.droptgt .colfront{outline:1px dashed color-mix(in srgb,var(--accent) 55%,transparent);outline-offset:3px}
+.card.dropping .poster::after,.slot.dropping .poster::after,.bcard.dropping .bposter::after,.colcard.dropping .colfront::after{content:var(--drop,"");position:absolute;inset:0;z-index:25;display:flex;align-items:center;justify-content:center;text-align:center;padding:10px;
+  background:hsl(var(--h) var(--sat) 6% / .9);color:var(--accent);font-weight:700;font-size:13px;line-height:1.3;border:2px dashed var(--accent);border-radius:inherit;pointer-events:none;text-shadow:0 0 12px var(--glow)}
+.builder.dropping:not(:has(.bcard.dropping)){outline:2px dashed var(--accent);outline-offset:4px}
+.bcard.dropping .bempty,.bcard.dropping .hover,.card.dropping .hover,.slot.dropping .hover{opacity:0!important}
+
+/* hover bar of a poster (0.9.15): three icon buttons at the bottom edge, "⋯" opens the other actions as a small menu; the picture stays visible */
+.poster .hover.bar{inset:auto 0 0 0;background:linear-gradient(transparent,color-mix(in srgb,var(--bg) 90%,transparent) 55%);padding:30px 8px 8px;flex-direction:row;justify-content:center;align-items:flex-end;gap:6px}
+.poster.menu .hover.bar{opacity:1;pointer-events:auto}
+.ovrow{display:flex;gap:6px;justify-content:center;align-items:center}
+.ovi{width:40px;height:40px;display:grid;place-items:center;background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);color:var(--text);font-size:18px;line-height:1;transition:.12s;padding:0}
+.ovi:hover,.ovi:focus-visible{border-color:var(--accent);color:var(--accent);box-shadow:0 0 12px var(--dim)}
+.ovmenu{position:absolute;right:8px;bottom:56px;max-height:calc(100% - 64px);overflow:auto;z-index:30;display:flex;flex-direction:column;gap:4px;background:var(--panel);border:1px solid var(--accent);border-radius:var(--r);padding:6px;min-width:150px;box-shadow:0 8px 24px #000b}
+.ovmenu[hidden]{display:none}.ovmenu .ov-btn{min-height:32px;text-align:left;white-space:nowrap}
+.colfront .hover.bar{padding:22px 3px 4px;gap:3px}.colfront .ovrow{gap:3px}.colfront .ovi{width:28px;height:28px;font-size:15px}.colfront .ovmenu{right:4px;bottom:36px;min-width:120px}
+@media(max-width:760px){.ovi{width:36px;height:36px}.ovmenu .ov-btn{min-height:40px}}
+
+/* logs: grouped problems (0.9.15) */
+.logprob{padding:12px 18px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:6px}.logprob[hidden]{display:none}
+.probhead{display:flex;flex-wrap:wrap;gap:10px;align-items:baseline}
+.probrow{display:flex;gap:10px;align-items:baseline;text-align:left;background:transparent;border:1px solid var(--line);border-radius:var(--r);padding:6px 10px;color:var(--text);cursor:pointer;font-size:12.5px}
+.probrow:hover{border-color:var(--accent)}.probrow .probn{font-weight:700;min-width:44px}.probrow .msg{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.9.15 – 2026-11-25
+
+**New**
+- History: a tab “History” next to the trash (trash icon) lists every change of a poster with a small picture of the old and the new version, the way it was made (upload, builder, online choice, Plex, import, copy …) and “Restore” (as long as the trash still has the old version: 30 days). Filter by title and source. Changes made before this version are not listed
+- Search later: “Search later” in the menu of a tile (and in the online search) marks it; once a day p5assets looks for new **textless** posters for marked tiles, shows “New” on the poster, a tab “Search later” (with “Check now”) and sends a notification. Nothing is taken over by itself; replacing the poster ends the mark
+- Poster builder: “Load set” (also: drop a ZIP, folder or several pictures anywhere on the builder) assigns the files to the tiles by their names with the usual review dialog; they become the **backgrounds** and nothing is saved until “Save posters”. Series and collections
+- Poster builder: presets can be exported to a file and imported again (choose which ones, same names are replaced after a note)
+- Logs: a group “Problems” sums up repeated warnings and errors (how often, when last); a click filters the list
+
+**Changed**
+- Dropping files: while a file is dragged every tile that takes it shows a dashed frame, the one under the pointer lights up and says what happens (“Release: background for Season 2”); no full-page drop area while a detail view or window is open; pictures dragged out of a web page (links) are fetched for TMDb, TVDB and fanart.tv and explained otherwise; the file type is also recognised by its ending
+- The hover menu of a poster is now a slim bar at the bottom edge with three icons (Replace/Upload, Search online, Build) and “⋯” for the rest, so the picture stays visible
+- “Upload to Plex” was removed: p5assets only writes the Kometa assets, Kometa applies them. An old setting is dropped quietly
+
 ## 0.9.14 – 2026-11-25
 
 **New**

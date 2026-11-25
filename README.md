@@ -114,6 +114,10 @@ This tab finds images that are too small or not 2:3. You set the thresholds (min
 
 <img src="docs/images/weak.png" alt="Weak posters tab" width="560">
 
+### History and “Search later”
+The tab **History** next to the trash lists every change of a poster with a small before/after picture, how it was made, and “Restore” (as long as the trash still has the old one).
+**Search later** marks a tile you wait for a better poster for (e.g. a textless one): p5assets looks once a day, shows “New” and notifies you. Nothing is taken over by itself.
+
 ### Trash and cleanup
 Replaced or deleted posters stay in the trash for **30 days** (2 GB max.). After every change, a notice offers “Undo”, and the trash icon in the header opens the full list.
 **Orphaned folders** (posters for titles that are no longer in Plex or Sonarr/Radarr) can be found and moved to the trash. Titles that Sonarr/Radarr still know are never touched.

@@ -340,10 +340,32 @@ function makeBuilder(opts) {
   /* --- backgrounds (chosen on the tiles) -------------------------------- */
   async function setBg(key, bg, fit) { cards[key].classList.toggle("nobg", !bg); P[key].bg = bg; P[key].auto = null; P[key].autoSig = ""; P[key].fit = { ...(fit || BUILD_FIT) }; cards[key].draggable = !!bg; await paint(key); syncControls(); }
   const bgFromFile = (key, files) => {
-    const f = (files || []).map(x => x.file).find(x => x && /^image\//.test(x.type));
+    const f = (files || []).map(x => x.file).find(isImageFile);
     if (!f) { toast(T("Keine Bilder gefunden"), "bad"); return; }
     const u = URL.createObjectURL(f); setBg(key, { url: u, preview: u, name: f.name, file: f });
   };
+  // A set (ZIP, folder, several pictures): the review dialog assigns the files to the tiles; they become the backgrounds, nothing is saved yet
+  const tileOfRow = r => col ? (r.collection_id ? "__col" : r.item_id) : r.slot;
+  const setBuilder = { hasBg: r => !!(P[tileOfRow(r)] && P[tileOfRow(r)].bg), apply: async (sid, rows) => {
+    let n = 0;
+    for (const r of rows) {
+      const key = tileOfRow(r);
+      if (!P[key]) continue;
+      try {
+        const resp = await fetch(`/api/import/${sid}/${r.id}`);
+        if (!resp.ok) throw new Error(resp.status);
+        const blob = await resp.blob(), name = (r.name || "bg.jpg").split("/").pop();
+        const f = new File([blob], name, { type: IMG_EXT.test(name) ? "image/" + (name.split(".").pop().toLowerCase().replace("jpg", "jpeg")) : "image/jpeg" });
+        const u = URL.createObjectURL(f); setBg(key, { url: u, preview: u, name: f.name, file: f }); n++;
+      } catch (e) { toast(T("Ein Bild ließ sich nicht laden: {0}", name_(r)), "bad"); }
+    }
+    api("/import/" + sid, { method: "DELETE" }).catch(() => {});
+    if (n) toast(TP(n, "Ein Hintergrund gesetzt ✓", "{0} Hintergründe gesetzt ✓"), "ok");
+  } };
+  const name_ = r => (r.name || "").split("/").pop();
+  const setFromFiles = files => col
+    ? importFiles(files, null, null, null, null, { collection: opts.collectionId, builder: setBuilder })
+    : importFiles(files, it.id, null, it, true, { builder: setBuilder });
   const slotOf = key => slots.find(s => s.key === key) || {};
   const bgOnline = key => searchOnline(itemOf(key), apiSlot(key), null, { ...(slotOf(key).colPoster ? { collection: { type: "collection", id: slotOf(key).colPoster.cid, title: P[key].title }, searchPath: `/collection-search?id=${encodeURIComponent(slotOf(key).colPoster.cid)}`, heading: `${T("Hintergrund wählen")} – ${P[key].title}` } : {}), pick: img => setBg(key, { url: img.url, preview: img.preview || img.url, name: img.label ? `${img.source} · ${img.label}` : img.source, ...(img.file ? { file: img.file } : {}) }), title: T("Hintergrund wählen"), scopes: slotOf(key).colPoster ? collectionScopes(slotOf(key).colPoster.cid, slotOf(key).colPoster.members, apiSlot(key)) : col ? null : slots.map(x => ({ key: x.key, label: x.label })) });
   const copyBg = (from, to) => { if (from !== to && P[from].bg) setBg(to, { ...P[from].bg }, P[from].fit); };
@@ -626,6 +648,32 @@ function makeBuilder(opts) {
         } catch (e) { toast(e.message, "bad"); }
       } }, T("Speichern")));
   }
+  /** Presets as a file: "Exportieren" saves all of them, "Importieren …" reads such a file and lets you choose which ones to take (same names are replaced after a note). */
+  function importPresets() {
+    const inp = h("input", { type: "file", accept: ".json,application/json" });
+    inp.onchange = async () => {
+      const f = inp.files[0];
+      if (!f) return;
+      let incoming = null;
+      try { const d = JSON.parse(await f.text()); incoming = d && d.format === "p5assets-presets" && d.presets && typeof d.presets === "object" ? d.presets : null; } catch { /* not json */ }
+      if (!incoming || !Object.keys(incoming).length) { toast(T("Die Datei enthält keine Vorlagen von p5assets."), "bad"); return; }
+      const names = Object.keys(incoming).sort(), chosen = new Set(names);
+      const rows = names.map(n => h("label", { class: "opt" }, h("input", { type: "checkbox", checked: true, onchange: e => { e.target.checked ? chosen.add(n) : chosen.delete(n); go.disabled = !chosen.size; } }),
+        h("div", {}, n, presets[n] ? h("small", {}, T("ersetzt die vorhandene Vorlage")) : null)));
+      const go = h("button", { class: "btn primary", onclick: async () => {
+        go.disabled = true;
+        try {
+          for (const n of names.filter(x => chosen.has(x))) {
+            const st = await api("/styles/presets/" + encodeURIComponent(n), { method: "PUT", json: { style: incoming[n] } });
+            presets = st.presets || {}; defaultName = st.default || null;
+          }
+          drawPresets(); m.close(); toast(TP(chosen.size, "Eine Vorlage importiert ✓", "{0} Vorlagen importiert ✓"), "ok");
+        } catch (e) { go.disabled = false; toast(e.message, "bad"); }
+      } }, T("Importieren"));
+      const m = modal(T("Vorlagen importieren"), h("div", {}, h("p", { class: "hint", style: "margin-top:0" }, T("Welche Vorlagen aus „{0}“ sollen übernommen werden?", f.name)), rows), go);
+    };
+    inp.click();
+  }
   async function deletePreset() {
     const name = presetSel.value || Object.keys(presets)[0];
     const names = Object.keys(presets).sort();
@@ -716,7 +764,7 @@ function makeBuilder(opts) {
     box.append(h("div", { class: "bempty" }, act("search", T("Online suchen"), () => bgOnline(s.key)), act("upload", T("Datei wählen"), () => pickFiles(files => bgFromFile(s.key, files), false))));
     const card = h("div", { class: "bcard nobg", "data-key": s.key, onclick: () => { selectSlot(s.key); if (matchMedia("(hover:none)").matches) box.classList.toggle("show"); }, ondblclick: () => zoom(s.key) },
       box, h("div", { class: "blabel" }, h("span", {}, s.label), h("small", { class: "bcustom" }, T("angepasst"))));
-    makeDropTarget(card, files => bgFromFile(s.key, files));
+    makeDropTarget(card, files => files.length === 1 && isImageFile(files[0].file) ? bgFromFile(s.key, files) : setFromFiles(files), T("Loslassen: Hintergrund für {0}", s.label));
     if (multi) {                                                    // drag a poster onto another one: it gets the same background
       card.addEventListener("dragstart", e => { e.dataTransfer.setData(SLOT_DRAG, s.key); e.dataTransfer.effectAllowed = "copy"; });
       card.addEventListener("dragover", e => { if ([...e.dataTransfer.types].includes(SLOT_DRAG)) { e.preventDefault(); card.classList.add("dropping"); } });
@@ -755,7 +803,7 @@ function makeBuilder(opts) {
           const fd = new FormData(); fd.append("file", new File([blob], "poster.jpg", { type: "image/jpeg" }));
           let r = null;
           if (cp) {                                                   // the poster of the collection itself: into its folder in the collections folder
-            const url = create => `/collection-poster?id=${encodeURIComponent(cp.cid)}${create ? "&create=true" : ""}`;
+            const url = create => `/collection-poster?id=${encodeURIComponent(cp.cid)}&source=builder${create ? "&create=true" : ""}`;
             try { r = await api(url(false), { method: "POST", body: fd }); }
             catch (e) {
               if (!(e.status === 409 && e.data && e.data.needs_folder)) throw e;
@@ -764,9 +812,8 @@ function makeBuilder(opts) {
               } else { toast(T("Das Collection-Poster wurde nicht gespeichert: Der Ordner fehlt."), "bad"); continue; }
             }
             cp.exists = true; cp.v = Date.now();
-          } else r = await api(`/items/${itemOf(key).id}/${apiSlot(key)}/upload`, { method: "POST", body: fd });
+          } else r = await api(`/items/${itemOf(key).id}/${apiSlot(key)}/upload?source=builder`, { method: "POST", body: fd });
           last = r.item || last; trash = r.trash; done++; S.rain.add(tileKey);
-          if (r.warning) toast(T("Plex: ") + r.warning, "bad");
         } finally { busyTile(tileKey, false); }
       }
       try { await saveProject(); } catch (e) { toast(T("Der Look konnte nicht gespeichert werden: {0}", e.message), "bad"); }
@@ -797,9 +844,10 @@ function makeBuilder(opts) {
     slider(T("Abstand zum Titel"), "gap", 0, 0.1, 0.002, pct), slider(T("Texthöhe"), "seasonY", 0.03, 0.97, 0.005, pct),
     slider(T("Textgröße"), "seasonScale", 0.5, 2.4, 0.01, pct), slider(T("Laufweite"), "tracking", 0, 0.4, 0.005, pct));
   makeDropTarget(titleSec, logoFromFile);
+  const setBtn = slots.length > 1 ? h("button", { class: "btn sm", type: "button", title: T("ZIP, Ordner oder mehrere Bilder laden: p5assets ordnet sie den Kacheln zu, sie werden die Hintergründe"), onclick: () => pickSet(setFromFiles, true) }, icon("upload", 14), T("Set laden")) : null;
   const compareBtn = slots.length >= 1 ? h("button", { class: "btn sm", type: "button", title: T("Aktuelle und gebaute Poster nebeneinander ansehen"), onclick: () => openCompare(slots, k => paint(k, true, false, 360), k => { selectSlot(k); zoom(k); }, currentUrl) }, icon("eye", 14), T("Vergleichen")) : null;
   const controls = h("div", { class: "bcontrols" },
-    h("div", { class: "bhead" }, h("span", { class: "hint", style: "margin:0" }, T("Bearbeitet:")), h("b", { class: "bedit" }), h("span", { class: "spacer" }), compareBtn),
+    h("div", { class: "bhead" }, h("span", { class: "hint", style: "margin:0" }, T("Bearbeitet:")), h("b", { class: "bedit" }), h("span", { class: "spacer" }), setBtn, compareBtn),
     lookNote,
     h("div", { class: "hint bbghint" }, T("Hintergrund: über ein Poster fahren (am Handy antippen) – suchen, Datei wählen, Vorschau. Ein Poster auf ein anderes ziehen kopiert den Hintergrund.")),
     h("label", { class: "bchk ballchk" }, allChk, T("Einstellungen für alle Poster")),
@@ -815,9 +863,12 @@ function makeBuilder(opts) {
     h("div", { class: "bsec" }, h("h4", {}, T("Vorlagen")),
       h("div", { class: "row wrap" }, presetSel, h("button", { class: "btn sm", type: "button", onclick: savePreset }, T("Als Vorlage speichern …")), h("button", { class: "btn sm ghost", type: "button", onclick: deletePreset }, T("Vorlage löschen …")),
         h("button", { class: "btn sm", type: "button", title: T("Mit welchem Look neue Looks starten"), onclick: chooseDefault }, T("Standard wählen …")),
+        h("button", { class: "btn sm ghost", type: "button", title: T("Alle Vorlagen als Datei speichern"), onclick: () => downloadUrl("/api/styles/export") }, T("Exportieren")),
+        h("button", { class: "btn sm ghost", type: "button", title: T("Vorlagen aus einer Datei laden"), onclick: importPresets }, T("Importieren …")),
         h("span", { class: "spacer" }), h("button", { class: "btn sm ghost", type: "button", title: T("Alle Einstellungen auf Standard, Hintergründe und Logo bleiben"), onclick: resetAll }, T("Alles zurücksetzen")))),
     h("div", { class: "row wrap bfoot" }, saveBtn, opts.onCancel ? h("button", { class: "btn", type: "button", onclick: opts.onCancel }, T("Abbrechen")) : null, status));
   root.append(grid, controls);
+  if (slots.length > 1) makeDropTarget(root, setFromFiles, T("Loslassen: Set den Kacheln zuordnen"));
 
   (async () => {
     try { const st = await api("/styles"); presets = st.presets || {}; defaultName = st.default || null; LOOK_DEFAULT = defaultName && presets[defaultName] ? presets[defaultName] : {}; } catch { /* optional */ }
@@ -966,7 +1017,7 @@ function openCollectionBuilder({ data, drawer, close, back, start }) {
     // the poster of the collection itself comes first (only when the world has a collections folder): the name of the collection as the title
     if (data.poster) slots.unshift({ key: "__col", season: null, label: T("Collection-Poster"), item: data.members[0], title: data.title, colPoster: { cid: data.id, exists: data.poster.exists, v: data.poster.v, members: data.members.map(m => ({ id: m.id, title: m.title })) } });
     const pseudo = { id: data.builder_key, title: data.title, type: "collection", slots: {} };
-    const b = makeBuilder({ item: pseudo, builderKey: data.builder_key, collection: true, multi: true, start, slots, onSaved: (last, keys) => back(keys), onCancel: () => back() });
+    const b = makeBuilder({ item: pseudo, builderKey: data.builder_key, collection: true, collectionId: data.id, multi: true, start, slots, onSaved: (last, keys) => back(keys), onCancel: () => back() });
     fill(drawer, h("header", {}, h("button", { class: "btn ghost", "aria-label": T("Schließen"), onclick: close }, "✕"),
       h("div", { class: "grow" }, h("h2", {}, T("Poster bauen – {0}", data.title)), h("div", { class: "hint", style: "margin:2px 0" }, T("Alle Filme der Collection in einem Look: Hintergrund, Logo oder Titel"),
         data.poster ? null : [" · ", T("Für das Poster der Collection selbst: Collection-Ordner unter Einstellungen → Welten angeben")]))),

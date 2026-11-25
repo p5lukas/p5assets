@@ -18,7 +18,7 @@ STAGING_DIR = CONFIG_DIR / "staging"
 DEFAULTS: dict = {
     "onboarded": False,
     "client_id": "",
-    "plex": {"url": "", "token": "", "server_name": "", "upload_to_plex": False},
+    "plex": {"url": "", "token": "", "server_name": ""},
     # [{key, title, type, enabled, world}]
     "libraries": [],
     # Welten (z. B. HD / 4K): eigener Assets-Ordner, Bibliotheken und Arr-Instanzen werden ihnen zugeordnet
@@ -73,6 +73,9 @@ def load() -> dict:
                     data = {}
             _config = _merge(DEFAULTS, data)
             changed = normalize(_config, legacy_path=(data.get("assets") or {}).get("path"))
+            if "upload_to_plex" in _config["plex"]:               # "Upload to Plex" was removed in 0.9.15: the old setting is dropped quietly
+                del _config["plex"]["upload_to_plex"]
+                changed = True
             if not _config["client_id"]:
                 _config["client_id"] = f"p5assets-{uuid.uuid4()}"
                 changed = True
