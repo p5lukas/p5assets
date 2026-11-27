@@ -82,14 +82,18 @@ class _SelectiveGZip:
     """Compresses scripts, styles and the big JSON lists (a library of thousands of titles is some hundred KB of text); pictures and ZIPs are left alone."""
     PREFIXES = ("/static/", "/i18n.js", "/api/items", "/api/collection", "/api/state", "/api/status", "/api/logs/read", "/api/changes", "/api/trash", "/api/news", "/manifest.webmanifest")
     TEXT = (".js", ".css", ".html", ".svg", ".webmanifest", ".json")
+    PICTURES = ("/api/collection-poster", "/plex-photo", "/collection-plex-photo", "/builder/file/", "/api/changes/", "/api/trash/")      # JPEG / PNG: already compressed
 
     def __init__(self, inner):
         self.inner = inner
         self.gzip = GZipMiddleware(inner, minimum_size=700, compresslevel=5)
 
+    @classmethod
+    def wants(cls, path: str) -> bool:
+        return path == "/" or (path.startswith(cls.PREFIXES) and (not path.startswith("/static/") or path.endswith(cls.TEXT)) and not any(p in path for p in cls.PICTURES))
+
     async def __call__(self, scope, receive, send):
-        path = scope.get("path", "") if scope["type"] == "http" else ""
-        text = path in ("/",) or (path.startswith(self.PREFIXES) and (not path.startswith("/static/") or path.endswith(self.TEXT)) and not path.startswith(("/api/changes/", "/api/trash/")) )
+        text = scope["type"] == "http" and self.wants(scope.get("path", ""))
         await (self.gzip if text else self.inner)(scope, receive, send)
 
 
@@ -1613,9 +1617,11 @@ async def import_apply(sid: str, body: ApplyBody):
         try:
             if a.collection_id:
                 _, world, title = _collection_films(a.collection_id)
-                path, _reason = await asyncio.to_thread(collection_assets.write_poster, world, title, uploads.staged_bytes(sid, a.file), a.create_folder, {})
+                undo_c: dict = {}
+                path, _reason = await asyncio.to_thread(collection_assets.write_poster, world, title, uploads.staged_bytes(sid, a.file), a.create_folder, undo_c)
                 if path is None:
                     raise ValueError(tr("Der Ordner „{0}“ existiert noch nicht.", title))
+                await asyncio.to_thread(changes.record, source="import", world=world["id"], item_id=None, title=title, slot="collection", type_="collection", gid=undo_c.get("gid"), path=path)
                 done.append({"item": title, "slot": "collection"})
                 continue
             it = _item(a.item_id)
@@ -1760,9 +1766,11 @@ async def watch_set(item_id: str, slot: str, body: WatchBody):
         await asyncio.to_thread(watch.unmark, item_id, slot)
     else:
         found = await _watch_look(it, slot)
-        if not await asyncio.to_thread(watch.mark, item_id, slot, [f["url"] for f in (found or [])]):
+        if found is None:                  # no baseline of what is online now: every known picture would count as new later
+            raise HTTPException(400, tr("Die Online-Suche ist gerade nicht möglich (API-Keys unter Einstellungen → Quellen prüfen) – gemerkt wird erst, wenn sie klappt"))
+        if not await asyncio.to_thread(watch.mark, item_id, slot, [f["url"] for f in found]):
             raise HTTPException(400, tr("Zu viele Markierungen – bitte erst einige aufheben"))
-        log.info("Marked 'search later': %s / %s (%d textless known)", it["title"], slot, len(found or []))
+        log.info("Marked 'search later': %s / %s (%d textless known)", it["title"], slot, len(found))
     return {"ok": True, "item": _public_item(_item(item_id), True)}
 
 
@@ -1788,6 +1796,7 @@ async def _watch_run(force: bool = False) -> dict:
             continue
         found = await _watch_look(it, m["slot"])
         if found is None:
+            await asyncio.to_thread(watch.touch, m["item_id"], m["slot"])      # tried: the next try is in a day, and the marks behind it get their turn
             continue
         fresh = await asyncio.to_thread(watch.record_check, m["item_id"], m["slot"], found)
         if fresh:

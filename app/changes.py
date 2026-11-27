@@ -35,8 +35,10 @@ def record(*, source: str, world: str | None, item_id: str | None, title: str, s
         if path and Path(path).is_file():
             try:
                 _dir().mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(thumbs.get(Path(path)), _dir() / f"{eid}.jpg")
-                has_pic = True
+                small = thumbs.get(Path(path))
+                if small != Path(path):                           # thumbs.get falls back to the original when it cannot make a thumbnail: no multi-MB copies
+                    shutil.copyfile(small, _dir() / f"{eid}.jpg")
+                    has_pic = True
             except OSError:
                 pass
         line = {"id": eid, "ts": int(time.time()), "source": source if source in SOURCES else "upload", "world": world, "item_id": item_id,

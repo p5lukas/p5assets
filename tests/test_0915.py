@@ -102,3 +102,64 @@ def test_presets_export_roundtrip(tmp_path, monkeypatch):
     assert data["format"] == "p5assets-presets" and data["presets"]["Dark"]["titleY"] == 0.9
     one = c.get("/api/styles/export", params={"name": "Dark"}).json()
     assert list(one["presets"]) == ["Dark"] and c.get("/api/styles/export", params={"name": "nope"}).status_code == 404
+
+
+def test_gzip_only_for_text_and_lists_never_for_pictures():
+    wants = main._SelectiveGZip.wants
+    assert wants("/") and wants("/static/app.js") and wants("/api/items") and wants("/api/collections") and wants("/i18n.js")
+    assert not wants("/static/icon-192.png") and not wants("/static/fonts/anton.woff2")
+    assert not wants("/api/collection-poster") and not wants("/api/items/w1-abc/plex-photo") and not wants("/api/collection-plex-photo")
+    assert not wants("/api/items/w1-abc/builder/file/bg.jpg") and not wants("/api/thumb/w1-abc/poster") and not wants("/api/download-zip/w1-abc")
+
+
+def test_marks_are_handed_out_as_a_copy(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    watch.mark("i1", "poster", [])
+    got = watch.marks()
+    got.clear()
+    assert "i1|poster" in watch.marks()
+
+
+def test_search_later_needs_a_working_search(tmp_path, monkeypatch):
+    """No baseline (the search failed) = no mark: otherwise every textless poster that is already online would count as new later."""
+    from app import scanner
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    item = {"id": "hd-1", "world": "hd", "title": "Alpha", "year": 2001, "type": "movie", "folder": "Alpha (2001)", "library_title": "Filme", "sources": ["Plex"], "letter": "A",
+            "_nt": "alpha", "_fl": "alpha", "updated": 0, "dupes": [], "seasons": [], "ids": {}, "missing": 0, "missing_plex": 0, "in_plex": True, "coming_soon": False,
+            "collections": [], "slots": {"poster": {"exists": True, "mtime": 1}}}
+    monkeypatch.setitem(scanner.STATE, "items", [item])
+
+    async def failing(it, slot):
+        return None
+    monkeypatch.setattr(main, "_watch_look", failing)
+    c = TestClient(main.app)
+    r = c.post("/api/items/hd-1/poster/watch", json={"on": True})
+    assert r.status_code == 400 and watch.marks() == {}
+
+    async def working(it, slot):
+        return [{"url": "u1", "preview": "p1", "source": "TMDb"}]
+    monkeypatch.setattr(main, "_watch_look", working)
+    r = c.post("/api/items/hd-1/poster/watch", json={"on": True})
+    assert r.status_code == 200 and r.json()["item"]["watch"] == {"poster": 0} and watch.marks()["hd-1|poster"]["seen"] == ["u1"]
+
+
+def test_statistics_cache_follows_changes_of_the_data(monkeypatch):
+    from app import scanner
+    items = [{"id": f"a{i}", "world": "w", "type": "movie", "slots": {"poster": {"exists": True}}, "missing": 0, "missing_plex": 0, "coming_soon": False} for i in range(3)]
+    monkeypatch.setitem(scanner.STATE, "items", items)
+    monkeypatch.setattr(main, "_hidden_list", list)
+    monkeypatch.setattr(main, "_hidden_collections", lambda: frozenset())
+    main._STATS_CACHE.clear()
+    first = main._cached_stats(items, "w", "", "", "", 0, False)
+    assert first["items"] == 3 and main._cached_stats(items, "w", "", "", "", 0, False) is first          # worked out once
+    items[0]["missing"] = 1
+    scanner.STATE["rev"] = scanner.STATE.get("rev", 0) + 1                                                 # what refresh_item / a scan do after a change
+    assert main._cached_stats(items, "w", "", "", "", 0, False)["counts"]["missing"] == 1
+
+
+def test_folder_with_look_alike_names_is_not_guessed(tmp_path):
+    from app import collection_assets
+    (tmp_path / "Fast Furious").mkdir()
+    assert collection_assets.folder_of(tmp_path, "Fast & Furious") == tmp_path / "Fast Furious"            # one clear match
+    (tmp_path / "Fast-Furious").mkdir()
+    assert collection_assets.folder_of(tmp_path, "Fast & Furious") is None                                 # two look alike: no guess

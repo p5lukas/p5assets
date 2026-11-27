@@ -1273,7 +1273,10 @@ function hoverBar(box, list) {
   const bar = h("div", { class: "hover bar" },
     h("div", { class: "ovrow" }, primary.map(([label, fn, cls = "", ic]) => h("button", { class: "ovi " + cls, type: "button", title: label, "aria-label": label, onclick: run(fn) }, icon(ic, 18))),
       more.length ? h("button", { class: "ovi", type: "button", title: T("Mehr"), "aria-label": T("Mehr"), "aria-haspopup": "true", onclick: toggle }, "⋯") : null));
-  if (more.length) box.addEventListener("mouseleave", () => { menu.hidden = true; box.classList.remove("menu"); });
+  if (more.length) {
+    box._p5menu = menu;                                                // the current menu of this poster (the bar is rebuilt on every change, the listener is added once)
+    if (!box._p5leave) { box._p5leave = true; box.addEventListener("mouseleave", () => { if (box._p5menu) box._p5menu.hidden = true; box.classList.remove("menu"); }); }
+  }
   return bar;
 }
 
@@ -1968,7 +1971,7 @@ const endDrag = () => {
   $("#dropveil").classList.remove("on"); document.body.classList.remove("dragging");
   document.querySelectorAll(".droptgt.dropping").forEach(el => el.classList.remove("dropping"));
 };
-const armDrag = () => { clearTimeout(dragWatch); dragWatch = setTimeout(endDrag, 700); };
+const armDrag = () => { clearTimeout(dragWatch); dragWatch = setTimeout(endDrag, 1500); };
 window.addEventListener("dragenter", e => {
   if (!isDrag(e)) return;
   document.body.classList.add("dragging"); armDrag();

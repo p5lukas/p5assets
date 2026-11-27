@@ -50,7 +50,7 @@ def _norm(name: str) -> str:
 def folder_of(root: Path, name: str) -> Path | None:
     """The folder of a collection: the name like in Plex (case does not matter; characters Kometa leaves out of folder names, spaces and punctuation are ignored)."""
     exact, loose = {name.casefold(), safe_name(name).casefold()}, _norm(name)
-    fuzzy = None
+    fuzzy: list[Path] = []
     try:
         with os.scandir(root) as it:
             for e in it:
@@ -59,10 +59,10 @@ def folder_of(root: Path, name: str) -> Path | None:
                 if e.name.casefold() in exact:
                     return Path(e.path)
                 if loose and _norm(e.name) == loose:
-                    fuzzy = fuzzy or Path(e.path)
+                    fuzzy.append(Path(e.path))
     except OSError:
         pass
-    return fuzzy
+    return fuzzy[0] if len(fuzzy) == 1 else None          # only a clear match: two folders that look alike are not guessed between
 
 
 def poster_of(folder: Path) -> Path | None:

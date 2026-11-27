@@ -77,7 +77,7 @@ def key(item_id: str, slot: str) -> str:
 
 def marks() -> dict:
     with _lock:
-        return _load()["marks"]
+        return dict(_load()["marks"])           # a copy: marks change in worker threads while lists are walked in the event loop
 
 
 def mark(item_id: str, slot: str, seen: list[str]) -> bool:
@@ -110,6 +110,16 @@ def dismiss(item_id: str, slot: str) -> None:
         if m:
             m["seen"] = list(dict.fromkeys([*m["seen"], *(n["url"] for n in m["new"])]))[:500]
             m["new"] = []
+            _save(data)
+
+
+def touch(item_id: str, slot: str) -> None:
+    """A look was tried (and failed): count it as checked, so failing marks do not hold up the others."""
+    with _lock:
+        data = _load()
+        m = data["marks"].get(key(item_id, slot))
+        if m:
+            m["checked"] = int(time.time())
             _save(data)
 
 
