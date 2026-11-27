@@ -174,6 +174,8 @@ async def _arr_items(cfg: dict, world: dict, warnings: list[str]) -> list[dict]:
                 entries = [e for e in entries if e["monitored"]]
                 log.info("%s: %d unmonitored titles hidden", inst["name"], hidden)
             out.extend(entries)
+            dated = sum(1 for e in entries if (e.get("release") or {}).get("from") or (e.get("release") or {}).get("seasons"))
+            log.info("%s: %d titles read, %d with release dates", inst["name"], len(entries), dated)      # so it is clear whether the dates are missing in Sonarr / Radarr or only in the display
         except arr.ArrError as e:
             warnings.append(["{0}: {1}", inst["name"], str(e)])
             STATE["failed"].setdefault(world["id"], []).append(inst["name"])   # their titles are missing from this scan

@@ -763,7 +763,7 @@ function makeBuilder(opts) {
     const act = (name, label, fn) => h("button", { class: "btn sm bempty-btn", type: "button", title: label, "aria-label": label, onclick: e => { e.stopPropagation(); selectSlot(s.key); fn(); } }, icon(name, 14), h("span", {}, label));
     box.append(h("div", { class: "bempty" }, act("search", T("Online suchen"), () => bgOnline(s.key)), act("upload", T("Datei wählen"), () => pickFiles(files => bgFromFile(s.key, files), false))));
     const card = h("div", { class: "bcard nobg", "data-key": s.key, onclick: () => { selectSlot(s.key); if (matchMedia("(hover:none)").matches) box.classList.toggle("show"); }, ondblclick: () => zoom(s.key) },
-      box, h("div", { class: "blabel" }, h("span", {}, s.label), h("small", { class: "bcustom" }, T("angepasst"))));
+      box, h("div", { class: "blabel" }, h("span", {}, s.label), s.when ? h("small", { class: "relsmall" }, T("ab {0}", fmtDay(s.when))) : null, h("small", { class: "bcustom" }, T("angepasst"))));
     makeDropTarget(card, files => files.length === 1 && isImageFile(files[0].file) ? bgFromFile(s.key, files) : setFromFiles(files), T("Loslassen: Hintergrund für {0}", s.label));
     if (multi) {                                                    // drag a poster onto another one: it gets the same background
       card.addEventListener("dragstart", e => { e.dataTransfer.setData(SLOT_DRAG, s.key); e.dataTransfer.effectAllowed = "copy"; });
@@ -982,7 +982,7 @@ function openCompare(slots, render, onPick, currentUrl) {
     row.classList.toggle("both", mode === "both");
     title.textContent = mode === "current" ? T("Aktuelle Poster – anklicken zum Vergrößern") : mode === "both" ? T("Oben aktuell, unten gebaut – anklicken zum Vergrößern") : T("Alle Poster nebeneinander – anklicken zum Vergrößern");
     fill(row, slots.map(s => h("button", { class: "cmpcell", type: "button", onclick: () => { close(); onPick(s.key); } },
-      mode === "current" ? currentEl(s) : mode === "both" ? [currentEl(s), builtCanvas(s)] : builtCanvas(s), h("span", { class: "cmplabel" }, s.label))));
+      mode === "current" ? currentEl(s) : mode === "both" ? [currentEl(s), builtCanvas(s)] : builtCanvas(s), h("span", { class: "cmplabel" }, s.label, s.when ? h("small", { class: "relsmall", style: "display:block" }, T("ab {0}", fmtDay(s.when))) : null))));
   }
   function set(m) { mode = m; draw(); }
   draw();
@@ -997,7 +997,8 @@ function buildSlotsFor(it) {
   // Specials are offered whenever the series has a season 0, even when they are not monitored (then they are no tile of their own)
   if (it.type === "show" && (it.seasons || []).some(x => x.number === 0) && !keys.includes("season-0")) keys.push("season-0");
   keys.sort((a, b) => seasonNum(a) - seasonNum(b));
-  return keys.map(k => ({ key: k, season: k === "poster" ? null : seasonNum(k), label: slotLabel(k, it.type) }));
+  const when = k => k !== "poster" && it.release && it.release.seasons && isFuture(it.release.seasons[seasonNum(k)]) ? it.release.seasons[seasonNum(k)] : null;      // season not aired yet: its date is shown under the tile
+  return keys.map(k => ({ key: k, season: k === "poster" ? null : seasonNum(k), label: slotLabel(k, it.type), when: when(k) }));
 }
 /** Movies: a window with one poster. */
 function openMovieBuilder(it, draw) {

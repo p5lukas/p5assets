@@ -238,6 +238,14 @@ const weakParams = () => { const c = weakCfg(), p = {}; if (c.wOn) p.weak_w = c.
 /** A search always covers ALL titles of the world, whatever tab is open (the tab only applies without a search). */
 const effFilter = () => S.q.trim() ? "all" : S.filter;
 const hideUnreleased = () => (S.hideUnreleased ??= lsGet("p5hideunrel") !== "0");        // default: titles that are not released yet are hidden in "All missing"
+const todayIso = () => new Date().toISOString().slice(0, 10);
+const isFuture = iso => !!iso && iso > todayIso();
+/** The next season of a series that is not aired yet: [number, date] or null. */
+function nextSeason(it) {
+  const s = it.release && it.release.seasons;
+  const list = s ? Object.entries(s).filter(([, d]) => isFuture(d)).sort((a, b) => a[1].localeCompare(b[1])) : [];
+  return list.length ? [+list[0][0], list[0][1]] : null;
+}
 const fmtDay = iso => { const d = new Date(iso + "T00:00:00"); return isNaN(d) ? iso : d.toLocaleDateString(LOCALE, { day: "2-digit", month: "2-digit", year: "numeric" }); };
 const COL_AZ_MIN = 12;   // collections: the A–Z bar already helps with a dozen
 const AZ_MIN = 150;   // from this many titles on the list is split by first letter instead of one endless page
@@ -1047,13 +1055,20 @@ function metaGroups(it) {
 /** Plain-text version of the groups for tooltips. */
 /** "ab 14.03.2027" for a title Sonarr / Radarr know that is not released yet; "Termin unbekannt" without a date. Shown under the poster, never on it. */
 function expectedText(it) {
-  if (!it.unreleased) return "";
+  if (!it.unreleased) {                                  // a series in Plex with a season that is still to come
+    const n = it.type === "show" ? nextSeason(it) : null;
+    return n ? T("{0} ab {1}", n[0] === 0 ? T("Specials") : T("Staffel {0}", n[0]), fmtDay(n[1])).replace(/ (?=\d{2}[./])/g, "\u00a0") : "";
+  }
   const d = it.release && it.release.from;
   return d ? T("ab {0}", fmtDay(d)).replace(/ /g, "\u00a0") : T("Termin unbekannt");
 }
 /** The dates behind it, as text for a tooltip. */
 function releaseTip(it) {
   const r = it.release;
+  if (it.type === "show" && r && r.seasons) {
+    const l = Object.entries(r.seasons).filter(([, d]) => isFuture(d)).sort((p, q) => +p[0] - +q[0]).map(([n, d]) => `${+n === 0 ? T("Specials") : T("Staffel {0}", n)}: ${T("ab {0}", fmtDay(d))}`);
+    if (l.length) return l.join("\n");
+  }
   if (!r || !it.unreleased) return "";
   return [r.cinema ? T("Kino: {0}", fmtDay(r.cinema)) : null, r.digital ? T("Digital: {0}", fmtDay(r.digital)) : null, r.disc ? T("Disc: {0}", fmtDay(r.disc)) : null,
     r.from && !r.cinema ? T("Ausstrahlung: {0}", fmtDay(r.from)) : null].filter(Boolean).join("\n");
@@ -1192,7 +1207,7 @@ async function openItem(id) {
     if (sl && sl.only_arr) box.append(h("span", { class: "badge warn b", title: T("Diese Staffel kennt bisher nur Sonarr – in Plex gibt es sie noch nicht") }, NOT_IN_PLEX()));
     const pick = () => pickFiles(files => uploadSlot(it, key, files, draw), false);
     box.append(slotActions(it, key, box, draw));
-    const sd = !exists && key !== "poster" && it.release && it.release.seasons ? it.release.seasons[seasonNum(key)] : null;
+    const sd = !exists && key !== "poster" && it.release && it.release.seasons && isFuture(it.release.seasons[seasonNum(key)]) ? it.release.seasons[seasonNum(key)] : null;
     const el = h("div", { class: "slot" }, box, h("div", { class: "lab" }, slotLabel(key, it.type), sd ? h("small", { class: "relsmall" }, T("ab {0}", fmtDay(sd))) : null));
     // click on the picture itself: preview (existing) / file dialog (empty); touch screens have no hover, so a tap shows the buttons first
     box.onclick = () => {
@@ -1348,6 +1363,7 @@ function openPreview(it, key, draw) {
     [T("Titel"), it.title + (it.year ? ` (${it.year})` : "")],
     [T("Slot"), slotLabel(key, it.type)],
     ...(releaseRows(it) ? [[T("Erscheint"), releaseRows(it)]] : []),
+    ...(key !== "poster" && it.type === "show" && it.release && it.release.seasons && isFuture(it.release.seasons[seasonNum(key)]) ? [[T("Ausstrahlung"), T("ab {0}", fmtDay(it.release.seasons[seasonNum(key)]))]] : []),
     [T("Kometa-Ordner"), it.folder || "—"],
     ...((it.mirror_folders || []).length ? [[T("Zusätzlich gespeichert in"), it.mirror_folders.join(", ")]] : []),
     ...(exists ? [

@@ -803,3 +803,5 @@ a,button,.btn,.chip,.tab,.seg,.az,.ovi,.ov-btn,.pick,label.opt,select,summary,[r
 /* release dates (0.10.1): in the details and under the poster, never on it */
 .relrows{display:flex;flex-direction:column;gap:4px}.relrow{display:flex;gap:8px;align-items:center}.relrow svg{flex:none;color:var(--muted)}.relrow b{font-weight:600;min-width:64px}
 .slot .lab small.relsmall{display:block;color:var(--muted);font-size:11px;font-weight:400}
+.blabel{flex-wrap:wrap}.blabel .relsmall{font-size:11px;font-weight:400}
+.blabel .relsmall{white-space:normal;overflow:visible;text-overflow:clip;flex:1 0 100%;line-height:1.25}

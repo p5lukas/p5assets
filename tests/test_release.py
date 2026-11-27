@@ -49,3 +49,12 @@ def test_released_now_is_reported_once_and_only_without_poster():
     title, text = notify.compose_released(got, False, "http://x")
     assert title == "p5assets: 1 title released, no poster yet" and "Now Out (2027)" in text and "http://x" in text
     assert config.DEFAULTS["notify"]["on_release"] is True
+
+
+def test_dates_texts_exist_in_english():
+    """The short texts of the date display are skipped by the general translation test (too short), so they are checked here."""
+    import json
+    from pathlib import Path
+    en = json.loads((Path(main.__file__).parent / "i18n" / "en.json").read_text("utf-8"))
+    for key in ("ab {0}", "{0} ab {1}", "Staffel {0}", "Termin unbekannt", "Kino", "Digital", "Disc", "Ausstrahlung", "Erscheint"):
+        assert key in en and en[key], key

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.10.2 – 2026-11-27
+
+**New**
+- Release dates for series: seasons that are not aired yet show “from 03/09/2027” under their tile in the series view, in the poster **builder** and in the comparison, and as a row in the preview of the season. A series in Plex with a season still to come shows “Season 5 from 03/09/2027” in the line under its poster (tooltip: all coming seasons), not only titles that are missing in Plex
+- The log notes after a scan how many titles Sonarr and Radarr delivered with release dates (“Sonarr: 22 titles read, 14 with release dates”), so it is clear whether dates are missing there or only in the display
+
+**Fixed**
+- The English texts of the date display were missing (“ab” instead of “from”, “Staffel” instead of “Season”); a test now checks them
+
 ## 0.10.1 – 2026-11-27
 
 **New**

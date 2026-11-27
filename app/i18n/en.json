@@ -1066,5 +1066,10 @@
 "③ Titel, die jetzt erschienen sind und noch kein Poster haben": "③ titles that are released now and have no poster yet",
 " (Coming-Soon-Titel sind markiert, alles in einer Nachricht), ": " (Coming Soon titles are marked, all in one message), ",
 "Erscheinungstermine aus Radarr und Sonarr": "Release dates from Radarr and Sonarr",
-"Titel, die noch nicht erschienen sind, zeigen unter dem Poster „ab …“, in den Details die Termine (Kino, Digital, Disc). In „Alle fehlenden“ lassen sie sich ausblenden (an, wenn du nichts änderst) oder nach Datum sortieren. Neu: eine Meldung, sobald ein Titel erschienen ist und noch kein Poster hat.": "Titles that are not released yet show “from …” under the poster and the dates (cinema, digital, disc) in the details. In “All missing” they can be hidden (on unless you change it) or sorted by date. New: a message as soon as a title is released and has no poster yet."
+"Titel, die noch nicht erschienen sind, zeigen unter dem Poster „ab …“, in den Details die Termine (Kino, Digital, Disc). In „Alle fehlenden“ lassen sie sich ausblenden (an, wenn du nichts änderst) oder nach Datum sortieren. Neu: eine Meldung, sobald ein Titel erschienen ist und noch kein Poster hat.": "Titles that are not released yet show “from …” under the poster and the dates (cinema, digital, disc) in the details. In “All missing” they can be hidden (on unless you change it) or sorted by date. New: a message as soon as a title is released and has no poster yet.",
+"ab {0}": "from {0}",
+"{0} ab {1}": "{0} from {1}",
+"Staffel {0}": "Season {0}",
+"Staffeltermine bei Serien": "Season dates for series",
+"Kommende Staffeln zeigen ihr Datum in der Serien-Ansicht, im Builder, im Vergleich und in der Vorschau; Serien in Plex mit einer kommenden Staffel zeigen sie unter dem Poster. Die Logs nennen, bei wie vielen Titeln Sonarr und Radarr Termine geliefert haben.": "Seasons still to come show their date in the series view, the builder, the comparison and the preview; series in Plex with a coming season show it under the poster. The logs say for how many titles Sonarr and Radarr delivered dates."
 }
