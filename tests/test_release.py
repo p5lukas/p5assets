@@ -56,7 +56,7 @@ def test_dates_texts_exist_in_english():
     import json
     from pathlib import Path
     en = json.loads((Path(main.__file__).parent / "i18n" / "en.json").read_text("utf-8"))
-    for key in ("ab {0}", "{0} ab {1}", "Staffel {0}", "Termin unbekannt", "Kino", "Digital", "Disc", "Ausstrahlung", "Erscheint"):
+    for key in ("ab {0}", "{0} ab {1}", "Staffel {0}", "Termin unbekannt", "Kino", "Digital", "Disc", "Streaming", "Erscheint"):
         assert en.get(key), key
 
 
@@ -84,3 +84,32 @@ def test_upcoming_strip_lists_soon_and_just_released_titles_without_poster(monke
     assert [(x["item"]["title"], x["slot"]) for x in r["entries"]] == [("Just Out", "poster"), ("Soon", "poster"), ("Show In Plex", "season-2")]
     assert r["entries"][0]["in_days"] == -5 and r["entries"][2]["in_days"] == 20
     assert TestClient(main.app).get("/api/upcoming", params={"world": "w", "days": 365}).json()["entries"][-1]["item"]["title"] == "Far"
+
+
+def test_statistics_summary_counts_sources_providers_and_weeks(tmp_path, monkeypatch):
+    from app import changes
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    assert changes.provider_of("https://image.tmdb.org/t/p/original/a.jpg") == "TMDb" and changes.provider_of("https://assets.fanart.tv/x.png") == "fanart.tv"
+    assert changes.provider_of("https://artworks.thetvdb.com/b.jpg") == "TVDB" and changes.provider_of("https://example.com/c.jpg") is None
+    rec = lambda src, prov=None, world="w": changes.record(source=src, world=world, item_id="i", title="T", slot="poster", type_="movie", provider=prov)
+    for src, prov in [("online", "TMDb"), ("online", "TMDb"), ("online", "fanart.tv"), ("online", None), ("upload", "ThePosterDB"), ("upload", None), ("builder", None), ("delete", None), ("restore", None)]:
+        rec(src, prov)
+    rec("builder", world="other")
+    s = changes.summary("w")
+    assert s["by_source"]["online"] == 4 and s["by_source"]["upload"] == 2 and s["by_source"]["builder"] == 1 and s["total"] == 7
+    assert s["providers"] == {"TMDb": 2, "fanart.tv": 1, "?": 1, "ThePosterDB": 1} and s["deleted"] == 1 and s["restored"] == 1
+    assert len(s["weekly"]) == 12 and s["weekly"][-1][1] == 7                                    # all of it happened this week
+
+
+def test_statistics_endpoint_has_every_part(tmp_path, monkeypatch):
+    from app import scanner
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(config, "CACHE_DIR", tmp_path / "cache")
+    item = _item(1, "Alpha", True, in_plex=True, missing=0)
+    item["slots"] = {"poster": {"exists": True, "w": 1200, "h": 1800, "size": 2048}}
+    monkeypatch.setitem(scanner.STATE, "items", [item])
+    monkeypatch.setattr(main, "_world", lambda w=None: {"id": "w"})
+    r = TestClient(main.app).get("/api/stats", params={"world": "w"}).json()
+    assert set(r) >= {"history", "quality", "waiting", "builder", "storage", "titles"}
+    assert r["quality"]["buckets"] == {"hd": 1, "mid": 0, "low": 0} and r["quality"]["avg_width"] == 1200 and r["quality"]["bytes"] == 2048
+    assert r["builder"]["looks"] == 0 and r["history"]["total"] == 0

@@ -242,13 +242,13 @@ def _slot_check(it: dict, slot: str) -> int | None:
     return season
 
 
-async def _store(it: dict, slot: str, data: bytes, source: str = "upload") -> dict:
+async def _store(it: dict, slot: str, data: bytes, source: str = "upload", provider: str | None = None) -> dict:
     undo: dict = {}
     path = (await asyncio.to_thread(uploads.write_assets, it, [slot], data, undo))[0]
     await asyncio.to_thread(scanner.refresh_item, it["id"])
     await asyncio.to_thread(thumbs.get, Path(path))                 # the preview image is ready when the browser asks for it
     await asyncio.to_thread(watch.unmark, it["id"], slot)           # a poster was chosen: "Später suchen" is done for this tile
-    await asyncio.to_thread(changes.record, source=source, world=it["world"], item_id=it["id"], title=it["title"], slot=slot, type_=it["type"], gid=undo.get("gid"), path=path)
+    await asyncio.to_thread(changes.record, source=source, world=it["world"], item_id=it["id"], title=it["title"], slot=slot, type_=it["type"], gid=undo.get("gid"), path=path, provider=provider)
     log.info("Saved: %s / %s → %s%s", it["title"], slot, path,
              f" (+ mirror: {', '.join(it['mirror_folders'])})" if it.get("mirror_folders") else "")
     return {"ok": True, "path": str(path), "trash": undo.get("gid"), "item": _public_item(_item(it["id"]), True)}
@@ -714,7 +714,7 @@ async def collection_poster(id: str, download: bool = False, thumb: bool = False
 
 
 @app.post("/api/collection-poster")
-async def collection_poster_upload(id: str, file: Annotated[UploadFile, File()], create: bool = False, source: str = "upload"):
+async def collection_poster_upload(id: str, file: Annotated[UploadFile, File()], create: bool = False, source: str = "upload", origin: str = ""):
     """Save the poster of a collection (the finished poster of the poster builder). The folder must exist unless create is set."""
     _, world, title = _collection_films(id)
     data = await file.read()
@@ -726,7 +726,7 @@ async def collection_poster_upload(id: str, file: Annotated[UploadFile, File()],
     if path is None:
         return JSONResponse({"detail": tr("Der Ordner „{0}“ existiert noch nicht.", title), "needs_folder": title, "reason": reason}, status_code=409)
     log.info("Collection poster: %s → %s", title, path)
-    await asyncio.to_thread(changes.record, source="builder" if source == "builder" else "upload", world=world["id"], item_id=None, title=title, slot="collection", type_="collection", gid=undo.get("gid"), path=path)
+    await asyncio.to_thread(changes.record, source="builder" if source == "builder" else "upload", world=world["id"], item_id=None, title=title, slot="collection", type_="collection", gid=undo.get("gid"), path=path, provider=origin if origin in ("ThePosterDB", "MediUX") else None)
     return {"ok": True, "path": str(path), "trash": undo.get("gid"), "poster": collection_assets.state(world, title)}
 
 
@@ -759,7 +759,7 @@ async def collection_poster_from_url(body: CollectionUrlBody):
         raise HTTPException(400, str(e)) from e
     if path is None:
         return JSONResponse({"detail": tr("Der Ordner „{0}“ existiert noch nicht.", title), "needs_folder": title, "reason": reason}, status_code=409)
-    await asyncio.to_thread(changes.record, source="online", world=world["id"], item_id=None, title=title, slot="collection", type_="collection", gid=undo.get("gid"), path=path)
+    await asyncio.to_thread(changes.record, source="online", world=world["id"], item_id=None, title=title, slot="collection", type_="collection", gid=undo.get("gid"), path=path, provider=changes.provider_of(body.url))
     return {"ok": True, "path": str(path), "trash": undo.get("gid"), "poster": collection_assets.state(world, title)}
 
 
@@ -939,11 +939,11 @@ async def season_thumb(item_id: str, slot: str):
 
 
 @app.post("/api/items/{item_id}/{slot}/upload")
-async def upload_slot(item_id: str, slot: str, file: Annotated[UploadFile, File()], source: str = "upload"):
+async def upload_slot(item_id: str, slot: str, file: Annotated[UploadFile, File()], source: str = "upload", origin: str = ""):
     it = _item(item_id)
     _slot_check(it, slot)
     data = await file.read()
-    return await _store(it, slot, data, "builder" if source == "builder" else "upload")
+    return await _store(it, slot, data, "builder" if source == "builder" else "upload", origin if origin in ("ThePosterDB", "MediUX") else None)
 
 
 class CopyBody(BaseModel):
@@ -1148,7 +1148,7 @@ async def upload_from_url(item_id: str, slot: str, body: UrlBody):
     it = _item(item_id)
     _slot_check(it, slot)
     data = await _download(body.url)
-    return await _store(it, slot, data, "online")
+    return await _store(it, slot, data, "online", changes.provider_of(body.url))
 
 
 @app.get("/api/items/{item_id}/{slot}/search")
@@ -1772,6 +1772,80 @@ class _RevalidatingStatic(StaticFiles):
 
 
 app.mount("/static", _RevalidatingStatic(directory=STATIC), name="static")
+
+
+# ------------------------------------------------------------ Statistik ---
+
+_DIR_SIZE: dict = {}
+
+
+def _dir_size(path: Path) -> tuple[int, int]:
+    """(bytes, files) of a folder tree, looked at again after two minutes only (the thumbnail cache has thousands of files)."""
+    key = str(path)
+    hit = _DIR_SIZE.get(key)
+    if hit and time.monotonic() - hit[0] < 120:
+        return hit[1]
+    total = n = 0
+    try:
+        for p in path.rglob("*"):
+            if p.is_file():
+                total += p.stat().st_size
+                n += 1
+    except OSError:
+        pass
+    _DIR_SIZE[key] = (time.monotonic(), (total, n))
+    return total, n
+
+
+def _builder_stats() -> dict:
+    modes: Counter = Counter()
+    fonts: Counter = Counter()
+    looks = logos = 0
+    root = builder_store._root()
+    if root.is_dir():
+        for d in root.iterdir():
+            pr = builder_store.load(d.name) if d.is_dir() else None
+            if not pr:
+                continue
+            looks += 1
+            look = pr.get("look") or {}
+            modes[look.get("mode") or "logo"] += 1
+            fonts[look.get("font") or "montserrat"] += 1
+            logos += 1 if pr.get("logo") else 0
+    st = styles.load()
+    return {"looks": looks, "modes": dict(modes), "fonts": fonts.most_common(6), "with_logo": logos, "presets": len(st["presets"]), "default": st["default"]}
+
+
+@app.get("/api/stats")
+async def stats(world: str = ""):
+    """Numbers for the statistics page: how the posters were set (since the history began), quality, what waits, the look of the builder, disk use."""
+    wid = _world(world)["id"]
+    items = [i for i in scanner.STATE["items"] if i["world"] == wid]
+    ch = await asyncio.to_thread(changes.summary, wid)
+    buckets = {"hd": 0, "mid": 0, "low": 0}
+    size = n = known = width_sum = 0
+    for it in items:
+        for sl in it["slots"].values():
+            if not sl.get("exists") or sl.get("extra"):
+                continue
+            n += 1
+            size += sl.get("size") or 0
+            if sl.get("w"):
+                known += 1
+                width_sum += sl["w"]
+                buckets["hd" if sl["w"] >= 1000 else "mid" if sl["w"] >= 500 else "low"] += 1
+    marks = {m["item_id"] for m in watch.marks().values()}
+    up = await upcoming(wid, 0, 24) if config.get()["upcoming"].get("enabled", True) else {"entries": []}
+    waiting = {"search_later": sum(1 for i in items if i["id"] in marks), "unreleased_missing": sum(1 for i in items if i["missing"] and _unreleased(i)),
+               "coming_soon": sum(1 for i in items if i.get("coming_soon") and not i["slots"].get("poster", {}).get("exists")),
+               "soon": len(up["entries"]), "missing_plex": sum(1 for i in items if i.get("missing_plex"))}
+    tr_groups = await asyncio.to_thread(trash.listing)
+    thumbs_size, thumbs_n = await asyncio.to_thread(_dir_size, config.CACHE_DIR / "thumbs-v3")
+    hist_size, _ = await asyncio.to_thread(_dir_size, config.CONFIG_DIR / "changes")
+    return {"world": wid, "titles": len(items), "history": ch, "quality": {"posters": n, "known": known, "buckets": buckets, "bytes": size, "avg_width": round(width_sum / known) if known else 0},
+            "waiting": waiting, "builder": await asyncio.to_thread(_builder_stats),
+            "storage": {"assets_bytes": size, "trash_bytes": sum(g.get("size", 0) for g in tr_groups), "trash_groups": len(tr_groups), "thumbs_bytes": thumbs_size, "thumbs_files": thumbs_n,
+                        "history_bytes": hist_size}}
 
 
 # ------------------------------------------------------ Bald erscheinend ---

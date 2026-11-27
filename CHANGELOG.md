@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.4 – 2026-11-27
+
+**New**
+- **Statistics page** (chart symbol in the header): a ring “Where the posters come from” (built with p5assets, chosen online, uploaded, taken from Plex, import, copied), the online sources (TMDb, TVDB, fanart.tv; ThePosterDB and MediUX when the picture was dropped in their tab), activity per week, what is waiting for you (with links to the lists), quality, poster builder and storage. The history remembers the online source from now on; older entries have none
+
+**Changed**
+- Series dates in the “Coming soon” cards, the preview and the builder now read “Streaming” (was “Airing”) and use the same symbol everywhere
 ## 0.10.3 – 2026-11-27
 
 **New**

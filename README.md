@@ -121,6 +121,11 @@ This tab finds images that are too small or not 2:3. You set the thresholds (min
 
 <img src="docs/images/weak.png" alt="Weak posters tab" width="560">
 
+### Statistics
+The chart symbol in the header opens a page with a ring of where your posters come from (built, chosen online, uploaded, Plex, import), the online sources (ThePosterDB and MediUX count when the picture was dropped in their tab), activity per week, what is waiting for you, quality, poster builder and storage. The history exists since 0.9.15, so earlier posters are not counted.
+
+<img src="docs/images/statistics.png" alt="Statistics page" width="560">
+
 ### History and “Search later”
 The tab **History** next to the trash lists every change of a poster with a small before/after picture, how it was made (upload, builder, online, Plex, import …), and “Restore” (as long as the trash still has the old one).
 

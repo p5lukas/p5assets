@@ -123,6 +123,11 @@ die Bildgrößen liest p5assets im Hintergrund.
 
 <img src="docs/images/weak.png" alt="Schwache Poster" width="560">
 
+### Statistik
+Das Diagramm-Symbol in der Kopfzeile öffnet eine Seite mit einem Ring „Woher die Poster stammen“ (gebaut, online gewählt, hochgeladen, Plex, Import), den Online-Quellen (ThePosterDB und MediUX zählen, wenn das Bild in ihrem Tab abgelegt wurde), der Aktivität pro Woche, Wartendem, Qualität, Poster-Builder und Speicher. Den Verlauf gibt es seit 0.9.15, frühere Poster werden nicht mitgezählt.
+
+<img src="docs/images/statistics.png" alt="Statistikseite" width="560">
+
 ### Verlauf und „Später suchen“
 Der Reiter **Verlauf** neben dem Papierkorb listet jede Änderung eines Posters mit kleinem Vorher/Nachher-Bild, der Art der Änderung (Upload, Builder, Online-Wahl, Plex, Import …) und „Wiederherstellen“ (solange der Papierkorb die alte Version hat).
 

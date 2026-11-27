@@ -176,7 +176,9 @@ const ICONS = {
   back: [{ d: "M19 12H5" }, { d: "M12 19l-7-7 7-7" }],
   file: [{ d: "M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" }, { d: "M14 2v6h6" }, { d: "M8 13h8" }, { d: "M8 17h6" }],
   search: [{ c: [11, 11, 8] }, { d: "M21 21l-4.3-4.3" }],
+  chart: [{ d: "M4 20V11" }, { d: "M10 20V4" }, { d: "M16 20v-7" }, { d: "M22 20H2" }],
   cal: [{ d: "M3 5h18v16H3z" }, { d: "M3 10h18" }, { d: "M8 3v4" }, { d: "M16 3v4" }],
+  tv: [{ d: "M3 5h18a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" }, { d: "M10 9l5 2.5-5 2.5z" }, { d: "M8 21h8" }],
   ticket: [{ d: "M3 9a2 2 0 0 0 0 6v3a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-3a2 2 0 0 1 0-6V6a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1z" }, { d: "M13 5v2" }, { d: "M13 11v2" }, { d: "M13 17v2" }],
   disc: [{ c: [12, 12, 9.5] }, { c: [12, 12, 2.5] }],
   // two squares with swap arrows (replace)
@@ -633,6 +635,61 @@ function logoEl(word) {
     h("i", { class: "logomark", "aria-hidden": "true" }, "p5"), h("span", {}, word, h("u", {}, "_")));
 }
 
+/* ============================================================ statistics === */
+const STAT_COLORS = ["var(--accent)", "#33d6ff", "#ffcc00", "#ff7ad9", "#b388ff", "#ff8a4c", "#8aa39a"];
+async function statsPage() {
+  S.view = "stats"; clearInterval(S.logTimer); clearInterval(S.upTimer);
+  checkAlerts(true);
+  const back = () => dashboard();
+  const body = h("div", { class: "statsgrid" }, h("div", { class: "empty" }, h("span", { class: "spin" }), T(" Zähle …")));
+  fill(app,
+    h("header", { class: "top" }, h("div", { class: "in" }, logoEl("stats"), h("div", { class: "spacer" }),
+      h("button", { class: "btn tb", onclick: back }, icon("back"), h("span", { class: "lbl" }, T("Zurück zum Dashboard"))),
+      h("button", { class: "btn tb icon", title: T("Einstellungen"), onclick: () => wizard(true) }, icon("gear", 20)))),
+    h("main", {}, h("h1", { class: "stath" }, T("Statistik")), body));
+  let d;
+  try { d = await api("/stats?world=" + encodeURIComponent(S.world)); } catch (e) { fill(body, h("div", { class: "status bad" }, e.message)); return; }
+  const card = (title, ...kids) => h("section", { class: "statcard" }, h("h3", {}, title), ...kids);
+  const pct = (n, t) => t ? Math.round(n / t * 100) : 0;
+  const pie = (title, rows, note) => {
+    const total = rows.reduce((s, r) => s + r.n, 0);
+    let acc = 0;
+    const stops = rows.filter(r => r.n).map((r, i) => { const from = acc / total * 100; acc += r.n; return `${r.color} ${from}% ${acc / total * 100}%`; });
+    const ring = h("div", { class: "pie", style: total ? `background:conic-gradient(${stops.join(",")})` : "" }, h("div", {}, h("b", {}, total), h("span", {}, T("Poster"))));
+    return card(title, h("div", { class: "piewrap" }, ring, h("div", { class: "legend" }, rows.map(r => h("div", { class: "lrow" + (r.n ? "" : " zero") },
+      h("i", { style: `background:${r.color}` }), h("span", { class: "lname" }, r.label), h("b", {}, r.n), h("small", {}, total ? pct(r.n, total) + " %" : "")))), ), note ? h("p", { class: "hint" }, note) : null);
+  };
+  const bars = (title, rows, note, fmt = x => x) => {
+    const max = Math.max(1, ...rows.map(r => r.n));
+    return card(title, h("div", { class: "bars" }, rows.map((r, i) => h("div", { class: "brow2" }, h("span", { class: "bname" }, r.label),
+      h("div", { class: "btrack" }, h("div", { class: "bfill", style: `width:${r.n / max * 100}%;background:${r.color || STAT_COLORS[i % STAT_COLORS.length]}` })), h("b", {}, fmt(r.n))))), note ? h("p", { class: "hint" }, note) : null);
+  };
+  const kv = (title, rows, note) => card(title, h("div", { class: "kvs" }, rows.filter(Boolean).map(([k, v, go]) => h("div", { class: "kv" }, h("span", {}, k), go ? h("button", { class: "link", onclick: go, title: T("Anzeigen") }, v) : h("b", {}, v)))), note ? h("p", { class: "hint" }, note) : null);
+  const hs = d.history, since = hs.since ? new Date(hs.since * 1000).toLocaleDateString(LOCALE) : null;
+  const SRC = { builder: T("Mit p5assets gebaut"), online: T("Online gewählt"), upload: T("Selbst hochgeladen"), plex: T("Aus Plex übernommen"), import: T("Import (ZIP, Ordner)"), copy: T("Kopiert"), all: T("Auf mehrere Kacheln") };
+  const order = ["builder", "online", "upload", "plex", "import", "copy", "all"];
+  const sinceNote = since ? T("Seit {0} (so lange gibt es den Verlauf); frühere Poster sind nicht erfasst.", since) : T("Noch keine Änderungen aufgezeichnet.");
+  const prov = Object.entries(hs.providers).sort((a, b) => b[1] - a[1]).map(([k, n], i) => ({ label: k === "?" ? T("unbekannt") : k, n, color: STAT_COLORS[i % STAT_COLORS.length] }));
+  const weeks = hs.weekly, wmax = Math.max(1, ...weeks.map(w => w[1]));
+  const goTab = f => () => { S.filter = f; S.letter = null; dashboard(); };
+  const q = d.quality, w = d.waiting, b = d.builder, st = d.storage;
+  const MODE = { logo: T("Logo"), text: T("Text"), none: T("Ohne") };
+  fill(body,
+    pie(T("Woher die Poster stammen"), order.map((k, i) => ({ label: SRC[k], n: hs.by_source[k], color: STAT_COLORS[i % STAT_COLORS.length] })), sinceNote),
+    bars(T("Online-Quellen"), prov.length ? prov : [], T("Online gewählte Poster nach Quelle. ThePosterDB und MediUX zählen, wenn das Bild über ihren Tab abgelegt wurde; sonst gilt es als selbst hochgeladen.")),
+    card(T("Aktivität"), h("div", { class: "weeks" }, weeks.map(([day, n], wi) => h("div", { class: "week", title: `${new Date(day + "T00:00:00").toLocaleDateString(LOCALE)}: ${n}` },
+      h("b", {}, n || ""), h("div", { class: "wbar", style: `height:${Math.max(n ? 6 : 2, n / wmax * 110)}px` }), h("small", {}, (weeks.length - 1 - wi) % 3 === 0 ? new Date(day + "T00:00:00").toLocaleDateString(LOCALE, { day: "2-digit", month: "2-digit" }) : "")))),
+      h("p", { class: "hint" }, T("Neu gesetzte Poster pro Woche (die letzten 12 Wochen). Gelöscht: {0} · wiederhergestellt: {1}", hs.deleted, hs.restored))),
+    kv(T("Wartet auf dich"), [[T("In Plex ohne Poster"), w.missing_plex, w.missing_plex ? goTab("plexmissing") : null], [T("Später suchen"), w.search_later, w.search_later ? goTab("watch") : null],
+      [T("Bald erscheinend"), w.soon], [T("Noch nicht erschienen, ohne Poster"), w.unreleased_missing, w.unreleased_missing ? goTab("missing") : null], [T("Coming Soon ohne Poster"), w.coming_soon, w.coming_soon ? goTab("comingsoon") : null]]),
+    bars(T("Qualität"), [{ label: T("ab 1000 px Breite"), n: q.buckets.hd }, { label: T("500 bis 999 px"), n: q.buckets.mid, color: "#ffcc00" }, { label: T("unter 500 px"), n: q.buckets.low, color: "#ff4d5e" }],
+      T("{0} Poster, davon {1} mit bekannter Größe; durchschnittlich {2} px breit, zusammen {3}.", q.posters, q.known, q.avg_width, fmtBytes(q.bytes))),
+    kv(T("Poster-Builder"), [[T("Gespeicherte Looks"), b.looks], [T("mit Logo"), b.with_logo], ...Object.entries(b.modes).map(([k, n]) => [T("Modus: {0}", MODE[k] || k), n]),
+      [T("Vorlagen"), b.presets], [T("Standard-Look"), b.default || T("eingebaut")], ...b.fonts.slice(0, 3).map(([f, n], i) => [i ? "" : T("Beliebteste Schrift"), `${f} (${n})`])]),
+    kv(T("Speicher"), [[T("Assets-Ordner (Poster dieser Welt)"), fmtBytes(st.assets_bytes)], [T("Papierkorb"), `${fmtBytes(st.trash_bytes)} · ${pl(st.trash_groups, "Eintrag", "Einträge")}`],
+      [T("Vorschaubilder (Cache)"), `${fmtBytes(st.thumbs_bytes)} · ${st.thumbs_files}`], [T("Bilder des Verlaufs"), fmtBytes(st.history_bytes)]]));
+}
+
 /* =============================================================== logs === */
 async function logsPage() {
   S.view = "logs";
@@ -757,6 +814,7 @@ function dashboard(opts) {
       h("span", { class: "vsep" }),
       h("button", { class: "btn tb", id: "scanbtn", title: T("Plex, Sonarr/Radarr und die Assets-Ordner neu einlesen"), onclick: doScan }, icon("sync"), h("span", { class: "lbl" }, T("Scannen"))),
       h("button", { class: "btn tb icon", title: T("Papierkorb & Aufräumen: ersetzte Poster zurückholen (30 Tage) und verwaiste Ordner entfernen"), onclick: () => openCleanup() }, icon("trash", 20)),
+      h("button", { class: "btn tb icon", title: T("Statistik"), onclick: statsPage }, icon("chart", 20)),
       h("button", { class: "btn tb icon logbtn", id: "logbtn", title: T("Logs"), onclick: logsPage }, icon("terminal", 20), h("span", { class: "lbadge" })),
       h("button", { class: "btn tb icon", title: T("Einstellungen"), onclick: () => wizard(true) }, icon("gear", 20)),
     )),
@@ -832,7 +890,7 @@ function upcomingSlide(e) {
     [T("Bauen"), build, "", "build"], later]));
   box.onclick = async () => { if (isTouch() && !box.classList.contains("show")) { toggleActions(box); return; } if (it.type === "movie") openPreview(await full(), slot, after); else openItem(it.id); };
   const rel = it.release || {};
-  const dates = it.type === "movie" ? releaseRows(it) : season != null && rel.seasons && rel.seasons[season] ? h("div", { class: "relrows" }, h("div", { class: "relrow" }, icon("cal", 15), h("b", {}, T("Ausstrahlung")), " " + fmtDay(rel.seasons[season]))) : releaseRows(it);
+  const dates = it.type === "movie" ? releaseRows(it) : season != null && rel.seasons && rel.seasons[season] ? h("div", { class: "relrows" }, h("div", { class: "relrow" }, icon("tv", 15), h("b", {}, T("Streaming")), " " + fmtDay(rel.seasons[season]))) : releaseRows(it);
   const enc = encodeURIComponent, term = `${it.title}${it.year ? " " + it.year : ""}`;
   const tmdb = it.tmdb_id || (it.ids || {}).tmdb;
   const link = (text, href) => h("a", { href, target: "_blank", rel: "noopener noreferrer", referrerpolicy: "no-referrer" }, text + " ↗");
@@ -1112,14 +1170,14 @@ function releaseTip(it) {
   }
   if (!r || !it.unreleased) return "";
   return [r.cinema ? T("Kino: {0}", fmtDay(r.cinema)) : null, r.digital ? T("Digital: {0}", fmtDay(r.digital)) : null, r.disc ? T("Disc: {0}", fmtDay(r.disc)) : null,
-    r.from && !r.cinema ? T("Ausstrahlung: {0}", fmtDay(r.from)) : null].filter(Boolean).join("\n");
+    r.from && !r.cinema ? T("Streaming: {0}", fmtDay(r.from)) : null].filter(Boolean).join("\n");
 }
 /** The release dates as rows with the symbols of Radarr (cinema, digital, disc); for series the airing date. */
 function releaseRows(it) {
   const r = it.release;
   if (!r) return null;
   const row = (ic, label, d) => d ? h("div", { class: "relrow" }, icon(ic, 15), h("b", {}, label), " " + fmtDay(d)) : null;
-  const rows = it.type === "movie" ? [row("ticket", T("Kino"), r.cinema), row("file", T("Digital"), r.digital), row("disc", T("Disc"), r.disc)] : [row("sync", T("Ausstrahlung"), r.from)];
+  const rows = it.type === "movie" ? [row("ticket", T("Kino"), r.cinema), row("file", T("Digital"), r.digital), row("disc", T("Disc"), r.disc)] : [row("tv", T("Streaming"), r.from)];
   const has = rows.filter(Boolean);
   return has.length ? h("div", { class: "relrows" }, has) : null;
 }
@@ -1404,7 +1462,7 @@ function openPreview(it, key, draw) {
     [T("Titel"), it.title + (it.year ? ` (${it.year})` : "")],
     [T("Slot"), slotLabel(key, it.type)],
     ...(releaseRows(it) ? [[T("Erscheint"), releaseRows(it)]] : []),
-    ...(key !== "poster" && it.type === "show" && it.release && it.release.seasons && isFuture(it.release.seasons[seasonNum(key)]) ? [[T("Ausstrahlung"), T("ab {0}", fmtDay(it.release.seasons[seasonNum(key)]))]] : []),
+    ...(key !== "poster" && it.type === "show" && it.release && it.release.seasons && isFuture(it.release.seasons[seasonNum(key)]) ? [[T("Streaming"), T("ab {0}", fmtDay(it.release.seasons[seasonNum(key)]))]] : []),
     [T("Kometa-Ordner"), it.folder || "—"],
     ...((it.mirror_folders || []).length ? [[T("Zusätzlich gespeichert in"), it.mirror_folders.join(", ")]] : []),
     ...(exists ? [
@@ -1475,9 +1533,9 @@ async function saveCollectionPoster(cid, title, send) {
   undoToast(T("Collection-Poster gespeichert ✓"), r, () => {});
   return r.poster;
 }
-const uploadCollectionPoster = (cid, title, file) => saveCollectionPoster(cid, title, create => {
+const uploadCollectionPoster = (cid, title, file, origin) => saveCollectionPoster(cid, title, create => {
   const fd = new FormData(); fd.append("file", file, file.name);
-  return api(`/collection-poster?id=${encodeURIComponent(cid)}${create ? "&create=true" : ""}`, { method: "POST", body: fd });
+  return api(`/collection-poster?id=${encodeURIComponent(cid)}${create ? "&create=true" : ""}${origin ? "&origin=" + encodeURIComponent(origin) : ""}`, { method: "POST", body: fd });
 });
 const collectionPosterFromUrl = (cid, title, url) => saveCollectionPoster(cid, title, create => api("/collection-poster/url", { json: { id: cid, url, create } }));
 /** Pick a picture file; a single image becomes the poster of the collection. */
@@ -1755,14 +1813,14 @@ function openApplyAll(it, key, draw) {
   refresh();
 }
 
-async function uploadSlot(it, slot, files, draw) {
+async function uploadSlot(it, slot, files, draw, origin) {
   const imgs = files.filter(f => IMG_EXT.test(f.path) || isImageFile(f.file));
   if (imgs.length !== 1 || files.length !== 1) return importFiles(files, it.id, draw);
   const fd = new FormData(); fd.append("file", imgs[0].file, imgs[0].file.name);
   const key = it.id + "|" + slot;
   busyTile(key, true);
   try {
-    const r = await api(`/items/${it.id}/${slot}/upload`, { method: "POST", body: fd });
+    const r = await api(`/items/${it.id}/${slot}/upload${origin ? "?origin=" + encodeURIComponent(origin) : ""}`, { method: "POST", body: fd });
     undoToast(T("Ersetzt ✓"), r, draw);
     S.rain.add(key);
     draw(r.item);
@@ -1949,11 +2007,11 @@ function posterDropZone(site, it, slot, draw, done, pick) {
     const imgs = files.filter(f => IMG_EXT.test(f.path) || isImageFile(f.file));
     done();
     if (coll) {                                                                              // the poster of a collection
-      if (files.length === 1 && imgs.length === 1) uploadCollectionPoster(it.id, it.title, imgs[0].file).then(np => { if (np) draw(np); }).catch(e => toast(e.message, "bad"));
+      if (files.length === 1 && imgs.length === 1) uploadCollectionPoster(it.id, it.title, imgs[0].file, site).then(np => { if (np) draw(np); }).catch(e => toast(e.message, "bad"));
       else importFiles(files, null, () => draw(null), null, null, { collection: it.id });
       return;
     }
-    if (slot && files.length === 1 && imgs.length === 1) uploadSlot(it, slot, files, draw);   // one poster for this tile
+    if (slot && files.length === 1 && imgs.length === 1) uploadSlot(it, slot, files, draw, site);   // one poster for this tile (the site is noted in the statistics)
     else importFiles(files, it.id, draw, it, true);                                           // several files: review dialog, title fixed
   };
   const zone = h("div", { class: "tpzone" }, h("b", {}, "＋"),
