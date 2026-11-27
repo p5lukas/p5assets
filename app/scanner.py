@@ -291,7 +291,7 @@ async def scan() -> None:
                 if plex:
                     await plex.close()
             all_items.sort(key=lambda i: i["title"].casefold())
-            STATE.update(items=all_items, scanned_at=int(time.time()), progress="", warnings=warnings)
+            STATE.update(items=all_items, scanned_at=int(time.time()), progress="", warnings=warnings, rev=STATE.get("rev", 0) + 1)
             for w in warnings:
                 log.warning("Scan: %s", render(w))
             log.info("Scan finished: %d titles in %.1f s", len(all_items), time.time() - t0)
@@ -371,6 +371,7 @@ def refresh_item(item_id: str) -> None:
     index = kometa.get_index(Path(item["assets_path"]), cfg["assets"]["asset_folders"], item.get("search_depth", 3))
     build_slots(item, index, cfg["assets"]["ignore_specials"])
     dims.fill([item], persist=False)      # only this title (a handful of files)
+    STATE["rev"] = STATE.get("rev", 0) + 1                    # numbers and counters of the lists are worked out again
 
 
 def summary() -> dict:

@@ -102,7 +102,7 @@ function glitch(items, dir, ms) {
 }
 let glitchBusy = false;
 /** Runs fn (which rebuilds part of the page) between the two halves of the letter effect: the old text scrambles, the new text decodes. */
-async function matrixSwap(fn, outMs = 420, inMs = 760) {
+async function matrixSwap(fn, outMs = 320, inMs = 560) {
   if (reduced() || !document.body.animate || glitchBusy) { await fn(); return; }
   glitchBusy = true;
   try {
@@ -999,7 +999,7 @@ function posterBox(item, slot, known = true) {
   const wrap = h("div", { class: "poster" + (!exists && known ? " miss" : ""), "data-key": item.id + "|" + slot });
   const placeholder = txt => wrap.append(h("div", { class: "ph" }, h("div", {}, h("b", {}, "＋"), txt)));
   if (exists) {
-    wrap.append(h("img", { loading: "lazy", alt: "", draggable: false, src: `/api/thumb/${item.id}/${slot}?v=${sl.ver || sl.mtime}`, onload: e => e.target.classList.add("loaded"),
+    wrap.append(h("img", { loading: "lazy", decoding: "async", alt: "", draggable: false, src: `/api/thumb/${item.id}/${slot}?v=${sl.ver || sl.mtime}`, onload: e => e.target.classList.add("loaded"),
       onerror: e => { e.target.remove(); placeholder(T("Bild defekt")); } }));
   } else if (item.in_plex && known && sl && sl.plex_thumb) {
     wrap.append(h("img", { loading: "lazy", alt: "", draggable: false, src: `/api/season-thumb/${item.id}/${slot}`, onload: e => { e.target.classList.add("loaded"); wrap.append(h("span", { class: "badge warn b", title: T("Nur Vorschau aus Plex (kann Overlays enthalten) – kein Kometa-Asset, nicht kopierbar") }, T("Plex-Vorschau"))); },

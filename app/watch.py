@@ -21,12 +21,34 @@ def _file():
     return config.CONFIG_DIR / "watch.json"
 
 
-def _load() -> dict:
+_cache: dict = {"sig": None, "data": {"marks": {}}, "by_item": {}}      # the file is read again only when it changed (lists ask for the marks of every title)
+
+
+def _sig():
     try:
-        data = json.loads(_file().read_text("utf-8"))
-    except (OSError, ValueError):
-        data = {}
-    return data if isinstance(data.get("marks"), dict) else {"marks": {}}
+        st = _file().stat()
+        return (str(_file()), st.st_mtime_ns, st.st_size)
+    except OSError:
+        return (str(_file()), None, 0)
+
+
+def _index(data: dict) -> dict:
+    by: dict[str, list] = {}
+    for m in data["marks"].values():
+        by.setdefault(m["item_id"], []).append(m)
+    return by
+
+
+def _load() -> dict:
+    sig = _sig()
+    if _cache["sig"] != sig:
+        try:
+            data = json.loads(_file().read_text("utf-8"))
+        except (OSError, ValueError):
+            data = {}
+        data = data if isinstance(data.get("marks"), dict) else {"marks": {}}
+        _cache.update(sig=sig, data=data, by_item=_index(data))
+    return _cache["data"]
 
 
 def _save(data: dict) -> None:
@@ -35,6 +57,18 @@ def _save(data: dict) -> None:
     tmp = f.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False), "utf-8")
     os.replace(tmp, f)
+    _cache.update(sig=_sig(), data=data, by_item=_index(data))
+
+
+def version():
+    """Changes whenever a mark changes (for caches of the lists)."""
+    return _sig()
+
+
+def for_item(item_id: str) -> list[dict]:
+    with _lock:
+        _load()
+        return _cache["by_item"].get(item_id, [])
 
 
 def key(item_id: str, slot: str) -> str:

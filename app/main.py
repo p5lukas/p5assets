@@ -7,6 +7,7 @@ import json
 import os
 import re
 import tempfile
+import time
 import zipfile
 from collections import Counter
 from contextlib import asynccontextmanager
@@ -25,6 +26,7 @@ from fastapi.responses import (
 )
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.middleware.gzip import GZipMiddleware
 
 from . import arr as arrmod
 from . import (
@@ -74,6 +76,24 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="p5assets", lifespan=lifespan)
+
+
+class _SelectiveGZip:
+    """Compresses scripts, styles and the big JSON lists (a library of thousands of titles is some hundred KB of text); pictures and ZIPs are left alone."""
+    PREFIXES = ("/static/", "/i18n.js", "/api/items", "/api/collection", "/api/state", "/api/status", "/api/logs/read", "/api/changes", "/api/trash", "/api/news", "/manifest.webmanifest")
+    TEXT = (".js", ".css", ".html", ".svg", ".webmanifest", ".json")
+
+    def __init__(self, inner):
+        self.inner = inner
+        self.gzip = GZipMiddleware(inner, minimum_size=700, compresslevel=5)
+
+    async def __call__(self, scope, receive, send):
+        path = scope.get("path", "") if scope["type"] == "http" else ""
+        text = path in ("/",) or (path.startswith(self.PREFIXES) and (not path.startswith("/static/") or path.endswith(self.TEXT)) and not path.startswith(("/api/changes/", "/api/trash/")) )
+        await (self.gzip if text else self.inner)(scope, receive, send)
+
+
+app.add_middleware(_SelectiveGZip)
 app.include_router(auth.router)
 
 
@@ -99,6 +119,9 @@ async def security_headers(request: Request, call_next):
         response.headers.setdefault(k, v)
     if request.url.path.startswith("/api/auth/"):
         response.headers["Cache-Control"] = "no-store"
+    elif request.url.path.startswith("/static/") and response.status_code == 200:
+        # the page asks for ?v=<hash of the files> (see index): such an address never changes its content, so the browser keeps it; fonts and icons rarely change
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable" if "v" in request.query_params else "public, max-age=86400"
     if auth._secure(request):
         response.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
     return response
@@ -112,9 +135,13 @@ async def language(request: Request, call_next):
 
 
 @app.get("/i18n.js")
-async def i18n_js():
-    """English texts for the browser (German is the source language of the UI)."""
-    return Response(i18n.js(), media_type="text/javascript", headers={"Cache-Control": "no-cache"})
+async def i18n_js(request: Request):
+    """English texts for the browser (German is the source language of the UI). Checked with an ETag, so an unchanged file costs a few bytes."""
+    body = i18n.js()
+    etag = '"' + hashlib.md5(body.encode("utf-8"), usedforsecurity=False).hexdigest()[:16] + '"'
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag, "Cache-Control": "no-cache"})
+    return Response(body, media_type="text/javascript", headers={"Cache-Control": "no-cache", "ETag": etag})
 
 
 @app.get("/api/health")
@@ -152,7 +179,7 @@ def _item(item_id: str) -> dict:
 
 
 def _marks_for(item_id: str) -> list[dict]:
-    return [m for m in watch.marks().values() if m["item_id"] == item_id]
+    return watch.for_item(item_id)
 
 
 def _public_item(it: dict, full: bool = False) -> dict:
@@ -479,6 +506,24 @@ def _is_weak(it: dict, min_w: int, ratio: bool) -> bool:
     return False
 
 
+_STATS_CACHE: dict = {}
+
+
+def _cached_stats(items: list[dict], *scope) -> dict:
+    """The statistic block of a source selection is the same for every tab, letter and search: it is worked out once per change of the data (or after 3 s)."""
+    all_items = scanner.STATE["items"]
+    key = (*scope, id(all_items), len(all_items), scanner.STATE.get("rev", 0), tuple(h["id"] for h in _hidden_list()), watch.version())
+    hit = _STATS_CACHE.get(key)
+    if hit and time.monotonic() - hit[0] < 3:
+        return hit[1]
+    weak_w, weak_r = scope[-2], scope[-1]
+    out = _scope_stats(items, weak_w, weak_r)
+    if len(_STATS_CACHE) > 24:
+        _STATS_CACHE.clear()
+    _STATS_CACHE[key] = (time.monotonic(), out)
+    return out
+
+
 def _scope_stats(items: list[dict], weak_w: int = 0, weak_r: bool = False) -> dict:
     """Numbers for the statistic block and the tab counters of one source selection."""
     c = Counter()
@@ -516,7 +561,7 @@ async def items(world: str = "", q: str = "", filter: str = "all", library: str 
         res = [i for i in res if source in i["sources"]]
     if type:
         res = [i for i in res if i["type"] == type]
-    stats = _scope_stats(res, weak_w, weak_r)          # for the chosen source, independent of tab, letter and search
+    stats = _cached_stats(res, wid, library, source, type, weak_w, weak_r)         # for the chosen source, independent of tab, letter and search
     if filter == "missing":
         res = [i for i in res if i["missing"]]
     elif filter == "plexmissing":     # already in Plex, but a poster/season is missing in the Kometa assets
