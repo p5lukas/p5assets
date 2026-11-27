@@ -129,6 +129,7 @@ async function api(path, opts = {}) {
   const o = { ...opts, headers: { "X-Requested-With": "p5assets", "X-Lang": LANG, ...(opts.headers || {}) } };     // the header protects writing requests when a login is set (CSRF)
   if (o.json !== undefined) { o.method = o.method || "POST"; o.headers["Content-Type"] = "application/json"; o.body = JSON.stringify(o.json); delete o.json; }
   const r = await fetch("/api" + path, o);
+  if (o.method && o.method !== "GET" && r.ok && /^\/(items|collection|trash|changes)/.test(path)) refreshUpcomingSoon();
   let data = null;
   try { data = await r.json(); } catch { /* not json */ }
   if (r.status === 401 && data && data.auth && !path.startsWith("/auth/")) { showLogin(); throw new Error(T("Anmeldung erforderlich")); }     // session expired or logged out elsewhere
@@ -173,6 +174,8 @@ const ICONS = {
   terminal: [{ d: "M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" }, { d: "M6.5 9.5l3 2.5-3 2.5" }, { d: "M12.5 15.5h4.5", cls: "cur" }],
   list: [{ d: "M8 6h13" }, { d: "M8 12h13" }, { d: "M8 18h13" }, { d: "M3 6h.01" }, { d: "M3 12h.01" }, { d: "M3 18h.01" }],
   gear: [{ d: "M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" }, { c: [12, 12, 3] }],
+  chevl: [{ d: "M15 5l-7 7 7 7" }],
+  chevr: [{ d: "M9 5l7 7-7 7" }],
   back: [{ d: "M19 12H5" }, { d: "M12 19l-7-7 7-7" }],
   file: [{ d: "M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" }, { d: "M14 2v6h6" }, { d: "M8 13h8" }, { d: "M8 17h6" }],
   search: [{ c: [11, 11, 8] }, { d: "M21 21l-4.3-4.3" }],
@@ -871,6 +874,9 @@ function paintScanned() {
 
 /* ----------------------------------------------------- "Bald erscheinend" --- */
 /** The strip above the list: titles and seasons of Sonarr / Radarr that come out soon (or just did) and have no poster yet. */
+let upTimeout = 0;
+/** After any change of a poster the strip may be out of date (a title got its poster): reload it shortly after, once. */
+function refreshUpcomingSoon() { clearTimeout(upTimeout); upTimeout = setTimeout(() => { if (S.world && S.view === "dash") loadUpcoming(); }, 900); }
 async function loadUpcoming() {
   try { const r = await api("/upcoming?world=" + encodeURIComponent(S.world)); S.upcoming = r.enabled ? r.entries : []; } catch { S.upcoming = []; }
   if (S.view === "dash") renderUpcoming();
@@ -883,7 +889,7 @@ function upcomingSlide(e) {
   const build = it.type === "movie" ? async () => openMovieBuilder(await full(), after) : async () => { await openItem(it.id); if (S.seriesBuild) S.seriesBuild(slot); };
   const later = [(slot in (it.watch || {})) ? T("Nicht mehr suchen") : T("Später suchen"), async () => { try { await api(`/items/${it.id}/${slot}/watch`, { json: { on: !(slot in (it.watch || {})) } }); toast(T("Gemerkt: p5assets schaut täglich nach einem besseren Poster"), "ok"); after(); } catch (err) { toast(err.message, "bad"); } }];
   const img = h("img", { alt: "", decoding: "async", draggable: false, onload: ev => { ev.target.classList.add("loaded"); const ph = ev.target.parentNode.querySelector(".ph"); if (ph) ph.remove(); } });
-  const box = h("div", { class: "poster uppost", title: T("Vorschau von TMDb: das Poster ist noch nicht gesetzt") }, h("div", { class: "ph" }, h("div", {}, h("b", {}, "＋"), T("fehlt"))), img,
+  const box = h("div", { class: "poster uppost", "data-key": it.id + "|" + slot, title: T("Vorschau von TMDb: das Poster ist noch nicht gesetzt") }, h("div", { class: "ph" }, h("div", {}, h("b", {}, "＋"), T("fehlt"))), img,
     h("span", { class: "badge warn b" }, T("Vorschau")), h("span", { class: "upshimmer" }));
   api(`/upcoming-poster?item_id=${encodeURIComponent(it.id)}&slot=${encodeURIComponent(slot)}`).then(r => { if (r.url) img.src = "/api/proxy?url=" + encodeURIComponent(r.url); }).catch(() => {});
   box.append(hoverBar(box, [[T("Hochladen"), () => pickFiles(files => uploadSlot(it, slot, files, after), false), "", "upload"], [T("Online suchen"), async () => searchOnline(await full(), slot, after), "", "search"],
@@ -917,9 +923,9 @@ function renderUpcoming() {
     else if (dir < 0 && track.scrollLeft <= 4) track.scrollTo({ left: track.scrollWidth, behavior: reduced() ? "auto" : "smooth" });
     else track.scrollBy({ left: dir * w, behavior: reduced() ? "auto" : "smooth" });
   };
-  const nav = (cls, label, dir, txt) => h("button", { class: "btn upnav " + cls, type: "button", "aria-label": label, onclick: () => step(dir) }, txt);
+  const nav = (cls, label, dir, txt) => h("button", { class: "btn upnav " + cls, type: "button", "aria-label": label, onclick: () => step(dir) }, icon(txt, 18));
   const wrap = h("div", { class: "upwrap" }, track);
-  const navs = h("span", { class: "upnavs" }, nav("up-prev", T("Zurück"), -1, "‹"), nav("up-next", T("Weiter"), 1, "›"));
+  const navs = h("span", { class: "upnavs" }, nav("up-prev", T("Zurück"), -1, "chevl"), nav("up-next", T("Weiter"), 1, "chevr"));
   fill(el, h("div", { class: "uphead" }, h("b", {}, T("Bald erscheinend")), h("span", { class: "hint", style: "margin:0" }, T("Poster vorbereiten, solange der Titel noch nicht in Plex ist")),
     h("span", { class: "spacer" }), h("span", { class: "hint", style: "margin:0" }, TP(list.length, "Ein Titel", "{0} Titel")), navs), wrap);
   const fits = () => track.scrollWidth <= track.clientWidth + 4;
@@ -1240,7 +1246,7 @@ async function openItem(id) {
     scrim.remove(); document.removeEventListener("keydown", onKey);
     if (S.seriesBuildItem === id) S.seriesBuild = S.seriesBuildItem = null;
     api("/status").then(s => { S.st.summary = s; updateHero(); });
-    loadItems().then(renderGrid);
+    loadItems().then(renderGrid); loadUpcoming();
   }
 
   let selMode = false, cur = item;
@@ -2752,6 +2758,8 @@ function wLibs(nav, c) {
       h("div", {}, T("„Bald erscheinend“ über der Liste zeigen"), h("small", {}, T("Titel aus Sonarr/Radarr, die bald erscheinen und noch kein Poster haben, mit Vorschau und Terminen")))),
     h("label", { class: "f" }, T("Wie viele Tage im Voraus")),
     h("input", { type: "number", min: 1, max: 365, value: c.upcoming.days || 60, style: "width:120px", onchange: e => savePatch({ upcoming: { days: +e.target.value || 60 } }).then(loadUpcoming) }),
+    h("label", { class: "f" }, T("Höchstens so viele Titel")),
+    h("input", { type: "number", min: 1, max: 60, value: c.upcoming.limit || 24, style: "width:120px", onchange: e => savePatch({ upcoming: { limit: +e.target.value || 24 } }).then(loadUpcoming) }),
     hiddenCollections(),
     h("p", { class: "hint" }, T("p5assets gleicht Plex, Sonarr/Radarr und die Assets-Ordner im Hintergrund ab und aktualisiert die Liste der fehlenden Poster. Dabei wird nichts heruntergeladen oder verändert.")),
     nav());

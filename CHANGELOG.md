@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.10.5 – 2026-11-27
+
+**New**
+- “Coming soon”: the number of titles is adjustable (Settings → Libraries, default 24, up to 60; was fixed at 12). The time window stays a separate setting
+
+**Fixed**
+- A series that got its poster or set in the series view stayed in the strip with the dimmed preview until the page was reloaded. The strip now refreshes after every poster change and when the series view closes; while a poster is saved from the strip, the matrix rain runs over its cover
+- The news of 0.10.4 were shown in German in the English interface
+
+**Changed**
+- The arrow buttons of the strip are redesigned: rounded squares with real arrow icons, accent border and glow on hover, larger on touch screens
 ## 0.10.4 – 2026-11-27
 
 **New**

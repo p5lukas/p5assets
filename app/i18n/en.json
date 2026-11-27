@@ -1122,5 +1122,10 @@
 "unter 500 px": "under 500 px",
 "{0} Poster, davon {1} mit bekannter Größe; durchschnittlich {2} px breit, zusammen {3}.": "{0} posters, {1} of them with a known size; on average {2} px wide, together {3}.",
 "eingebaut": "built-in",
-"unbekannt": "unknown"
+"unbekannt": "unknown",
+"Höchstens so viele Titel": "At most this many titles",
+"Statistikseite": "Statistics page",
+"Neues Diagramm-Symbol in der Kopfzeile: Woher die Poster stammen (gebaut, online, selbst hochgeladen, Plex, Import), Online-Quellen, Aktivität pro Woche, Wartendes, Qualität, Builder und Speicher. Bei Serien heißt das Datum jetzt „Streaming“.": "A new chart symbol in the header: where the posters come from (built, online, uploaded, Plex, import), online sources, activity per week, what is waiting, quality, builder and storage. For series the date now reads “Streaming”.",
+"Bald erscheinend: mehr Titel und frischer": "Coming soon: more titles, always current",
+"Die Leiste zeigt jetzt bis zu 24 Titel (einstellbar bis 60 in den Einstellungen) und aktualisiert sich nach jeder Poster-Änderung, auch aus der Serienansicht; die Pfeil-Knöpfe sind neu gestaltet.": "The strip now shows up to 24 titles (adjustable up to 60 in the settings) and refreshes after every poster change, also from the series view; the arrow buttons have a new design."
 }

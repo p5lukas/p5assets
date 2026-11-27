@@ -113,3 +113,21 @@ def test_statistics_endpoint_has_every_part(tmp_path, monkeypatch):
     assert set(r) >= {"history", "quality", "waiting", "builder", "storage", "titles"}
     assert r["quality"]["buckets"] == {"hd": 1, "mid": 0, "low": 0} and r["quality"]["avg_width"] == 1200 and r["quality"]["bytes"] == 2048
     assert r["builder"]["looks"] == 0 and r["history"]["total"] == 0
+
+
+def test_every_news_entry_has_an_english_text():
+    import json
+    from pathlib import Path
+    en = json.loads((Path(main.__file__).parent / "i18n" / "en.json").read_text("utf-8"))
+    for e in json.loads((Path(main.__file__).parent / "news.json").read_text("utf-8")):
+        for text in (e["title"], e["text"], (e.get("action") or {}).get("label")):
+            assert text is None or text in en, f"news {e['id']}: English text missing for {text[:40]!r}"
+
+
+def test_upcoming_limit_is_adjustable_and_clamped(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    assert config.get()["upcoming"]["limit"] == 24
+    c = TestClient(main.app)
+    h = {"X-Requested-With": "p5assets"}
+    assert c.post("/api/config", json={"patch": {"upcoming": {"limit": 500}}}, headers=h).json()["upcoming"]["limit"] == main.UPCOMING_MAX
+    assert c.post("/api/config", json={"patch": {"upcoming": {"limit": 0}}}, headers=h).json()["upcoming"]["limit"] == 1

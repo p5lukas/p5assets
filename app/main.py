@@ -278,11 +278,13 @@ async def set_config(body: ConfigPatch):
         for w in worlds:
             w["name"] = (w.get("name") or "").strip()
             w["assets_path"] = (w.get("assets_path") or "").strip()
-    if isinstance(patch.get("upcoming"), dict) and "days" in patch["upcoming"]:
-        try:
-            patch["upcoming"]["days"] = min(max(int(patch["upcoming"]["days"]), 1), 365)
-        except (TypeError, ValueError):
-            patch["upcoming"].pop("days")
+    if isinstance(patch.get("upcoming"), dict):
+        for key, lo, hi in (("days", 1, 365), ("limit", 1, UPCOMING_MAX)):
+            if key in patch["upcoming"]:
+                try:
+                    patch["upcoming"][key] = min(max(int(patch["upcoming"][key]), lo), hi)
+                except (TypeError, ValueError):
+                    patch["upcoming"].pop(key)
     log.info("Settings changed: %s", ", ".join(sorted(patch)) or "-")
     return config.public(config.update(patch))
 
@@ -1835,7 +1837,7 @@ async def stats(world: str = ""):
                 width_sum += sl["w"]
                 buckets["hd" if sl["w"] >= 1000 else "mid" if sl["w"] >= 500 else "low"] += 1
     marks = {m["item_id"] for m in watch.marks().values()}
-    up = await upcoming(wid, 0, 24) if config.get()["upcoming"].get("enabled", True) else {"entries": []}
+    up = await upcoming(wid, 0, UPCOMING_MAX) if config.get()["upcoming"].get("enabled", True) else {"entries": []}
     waiting = {"search_later": sum(1 for i in items if i["id"] in marks), "unreleased_missing": sum(1 for i in items if i["missing"] and _unreleased(i)),
                "coming_soon": sum(1 for i in items if i.get("coming_soon") and not i["slots"].get("poster", {}).get("exists")),
                "soon": len(up["entries"]), "missing_plex": sum(1 for i in items if i.get("missing_plex"))}
@@ -1853,14 +1855,18 @@ async def stats(world: str = ""):
 RECENT_DAYS = 14             # released a short while ago and still without poster: stays in the strip
 
 
+UPCOMING_MAX = 60
+
+
 @app.get("/api/upcoming")
-async def upcoming(world: str = "", days: int = 0, limit: int = 12):
+async def upcoming(world: str = "", days: int = 0, limit: int = 0):
     """Titles (and seasons) of Sonarr / Radarr that come out soon or just did and have no poster yet: the strip above the list."""
     cfg = config.get()["upcoming"]
     if not cfg.get("enabled", True):
         return {"enabled": False, "entries": []}
     wid = _world(world)["id"]
     window = min(max(days or int(cfg.get("days") or 60), 1), 365)
+    cap = min(max(limit or int(cfg.get("limit") or 24), 1), UPCOMING_MAX)
     today = datetime.datetime.now().astimezone().date()
     entries = []
 
@@ -1888,7 +1894,7 @@ async def upcoming(world: str = "", days: int = 0, limit: int = 12):
             continue
         seen.add((it["id"], slot))
         out.append({"in_days": d, "date": iso, "slot": slot, "item": _public_item(it, True)})
-        if len(out) >= min(max(limit, 1), 24):
+        if len(out) >= cap:
             break
     return {"enabled": True, "days": window, "entries": out}
 

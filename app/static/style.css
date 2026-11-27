@@ -812,8 +812,10 @@ a,button,.btn,.chip,.tab,.seg,.az,.ovi,.ov-btn,.pick,label.opt,select,summary,[r
 @media(max-width:1100px){.uptrack{--per:2}}
 @media(max-width:700px){.uptrack{--per:1}.uppost{width:96px}.tabrow .srccell{flex:1 1 100%;max-width:none}}
 @media(prefers-reduced-motion:reduce){.upshimmer{animation:none;display:none}.uppost img{transition:none}}
-.upnavs{display:inline-flex;gap:6px}.upnavs[hidden]{display:none}
-.upnav{position:static;transform:none;width:30px;height:30px;font-size:18px}
+.upnavs{display:inline-flex;gap:8px}.upnavs[hidden]{display:none}
+.upnav{position:static;transform:none;width:34px;height:34px;padding:0;border-radius:8px;display:inline-grid;place-items:center;background:transparent;color:var(--accent);border:1px solid var(--line);transition:border-color .15s,box-shadow .15s,background .15s}
+.upnav svg{display:block}.upnav:hover,.upnav:focus-visible{border-color:var(--accent);background:var(--dim);box-shadow:0 0 10px var(--dim)}.upnav:active{transform:scale(.94)}
+@media(pointer:coarse){.upnav{width:40px;height:40px}}
 /* statistics page (0.10.4) */
 .stath{margin:0 0 16px;color:var(--accent);font-size:22px}
 .statsgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr));gap:18px;align-items:start}
