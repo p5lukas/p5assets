@@ -176,6 +176,8 @@ const ICONS = {
   back: [{ d: "M19 12H5" }, { d: "M12 19l-7-7 7-7" }],
   file: [{ d: "M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" }, { d: "M14 2v6h6" }, { d: "M8 13h8" }, { d: "M8 17h6" }],
   search: [{ c: [11, 11, 8] }, { d: "M21 21l-4.3-4.3" }],
+  ticket: [{ d: "M3 9a2 2 0 0 0 0 6v3a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-3a2 2 0 0 1 0-6V6a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1z" }, { d: "M13 5v2" }, { d: "M13 11v2" }, { d: "M13 17v2" }],
+  disc: [{ c: [12, 12, 9.5] }, { c: [12, 12, 2.5] }],
   // two squares with swap arrows (replace)
   replace: [{ d: "M4 2.5h6A1.5 1.5 0 0 1 11.5 4v6A1.5 1.5 0 0 1 10 11.5H4A1.5 1.5 0 0 1 2.5 10V4A1.5 1.5 0 0 1 4 2.5z" }, { d: "M14 12.5h6a1.5 1.5 0 0 1 1.5 1.5v6a1.5 1.5 0 0 1-1.5 1.5h-6a1.5 1.5 0 0 1-1.5-1.5v-6A1.5 1.5 0 0 1 14 12.5z" }, { d: "M15 6h4.5" }, { d: "M17.5 3.5L20 6l-2.5 2.5" }, { d: "M9 18H4.5" }, { d: "M6.5 15.5L4 18l2.5 2.5" }],
   download: [{ d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" }, { d: "M7 10l5 5 5-5" }, { d: "M12 15V3" }],
@@ -197,7 +199,7 @@ function icon(name, size = 18) {
 
 /* ------------------------------------------------------------ state --- */
 const DEFAULT_FILTER = "plexmissing";   // what a Plex user sees first: titles that are in Plex but have no poster
-const S = { st: null, langs: [], items: [], total: 0, filter: DEFAULT_FILTER, q: "", lib: "", letter: null, letters: {}, allTotal: 0, req: 0, pending: 0, ctl: null, stats: null, nopost: false, io: null, hist: [], dimTries: 0, world: "", poll: null, step: "", reached: 0, rain: new Set(), view: "", colFilter: "all", colLetter: "" };
+const S = { st: null, langs: [], items: [], total: 0, filter: DEFAULT_FILTER, q: "", lib: "", letter: null, letters: {}, allTotal: 0, req: 0, pending: 0, ctl: null, stats: null, nopost: false, io: null, hist: [], dimTries: 0, world: "", poll: null, step: "", reached: 0, rain: new Set(), view: "", colFilter: "all", colLetter: "", hideUnreleased: null, sortRelease: false };
 const cfg = () => S.st.config;
 const curWorld = () => cfg().worlds.find(w => w.id === S.world) || cfg().worlds[0];
 const weakDefault = { wOn: true, w: 1000, rOn: true };
@@ -235,6 +237,8 @@ async function savePatch(patch) { const r = await api("/config", { json: { patch
 const weakParams = () => { const c = weakCfg(), p = {}; if (c.wOn) p.weak_w = c.w; if (c.rOn) p.weak_r = "1"; return p; };
 /** A search always covers ALL titles of the world, whatever tab is open (the tab only applies without a search). */
 const effFilter = () => S.q.trim() ? "all" : S.filter;
+const hideUnreleased = () => (S.hideUnreleased ??= lsGet("p5hideunrel") !== "0");        // default: titles that are not released yet are hidden in "All missing"
+const fmtDay = iso => { const d = new Date(iso + "T00:00:00"); return isNaN(d) ? iso : d.toLocaleDateString(LOCALE, { day: "2-digit", month: "2-digit", year: "numeric" }); };
 const COL_AZ_MIN = 12;   // collections: the A–Z bar already helps with a dozen
 const AZ_MIN = 150;   // from this many titles on the list is split by first letter instead of one endless page
 async function loadItems(append = false) {
@@ -251,7 +255,7 @@ async function loadItemsInner(append, id, q, sig) {
   // S.lib: "" = all | "type:movie|show" = all movie/series sources combined | "lib:<Plex library>" | "src:<Sonarr/Radarr instance>"
   const scope = { type: S.lib.startsWith("type:") ? S.lib.slice(5) : "", library: S.lib.startsWith("lib:") ? S.lib.slice(4) : "", source: S.lib.startsWith("src:") ? S.lib.slice(4) : "" };
   const query = (letter, limit, offset) => new URLSearchParams({ world: S.world, q: S.q, filter: effFilter(), letter, ...scope,
-    ...(effFilter() === "comingsoon" && S.nopost ? { nopost: "1" } : {}), ...weakParams(), offset, limit });
+    ...(effFilter() === "comingsoon" && S.nopost ? { nopost: "1" } : {}), ...(effFilter() === "missing" ? { hide_unreleased: hideUnreleased() ? "1" : "0", sort: S.sortRelease ? "release" : "" } : {}), ...weakParams(), offset, limit });
   if (S.filter === "collections") {                // the tab of the Plex collections: its own list, the search filters by name
     const [r0, cr] = await Promise.all([api("/items?" + new URLSearchParams({ world: S.world, filter: "all", limit: 1, ...scope }), sig), api("/collections?" + new URLSearchParams({ world: S.world, q: S.q }), sig)]);
     if (id !== S.req) return;
@@ -871,11 +875,17 @@ function renderChips() {
     chip(T("In Plex, Poster fehlt"), "plexmissing", cnt.plexmissing, T("In Plex vorhanden, aber bei Kometa fehlt ein Poster oder eine Staffel – das, was in Plex ohne Bild erscheint")),
     cnt.comingsoon > 0 || S.filter === "comingsoon" ? chip(T("Coming Soon"), "comingsoon", cnt.comingsoon, T("Coming-Soon-Titel ({edition-Coming Soon}): in Plex schon sichtbar, brauchen zeitnah ein Poster")) : null,
     chip(T("Alle"), "all", cnt.all),
-    chip(T("Alle fehlenden"), "missing", cnt.missing, T("Alles, was ein Poster oder eine Staffel braucht – auch Titel, die nur Sonarr/Radarr kennen und in Plex noch nicht sind")),
+    chip(T("Alle fehlenden"), "missing", cnt.missing - (hideUnreleased() ? cnt.unreleased_missing || 0 : 0), T("Alles, was ein Poster oder eine Staffel braucht – auch Titel, die nur Sonarr/Radarr kennen und in Plex noch nicht sind")),
     chip(T("Schwache Poster"), "weak", cnt.weak, T("Bilder, die zu schmal sind oder nicht das Seitenverhältnis 2:3 haben (Schwellwerte wählst du selbst)")),
     cnt.watch > 0 || S.filter === "watch" ? chip(T("Später suchen"), "watch", cnt.watch, T("Titel, bei denen du auf ein besseres Poster wartest (z. B. ein Textless-Poster): p5assets schaut täglich nach und meldet neue")) : null,
     cnt.collections > 0 || S.filter === "collections" ? chip(T("Collections"), "collections", cnt.collections, T("Alle Plex-Collections (Filmreihen) dieser Welt: ansehen, bearbeiten und alle Filme in einem Look bauen")) : null,
     S.filter === "weak" ? weakOptions() : null,
+    S.filter === "missing" ? [
+      h("label", { class: "chip" + (hideUnreleased() ? " on" : ""), title: T("Titel, die Sonarr/Radarr kennen und die noch nicht erschienen sind, in dieser Liste ausblenden"), style: "display:inline-flex;gap:8px;align-items:center;cursor:pointer" },
+        h("input", { type: "checkbox", checked: hideUnreleased(), style: "accent-color:var(--accent)", onchange: async e => { S.hideUnreleased = e.target.checked; try { localStorage.setItem("p5hideunrel", e.target.checked ? "1" : "0"); } catch { /* optional */ } S.letter = null; renderChips(); await loadItems(); renderGrid(); } }),
+        hideUnreleased() && cnt.unreleased_missing ? T("noch nicht erschienene ausblenden ({0})", cnt.unreleased_missing) : T("noch nicht erschienene ausblenden")),
+      h("label", { class: "chip" + (S.sortRelease ? " on" : ""), title: T("Zuerst die Titel, die als Nächstes erscheinen"), style: "display:inline-flex;gap:8px;align-items:center;cursor:pointer" },
+        h("input", { type: "checkbox", checked: S.sortRelease, style: "accent-color:var(--accent)", onchange: async e => { S.sortRelease = e.target.checked; renderChips(); await loadItems(); renderGrid(); } }), T("nach Erscheinungsdatum"))] : null,
     S.filter === "watch" ? h("button", { class: "chip", type: "button", title: T("Jetzt nach neuen Textless-Postern für alle markierten Titel suchen"), onclick: async e => {
       try { const r = await busy(e.currentTarget, () => api("/watch/check", { method: "POST", json: {} })); toast(r.news.length ? TP(r.news.length, "Neue Textless-Poster bei einem Titel gefunden", "Neue Textless-Poster bei {0} Titeln gefunden") : T("Nichts Neues gefunden"), "ok"); await loadItems(); renderGrid(); renderChips(); }
       catch (err) { toast(err.message, "bad"); } } }, T("Jetzt prüfen")) : null,
@@ -1035,6 +1045,28 @@ function metaGroups(it) {
     group(T("Status"), statusTags(it).map(t => h("span", { class: "tag " + t.cls }, t.text))));
 }
 /** Plain-text version of the groups for tooltips. */
+/** "ab 14.03.2027" for a title Sonarr / Radarr know that is not released yet; "Termin unbekannt" without a date. Shown under the poster, never on it. */
+function expectedText(it) {
+  if (!it.unreleased) return "";
+  const d = it.release && it.release.from;
+  return d ? T("ab {0}", fmtDay(d)).replace(/ /g, "\u00a0") : T("Termin unbekannt");
+}
+/** The dates behind it, as text for a tooltip. */
+function releaseTip(it) {
+  const r = it.release;
+  if (!r || !it.unreleased) return "";
+  return [r.cinema ? T("Kino: {0}", fmtDay(r.cinema)) : null, r.digital ? T("Digital: {0}", fmtDay(r.digital)) : null, r.disc ? T("Disc: {0}", fmtDay(r.disc)) : null,
+    r.from && !r.cinema ? T("Ausstrahlung: {0}", fmtDay(r.from)) : null].filter(Boolean).join("\n");
+}
+/** The release dates as rows with the symbols of Radarr (cinema, digital, disc); for series the airing date. */
+function releaseRows(it) {
+  const r = it.release;
+  if (!r) return null;
+  const row = (ic, label, d) => d ? h("div", { class: "relrow" }, icon(ic, 15), h("b", {}, label), " " + fmtDay(d)) : null;
+  const rows = it.type === "movie" ? [row("ticket", T("Kino"), r.cinema), row("file", T("Digital"), r.digital), row("disc", T("Disc"), r.disc)] : [row("sync", T("Ausstrahlung"), r.from)];
+  const has = rows.filter(Boolean);
+  return has.length ? h("div", { class: "relrows" }, has) : null;
+}
 function metaText(it) {
   const world = itemWorld(it);
   return [world && cfg().worlds.length > 1 ? T("Welt: {0}", world.name) : null, T("Quellen: {0}", it.sources.join(" · ")), T("Status: {0}", statusTags(it).map(t => t.text).join(" · "))].filter(Boolean).join("\n");
@@ -1054,7 +1086,7 @@ function card(item, local, extra) {
   // a movie has one poster: no detail view, title/year and poster open the preview; the action buttons are built on first use
   const info = h("div", { class: "info", onclick: movie ? () => openPreview(item, "poster", changed) : null, title: movie ? T("Vorschau öffnen") : null },
     h("div", { class: "t", title: item.title }, item.title),
-    h("div", { class: "s" }, [item.year, item.type === "show" ? TP(item.poster_count, "1 Poster", "{0} Poster") : T("Film")].filter(Boolean).join(" · ")));
+    h("div", { class: "s", title: releaseTip(item) }, [item.year, item.type === "show" ? TP(item.poster_count, "1 Poster", "{0} Poster") : T("Film"), expectedText(item)].filter(Boolean).join(" · ")));
   function changed(it) {
     const i = S.items.findIndex(x => x.id === it.id);
     if (i >= 0) S.items[i] = it;
@@ -1160,7 +1192,8 @@ async function openItem(id) {
     if (sl && sl.only_arr) box.append(h("span", { class: "badge warn b", title: T("Diese Staffel kennt bisher nur Sonarr – in Plex gibt es sie noch nicht") }, NOT_IN_PLEX()));
     const pick = () => pickFiles(files => uploadSlot(it, key, files, draw), false);
     box.append(slotActions(it, key, box, draw));
-    const el = h("div", { class: "slot" }, box, h("div", { class: "lab" }, slotLabel(key, it.type)));
+    const sd = !exists && key !== "poster" && it.release && it.release.seasons ? it.release.seasons[seasonNum(key)] : null;
+    const el = h("div", { class: "slot" }, box, h("div", { class: "lab" }, slotLabel(key, it.type), sd ? h("small", { class: "relsmall" }, T("ab {0}", fmtDay(sd))) : null));
     // click on the picture itself: preview (existing) / file dialog (empty); touch screens have no hover, so a tap shows the buttons first
     box.onclick = () => {
       if (selMode) { if (!exists) return; sel.has(key) ? sel.delete(key) : sel.add(key); draw(it); return; }
@@ -1314,6 +1347,7 @@ function openPreview(it, key, draw) {
   const rows = [
     [T("Titel"), it.title + (it.year ? ` (${it.year})` : "")],
     [T("Slot"), slotLabel(key, it.type)],
+    ...(releaseRows(it) ? [[T("Erscheint"), releaseRows(it)]] : []),
     [T("Kometa-Ordner"), it.folder || "—"],
     ...((it.mirror_folders || []).length ? [[T("Zusätzlich gespeichert in"), it.mirror_folders.join(", ")]] : []),
     ...(exists ? [
@@ -2849,9 +2883,11 @@ function wNotify(nav, c) {
   };
   return h("div", {}, h("h1", {}, T("Benachrichtigungen")),
     h("p", { class: "lead" }, T("Optional: p5assets meldet sich nach einem Scan, wenn es etwas Neues gibt. Du kannst diesen Schritt überspringen und später in den Einstellungen nachholen.")),
-    h("div", { class: "status ok", style: "display:block;font-size:13px;line-height:1.7" }, T("Es gibt genau zwei Anlässe: "),
-      h("b", {}, T("① neue Titel in „In Plex, Poster fehlt“")), T(" (Coming-Soon-Titel sind markiert, alles in einer Nachricht) und "), h("b", {}, T("② Fehler beim Scan")),
-      T(" (einmal pro Fehler). Beim ersten Scan merkt sich p5assets nur den Ausgangsstand und schickt nichts.")),
+    h("div", { class: "status ok", style: "display:block;font-size:13px;line-height:1.7" }, T("Es gibt drei Anlässe: "),
+      h("b", {}, T("① neue Titel in „In Plex, Poster fehlt“")), T(" (Coming-Soon-Titel sind markiert, alles in einer Nachricht), "), h("b", {}, T("② Fehler beim Scan")),
+      T(" (einmal pro Fehler) und "), h("b", {}, T("③ Titel, die jetzt erschienen sind und noch kein Poster haben")), T(". Beim ersten Scan merkt sich p5assets nur den Ausgangsstand und schickt nichts.")),
+    h("label", { class: "opt" }, h("input", { type: "checkbox", checked: n.on_release !== false, onchange: e => savePatch({ notify: { on_release: e.target.checked } }) }),
+      h("div", {}, T("Melden, wenn ein Titel erschienen ist und noch kein Poster hat"), h("small", {}, T("Gilt für Titel, die Sonarr/Radarr kennen und die bisher als „noch nicht erschienen“ galten.")))),
     card("discord", T("Discord"), T("Server-Einstellungen → Integrationen → Webhooks → „Neuer Webhook“ → „Webhook-URL kopieren“ und hier einfügen."),
       field("discord", "webhook", T("Webhook-URL"), { secret: true, ph: "https://discord.com/api/webhooks/…" })),
     card("telegram", T("Telegram"), T("Schreibe dem @BotFather „/newbot“ und folge den Fragen: du bekommst den Bot-Token. Schreibe deinem neuen Bot eine Nachricht und rufe https://api.telegram.org/bot<TOKEN>/getUpdates auf: die Zahl bei „chat“ → „id“ ist deine Chat-ID."),

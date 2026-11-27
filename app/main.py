@@ -186,6 +186,11 @@ def _marks_for(item_id: str) -> list[dict]:
     return watch.for_item(item_id)
 
 
+def _unreleased(it: dict) -> bool:
+    """Sonarr / Radarr know the title, but it is not released yet and not in Plex (so a missing poster is no hurry)."""
+    return not it.get("in_plex") and it.get("available") is False
+
+
 def _public_item(it: dict, full: bool = False) -> dict:
     out = {k: it[k] for k in ("id", "world", "type", "title", "year", "folder", "library_title", "missing",
                               "updated", "in_plex", "sources", "dupes")}
@@ -198,6 +203,8 @@ def _public_item(it: dict, full: bool = False) -> dict:
     out["monitored"] = it.get("monitored")      # None = no Sonarr/Radarr information
     out["has_files"] = it.get("has_files")
     out["available"] = it.get("available")
+    out["unreleased"] = _unreleased(it)
+    out["release"] = it.get("release")
     out["slots"] = {k: {kk: vv for kk, vv in v.items() if kk != "path"} for k, v in it["slots"].items()}
     out["season_count"] = len(it["seasons"])
     out["tmdb_id"] = (it.get("ids") or {}).get("tmdb")
@@ -558,11 +565,12 @@ def _scope_stats(items: list[dict], weak_w: int = 0, weak_r: bool = False) -> di
         c["slots"] += sum(1 for s in i["slots"].values() if not s.get("extra"))
         c["missing_slots"] += i["missing"]
         c["missing"] += 1 if i["missing"] else 0
+        c["unreleased_missing"] += 1 if i["missing"] and _unreleased(i) else 0
         c["complete"] += 0 if i["missing"] else 1
         c["comingsoon"] += 1 if i.get("coming_soon") else 0
         c["plexmissing"] += 1 if i.get("missing_plex") else 0
     return {"items": c["items"], "slots": c["slots"], "missing": c["missing_slots"], "complete_items": c["complete"],
-            "counts": {"all": c["items"], "missing": c["missing"],
+            "counts": {"all": c["items"], "missing": c["missing"], "unreleased_missing": c["unreleased_missing"],
                        "comingsoon": c["comingsoon"], "plexmissing": c["plexmissing"], "weak": c["weak"], "watch": sum(1 for i in items if i["id"] in marked),
                        "collections": sum(1 for g in collection_overview([i for i in items if i["type"] == "movie"], "", _hidden_collections()) if not g["hidden"])},
             "dims": {"known": c["dims_known"], "total": c["dims_total"]}}
@@ -570,7 +578,7 @@ def _scope_stats(items: list[dict], weak_w: int = 0, weak_r: bool = False) -> di
 
 @app.get("/api/items")
 async def items(world: str = "", q: str = "", filter: str = "all", library: str = "", source: str = "",
-                type: str = "", letter: str = "", nopost: bool = False, weak_w: int = 0, weak_r: bool = False,
+                type: str = "", letter: str = "", nopost: bool = False, weak_w: int = 0, weak_r: bool = False, hide_unreleased: bool = False, sort: str = "",
                 offset: int = 0, limit: int = Query(120, le=500)):
     wid = _world(world)["id"]   # once – config.get() deep-copies the whole configuration
     res = [i for i in scanner.STATE["items"] if i["world"] == wid]
@@ -582,7 +590,9 @@ async def items(world: str = "", q: str = "", filter: str = "all", library: str 
         res = [i for i in res if i["type"] == type]
     stats = _cached_stats(res, wid, library, source, type, weak_w, weak_r)         # for the chosen source, independent of tab, letter and search
     if filter == "missing":
-        res = [i for i in res if i["missing"]]
+        res = [i for i in res if i["missing"] and not (hide_unreleased and _unreleased(i))]
+        if sort == "release":                 # the ones that come out next first, no date last
+            res.sort(key=lambda i: (((i.get("release") or {}).get("from")) or "9999", i["title"].casefold()))
     elif filter == "plexmissing":     # already in Plex, but a poster/season is missing in the Kometa assets
         res = [i for i in res if i.get("missing_plex")]
     elif filter == "comingsoon":      # Coming-Soon placeholders already visible in Plex: the ones without a poster first

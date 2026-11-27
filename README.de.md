@@ -29,7 +29,7 @@ Die Oberfläche gibt es auf Englisch und Deutsch (Sprachumschalter in der Kopfze
 
 ### Lücken finden
 p5assets führt Plex, Sonarr und Radarr zusammen (über TMDb-, TVDB- und IMDb-IDs). Die Reiter zeigen sofort, was zu tun ist:
-**In Plex, Poster fehlt** (die Startansicht: alles, was in Plex ohne Bild erscheint), **Coming Soon**, **Alle**, **Alle fehlenden** (auch Titel, die nur Sonarr oder Radarr kennen und die noch nicht in Plex sind; sie tragen das Etikett „Noch nicht in Plex“) und **Schwache Poster**.
+**In Plex, Poster fehlt** (die Startansicht: alles, was in Plex ohne Bild erscheint), **Coming Soon**, **Alle**, **Alle fehlenden** (Titel, die noch nicht erschienen sind, zeigen ihr Datum unter dem Poster, z. B. „ab 14.03.2027“, und lassen sich ausblenden oder nach Erscheinungsdatum sortieren; auch Titel, die nur Sonarr oder Radarr kennen und die noch nicht in Plex sind; sie tragen das Etikett „Noch nicht in Plex“) und **Schwache Poster**.
 Dazu kommen eine Quellenauswahl, eine Schnellsuche (rechts neben den Reitern; sie durchsucht immer alle Titel der Welt), eine A–Z-Leiste und eine Abdeckungsanzeige mit kleinem Verlauf pro Scan.
 Große Bibliotheken sind kein Problem: Bei über 6000 Titeln antworten die Listen in rund 30 ms, und Skripte, Stile und Listen werden komprimiert und vom Browser zwischengespeichert.
 

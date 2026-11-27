@@ -36,6 +36,7 @@ DEFAULTS: dict = {
     # Benachrichtigungen nach einem Scan (nur: Coming Soon / neu in „In Plex, Poster fehlt“ / Scan-Fehler)
     "notify": {
         "base_url": "",
+        "on_release": True,        # a title that was not released yet is released now and has no poster
         "discord": {"enabled": False, "webhook": ""},
         "telegram": {"enabled": False, "token": "", "chat_id": ""},
         "ntfy": {"enabled": False, "url": "https://ntfy.sh", "topic": "", "token": ""},

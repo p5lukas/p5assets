@@ -54,6 +54,31 @@ def _folder(entry: dict) -> str:
     return ""
 
 
+def _day(v) -> str | None:
+    """'2027-03-14T00:00:00Z' -> '2027-03-14' (None when there is no date)."""
+    return str(v)[:10] if v and len(str(v)) >= 10 and str(v)[4] == "-" else None
+
+
+def movie_release(m: dict) -> dict:
+    """The dates Radarr knows and the one from which Radarr counts the film as available (its "Minimum Availability"); None = available at once."""
+    cinema, digital, disc = _day(m.get("inCinemas")), _day(m.get("digitalRelease")), _day(m.get("physicalRelease"))
+    home = min([d for d in (digital, disc) if d], default=None)
+    mode = str(m.get("minimumAvailability") or "released")
+    start = None if mode in ("announced", "tba") else (cinema or home) if mode == "inCinemas" else home
+    return {"cinema": cinema, "digital": digital, "disc": disc, "from": start}
+
+
+def show_release(s: dict) -> dict:
+    """Sonarr: when the series (and each season) is aired from."""
+    seasons = {}
+    for x in s.get("seasons", []):
+        st = x.get("statistics") or {}
+        d = _day(st.get("nextAiring")) or _day(st.get("previousAiring"))
+        if "seasonNumber" in x and d and not int(st.get("episodeFileCount") or 0):
+            seasons[int(x["seasonNumber"])] = d
+    return {"from": _day(s.get("firstAired")) or _day(s.get("nextAiring")), "seasons": seasons}
+
+
 async def fetch(inst: dict) -> list[dict]:
     """Normalised entries: {type, title, year, folder, ids, seasons[int], source, monitored, has_files, available}."""
     url = inst["url"] if "://" in inst["url"] else "http://" + inst["url"]
@@ -70,6 +95,7 @@ async def fetch(inst: dict) -> list[dict]:
                     "monitored": bool(s.get("monitored", True)),
                     "has_files": int((s.get("statistics") or {}).get("episodeFileCount") or 0) > 0,
                     "available": s.get("status") != "upcoming",
+                    "release": show_release(s),
                 })
         else:
             for m in await _get(c, "/api/v3/movie"):
@@ -80,5 +106,6 @@ async def fetch(inst: dict) -> list[dict]:
                     "monitored": bool(m.get("monitored", True)),
                     "has_files": bool(m.get("hasFile")),
                     "available": bool(m.get("isAvailable", True)),
+                    "release": movie_release(m),
                 })
     return out

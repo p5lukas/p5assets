@@ -203,6 +203,7 @@ def _merge(plex_items: list[dict], arr_items: list[dict]) -> list[dict]:
             target["monitored"] = bool(target.get("monitored")) or a["monitored"]
             target.setdefault("has_files", a["has_files"])
             target.setdefault("available", a["available"])
+            target.setdefault("release", a.get("release"))
             if not target["folder"]:
                 target["folder"] = a["folder"]
             if a["folder"] and a["folder"] not in target.setdefault("arr_folders", []):
@@ -220,7 +221,7 @@ def _merge(plex_items: list[dict], arr_items: list[dict]) -> list[dict]:
             "year": a["year"], "folder": a["folder"], "thumb": "", "ids": dict(a["ids"]),
             "seasons": [{"number": n, "title": "", "rating_key": None, "thumb": ""} for n in a["seasons"]],
             "in_plex": False, "sources": [a["source"]],
-            "monitored": a["monitored"], "has_files": a["has_files"], "available": a["available"],
+            "monitored": a["monitored"], "has_files": a["has_files"], "available": a["available"], "release": a.get("release"),
             "arr_folders": [a["folder"]] if a["folder"] else [],
         }
         items.append(new)

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.1 – 2026-11-27
+
+**New**
+- Release dates from Radarr and Sonarr: titles that Sonarr/Radarr know but that are not released yet show “from 14/03/2027” (or “date unknown”) in the line **under** the poster, never on it. The details show the three Radarr dates with symbols (cinema, digital, disc); the date under the poster is the one from which Radarr counts the film as available (its “Minimum Availability”). Series show the airing date, missing seasons in the series view too
+- “All missing”: “hide not yet released (n)” (on by default, remembered; the counter then counts only released titles) and “by release date” (the next ones first)
+- Notification “released, no poster yet”: when a title that was not released yet is released and still has no poster (switch in the notification settings, on by default; the first scan after the update only records the starting point)
+
 ## 0.10.0 – 2026-11-27
 
 The poster builder release: everything of 0.9.x in one version, checked once more and made faster.

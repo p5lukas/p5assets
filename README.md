@@ -33,7 +33,7 @@ p5assets matches Plex, Sonarr and Radarr titles by their TMDb, TVDB and IMDb IDs
 - “In Plex, poster missing” (the start view): titles that show up in Plex without an image
 - “Coming Soon”
 - “All”
-- “All missing”: also includes titles that only Sonarr/Radarr know about, marked “Not in Plex yet”
+- “All missing”: also includes titles that only Sonarr/Radarr know about, marked “Not in Plex yet”. Titles that are not released yet show their date under the poster (“from 14/03/2027”) and can be hidden or sorted by release date
 - “Weak posters”
 
 You also get a source filter, a search next to the tabs (it always searches all titles in the current world), an A–Z bar and a coverage indicator with a small history graph (one point per scan).

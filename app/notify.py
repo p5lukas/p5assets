@@ -100,6 +100,29 @@ def compose(new: list[dict], multi_world: bool, link: str) -> tuple[str, str]:
     return "p5assets: " + head, "\n".join(lines)
 
 
+def compose_released(done: list[dict], multi_world: bool, link: str) -> tuple[str, str]:
+    """(title, text) for titles that came out and still have no poster; ``done`` = [{title, year, world}]."""
+    n = len(done)
+    lines = [f"• {'[' + x['world'] + '] ' if multi_world else ''}{x['title']}{' (' + str(x['year']) + ')' if x['year'] else ''}"
+             for x in sorted(done, key=lambda x: x["title"].casefold())[:MAX_LISTED]]
+    if n > MAX_LISTED:
+        lines.append(f"… and {n - MAX_LISTED} more")
+    if link:
+        lines.append(link)
+    return f"p5assets: {n} title{'' if n == 1 else 's'} released, no poster yet", "\n".join(lines)
+
+
+def released_since(prev: dict, items: list[dict], names: dict[str, str]) -> list[dict]:
+    """Titles that were "not released yet" at the last scan, are released now and still miss a poster. ``prev`` = {id: {...}} of the last scan."""
+    by_id = {i["id"]: i for i in items}
+    out = []
+    for k in prev:
+        it = by_id.get(k)
+        if it and it.get("missing") and (it.get("in_plex") or it.get("available") is not False):
+            out.append({"title": it["title"], "year": it.get("year"), "world": names.get(it["world"], "")})
+    return out
+
+
 async def after_scan(items: list[dict], worlds: list[dict], failed: dict[str, list[str]], error: str | None) -> None:
     """Called at the end of every scan. Never raises."""
     try:
@@ -122,6 +145,16 @@ async def after_scan(items: list[dict], worlds: list[dict], failed: dict[str, li
                 title, text = compose(new, len(worlds) > 1, (cfg["notify"].get("base_url") or "").strip())
                 res = await send_all(title, text)
                 log.info("Notification: %s (%s)", title, ", ".join(f"{k}: {'ok' if v is None else v}" for k, v in res.items()))
+        # --- 4: titles that were not released yet and are now (without poster)
+        if not error:
+            now = {it["id"]: 1 for it in items if not it.get("in_plex") and it.get("available") is False}
+            if "unreleased" in state and cfg["notify"].get("on_release", True) and channels(cfg):
+                done = released_since(state["unreleased"], items, names)
+                if done:
+                    title, text = compose_released(done, len(worlds) > 1, (cfg["notify"].get("base_url") or "").strip())
+                    res = await send_all(title, text)
+                    log.info("Notification: %s (%s)", title, ", ".join(f"{k}: {'ok' if v is None else v}" for k, v in res.items()))
+            state["unreleased"] = now
         # --- 2: errors, once per error state
         names_failed = [n for lst in failed.values() for n in lst]
         sig = error or (", ".join(sorted(set(names_failed))) + " not reachable" if names_failed else "")
