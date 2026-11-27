@@ -57,4 +57,4 @@ def test_dates_texts_exist_in_english():
     from pathlib import Path
     en = json.loads((Path(main.__file__).parent / "i18n" / "en.json").read_text("utf-8"))
     for key in ("ab {0}", "{0} ab {1}", "Staffel {0}", "Termin unbekannt", "Kino", "Digital", "Disc", "Ausstrahlung", "Erscheint"):
-        assert key in en and en[key], key
+        assert en.get(key), key
