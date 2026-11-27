@@ -176,6 +176,7 @@ const ICONS = {
   back: [{ d: "M19 12H5" }, { d: "M12 19l-7-7 7-7" }],
   file: [{ d: "M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" }, { d: "M14 2v6h6" }, { d: "M8 13h8" }, { d: "M8 17h6" }],
   search: [{ c: [11, 11, 8] }, { d: "M21 21l-4.3-4.3" }],
+  cal: [{ d: "M3 5h18v16H3z" }, { d: "M3 10h18" }, { d: "M8 3v4" }, { d: "M16 3v4" }],
   ticket: [{ d: "M3 9a2 2 0 0 0 0 6v3a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-3a2 2 0 0 1 0-6V6a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1z" }, { d: "M13 5v2" }, { d: "M13 11v2" }, { d: "M13 17v2" }],
   disc: [{ c: [12, 12, 9.5] }, { c: [12, 12, 2.5] }],
   // two squares with swap arrows (replace)
@@ -297,7 +298,7 @@ function startPolling() {
     try {
       const was = S.st.summary.running;
       S.st.summary = await api("/status");
-      if (S.view === "dash") { updateHero(); if (was && !S.st.summary.running) { S.dimTries = 0; await loadItems(); renderGrid(); checkAlerts(); loadHistory(); } }
+      if (S.view === "dash") { updateHero(); if (was && !S.st.summary.running) { S.dimTries = 0; await loadItems(); renderGrid(); checkAlerts(); loadUpcoming(); } }
       if (!S.st.summary.running) clearInterval(S.poll);
     } catch { /* ignore */ }
   }, 1500);
@@ -374,7 +375,8 @@ async function loadVersion() {
       h("a", { href: "#", onclick: e => { e.preventDefault(); checkNews(true); } }, T("Neuigkeiten")),
       h("a", { href: "#", onclick: e => { e.preventDefault(); location.reload(); } }, T("Neu laden")),
       S.auth && S.auth.enabled ? h("a", { href: "#", onclick: async e => { e.preventDefault(); await api("/auth/logout", { method: "POST" }); location.reload(); } }, T("Abmelden")) : null,
-      link("GitHub ↗", v.repo));
+      h("span", { id: "fscan", class: "fscan" }), link("GitHub ↗", v.repo));
+    paintScanned();
   } catch { /* footer is optional */ }
 }
 
@@ -758,11 +760,11 @@ function dashboard(opts) {
       h("button", { class: "btn tb icon logbtn", id: "logbtn", title: T("Logs"), onclick: logsPage }, icon("terminal", 20), h("span", { class: "lbadge" })),
       h("button", { class: "btn tb icon", title: T("Einstellungen"), onclick: () => wizard(true) }, icon("gear", 20)),
     )),
-    h("main", {}, h("div", { id: "hero" }), h("div", { id: "tabrow", class: "tabrow" }, h("div", { id: "chips" }), h("div", { class: "search" }, icon("search", 16), qInput, clearBtn(qInput))), h("div", { id: "az", class: "azbar" }), h("div", { id: "grid" }), h("div", { id: "az2", class: "azbar" })),
+    h("main", {}, h("div", { id: "hero" }, h("div", { id: "status", class: "statusline", hidden: true }), h("div", { id: "upnext", class: "upnext", hidden: true })), h("div", { id: "tabrow", class: "tabrow" }, h("div", { id: "chips" }), h("div", { id: "srcslot", style: "display:contents" }), h("div", { class: "search" }, icon("search", 16), qInput, clearBtn(qInput))), h("div", { id: "az", class: "azbar" }), h("div", { id: "grid" }), h("div", { id: "az2", class: "azbar" })),
   );
   updateHero();
   if (keep) { paintAlert(); renderChips(); renderGrid(); return; }
-  S.dimTries = 0; loadHistory();
+  S.dimTries = 0; loadUpcoming();
   checkAlerts();
   if (!S.newsChecked) { S.newsChecked = true; setTimeout(checkNews, 1500); }
   loadItems().then(renderGrid);
@@ -774,7 +776,7 @@ function switchWorld(id) {
   if (id === S.world) return;
   const w = cfg().worlds.find(x => x.id === id);
   worldTransition(w, async () => {
-    S.world = id; S.filter = DEFAULT_FILTER; S.q = ""; S.lib = ""; S.letter = null; S.letters = {}; S.stats = null; S.nopost = false; S.hist = [];
+    S.world = id; S.filter = DEFAULT_FILTER; S.q = ""; S.lib = ""; S.letter = null; S.letters = {}; S.stats = null; S.nopost = false; S.upcoming = [];
     try { localStorage.setItem("p5world", id); } catch { /* ignore */ }
     setAccent(); dashboard();
   });
@@ -787,53 +789,92 @@ async function doScan() {
 
 function updateHero() {
   const hero = $("#hero"); if (!hero) return;
-  const s = S.st.summary, ws = scopeStats(), c = cfg();
-  const pct = ws.slots ? Math.round(((ws.slots - ws.missing) / ws.slots) * 100) : 0;
-  const sb = $("#scanbtn"); if (sb) { sb.disabled = s.running; sb.classList.toggle("spinning", !!s.running); }
-  let box = hero.firstElementChild;
-  if (!box) {   // built once; only the parts are refreshed, so an open source dropdown is not torn down by a re-render
-    box = h("div", { class: "hero" }, h("div", { class: "ring" }), h("div", { id: "hmain" }), h("div", { id: "hsrc", style: "display:contents" }),
-      h("div", { class: "hint scanned", id: "hhint", style: "text-align:right;white-space:pre" }));
-    hero.append(box);
+  const s = S.st.summary, c = cfg();
+  const sb = $("#scanbtn"); if (sb) { sb.disabled = s.running; sb.classList.toggle("spinning", !!s.running); sb.title = s.scanned_at ? T("Zuletzt gescannt\n") + new Date(s.scanned_at * 1000).toLocaleString(LOCALE) : ""; }
+  // a slim line, only when there is something to say: scan running, an error, warnings
+  const st = $("#status");
+  if (st) {
+    const lines = [s.running ? h("div", { class: "row" }, h("span", { class: "spin" }), s.progress || T("Scanne …")) : null,
+      s.error ? h("div", { class: "status bad" }, "[ !! ] " + s.error) : null, ...(s.warnings || []).map(w => h("div", { class: "status bad" }, "[ !! ] " + w))].filter(Boolean);
+    st.hidden = !lines.length;
+    fill(st, lines);
   }
-  box.firstElementChild.style.setProperty("--p", pct);
-  fill(box.firstElementChild, h("b", {}, pct + "%"));
-  fill($("#hmain"),
-    s.running ? h("div", { class: "row", style: "margin-bottom:10px" }, h("span", { class: "spin" }), s.progress || T("Scanne …")) : null,
-    s.error ? h("div", { class: "status bad" }, "[ !! ] " + s.error) : null,
-    (s.warnings || []).map(w => h("div", { class: "status bad" }, "[ !! ] " + w)),
-    h("div", { class: "stats" },
-      stat(ws.items, T("Titel")), stat(ws.slots - ws.missing, T("Assets vorhanden"), "ok"), stat(ws.missing, T("Fehlen"), ws.missing ? "bad" : "ok"),
-      stat(ws.complete_items, T("Vollständig"))),
-    sparkline());
   const sig = JSON.stringify([S.world, S.lib, c.libraries.map(l => [l.title, l.enabled, l.world]), c.arr.map(a => [a.name, a.world])]);
-  if (box.dataset.sig !== sig) { box.dataset.sig = sig; fill($("#hsrc"), sourceSelect()); }
-  const hasSrc = !!$("#hsrc").firstChild;
-  box.classList.toggle("hassrc", hasSrc);
-  fill($("#hhint"), s.scanned_at ? T("Zuletzt gescannt\n") + new Date(s.scanned_at * 1000).toLocaleString(LOCALE) : "");
+  const slot = $("#srcslot");
+  if (slot && slot.dataset.sig !== sig) { slot.dataset.sig = sig; fill(slot, sourceSelect()); }
+  paintScanned();
   renderChips();
 }
-const stat = (n, label, cls = "") => h("div", { class: "stat " + cls }, h("b", {}, n ?? 0), h("span", {}, label));
-
-/** Coverage over time (one point per scan) of the world: a small line under the numbers. */
-async function loadHistory() {
-  try { S.hist = (await api("/history?world=" + encodeURIComponent(S.world) + "&days=90")).points; } catch { S.hist = []; }
-  if (S.view === "dash") updateHero();
+/** "Last scanned" lives in the footer. */
+function paintScanned() {
+  const el = $("#fscan"), s = S.st && S.st.summary;
+  if (el) el.textContent = s && s.scanned_at ? T("Zuletzt gescannt: {0}", new Date(s.scanned_at * 1000).toLocaleString(LOCALE)) : "";
 }
-function sparkline() {
-  const pts = (S.hist || []).filter(p => p[2] > 0).map(p => [p[0], Math.round((p[2] - p[3]) / p[2] * 1000) / 10]);
-  if (pts.length < 2) return null;
-  const W = 200, H = 34, t0 = pts[0][0], t1 = pts[pts.length - 1][0] || t0 + 1;
-  const lo = Math.min(...pts.map(p => p[1])), hi = Math.max(...pts.map(p => p[1])), span = Math.max(hi - lo, 2);
-  const xy = ([t, v]) => [4 + (t - t0) / Math.max(1, t1 - t0) * (W - 8), H - 5 - (v - lo) / span * (H - 10)];
-  const line = pts.map(p => xy(p).map(n => n.toFixed(1)).join(",")).join(" ");
-  const [lx, ly] = xy(pts[pts.length - 1]), first = pts[0][1], last = pts[pts.length - 1][1], diff = Math.round((last - first) * 10) / 10;
-  const days = Math.max(1, Math.round((t1 - t0) / 86400));
-  const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg");
-  svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("width", W); svg.setAttribute("height", H); svg.setAttribute("class", "spark-svg");
-  svg.innerHTML = `<polyline points="${line} ${lx.toFixed(1)},${H} 4,${H}" fill="var(--dim)" stroke="none"/><polyline points="${line}" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="2.6" fill="var(--accent)"/>`;
-  return h("div", { class: "spark", title: TP(days, "Abdeckung {1}% → {2}% in {0} Tag (ganze Welt, ein Punkt pro Scan)", "Abdeckung {1}% → {2}% in {0} Tagen (ganze Welt, ein Punkt pro Scan)", first, last) },
-    svg, h("span", {}, T("Abdeckung {0}: ", pl(days, "Tag", "Tage")), h("b", {}, `${last}%`), h("span", { class: diff >= 0 ? "up" : "down" }, ` ${diff >= 0 ? "▲" : "▼"} ${Math.abs(diff)}`)));
+
+/* ----------------------------------------------------- "Bald erscheinend" --- */
+/** The strip above the list: titles and seasons of Sonarr / Radarr that come out soon (or just did) and have no poster yet. */
+async function loadUpcoming() {
+  try { const r = await api("/upcoming?world=" + encodeURIComponent(S.world)); S.upcoming = r.enabled ? r.entries : []; } catch { S.upcoming = []; }
+  if (S.view === "dash") renderUpcoming();
+}
+const whenText = d => d > 0 ? TP(d, "in {0} Tag", "in {0} Tagen") : d === 0 ? T("heute") : TP(-d, "seit {0} Tag erschienen", "seit {0} Tagen erschienen");
+function upcomingSlide(e) {
+  const it = e.item, slot = e.slot, season = slot === "poster" ? null : seasonNum(slot);
+  const after = () => { loadUpcoming(); loadItems().then(renderGrid); };
+  const full = () => api("/items/" + it.id);
+  const build = it.type === "movie" ? async () => openMovieBuilder(await full(), after) : async () => { await openItem(it.id); if (S.seriesBuild) S.seriesBuild(slot); };
+  const later = [(slot in (it.watch || {})) ? T("Nicht mehr suchen") : T("Später suchen"), async () => { try { await api(`/items/${it.id}/${slot}/watch`, { json: { on: !(slot in (it.watch || {})) } }); toast(T("Gemerkt: p5assets schaut täglich nach einem besseren Poster"), "ok"); after(); } catch (err) { toast(err.message, "bad"); } }];
+  const img = h("img", { alt: "", decoding: "async", draggable: false, onload: ev => { ev.target.classList.add("loaded"); const ph = ev.target.parentNode.querySelector(".ph"); if (ph) ph.remove(); } });
+  const box = h("div", { class: "poster uppost", title: T("Vorschau von TMDb: das Poster ist noch nicht gesetzt") }, h("div", { class: "ph" }, h("div", {}, h("b", {}, "＋"), T("fehlt"))), img,
+    h("span", { class: "badge warn b" }, T("Vorschau")), h("span", { class: "upshimmer" }));
+  api(`/upcoming-poster?item_id=${encodeURIComponent(it.id)}&slot=${encodeURIComponent(slot)}`).then(r => { if (r.url) img.src = "/api/proxy?url=" + encodeURIComponent(r.url); }).catch(() => {});
+  box.append(hoverBar(box, [[T("Hochladen"), () => pickFiles(files => uploadSlot(it, slot, files, after), false), "", "upload"], [T("Online suchen"), async () => searchOnline(await full(), slot, after), "", "search"],
+    [T("Bauen"), build, "", "build"], later]));
+  box.onclick = async () => { if (isTouch() && !box.classList.contains("show")) { toggleActions(box); return; } if (it.type === "movie") openPreview(await full(), slot, after); else openItem(it.id); };
+  const rel = it.release || {};
+  const dates = it.type === "movie" ? releaseRows(it) : season != null && rel.seasons && rel.seasons[season] ? h("div", { class: "relrows" }, h("div", { class: "relrow" }, icon("cal", 15), h("b", {}, T("Ausstrahlung")), " " + fmtDay(rel.seasons[season]))) : releaseRows(it);
+  const enc = encodeURIComponent, term = `${it.title}${it.year ? " " + it.year : ""}`;
+  const tmdb = it.tmdb_id || (it.ids || {}).tmdb;
+  const link = (text, href) => h("a", { href, target: "_blank", rel: "noopener noreferrer", referrerpolicy: "no-referrer" }, text + " ↗");
+  return h("div", { class: "upslide" }, box, h("div", { class: "upinfo" },
+    h("b", { class: "uptitle", title: it.title }, it.title, it.year ? ` (${it.year})` : ""),
+    season != null ? h("div", { class: "hint", style: "margin:0" }, slotLabel(slot, "show")) : null,
+    h("div", { class: "upwhen" + (e.in_days <= 0 ? " now" : "") }, whenText(e.in_days)), dates,
+    h("div", { class: "upchips" }, (it.sources || []).map(sr => h("span", { class: "tag" }, sr)), !it.in_plex ? h("span", { class: "tag warn" }, NOT_IN_PLEX()) : null),
+    h("div", { class: "uplinks" }, link("ThePosterDB", `https://theposterdb.com/search?term=${enc(term)}&section=${it.type === "movie" ? "movies" : "shows"}`),
+      tmdb ? link("MediUX", `https://mediux.pro/${it.type === "movie" ? "movies" : "shows"}/${tmdb}`) : null)));
+}
+function renderUpcoming() {
+  const el = $("#upnext"); if (!el) return;
+  clearInterval(S.upTimer);
+  const list = S.upcoming || [];
+  el.hidden = !list.length;
+  if (!list.length) { el.replaceChildren(); return; }
+  const track = h("div", { class: "uptrack" }, list.map(upcomingSlide));
+  let paused = false, resume = 0;
+  const step = dir => {
+    const first = track.firstElementChild; if (!first) return;
+    const w = first.offsetWidth + 14, end = track.scrollLeft + track.clientWidth >= track.scrollWidth - 4;
+    if (dir > 0 && end) track.scrollTo({ left: 0, behavior: reduced() ? "auto" : "smooth" });
+    else if (dir < 0 && track.scrollLeft <= 4) track.scrollTo({ left: track.scrollWidth, behavior: reduced() ? "auto" : "smooth" });
+    else track.scrollBy({ left: dir * w, behavior: reduced() ? "auto" : "smooth" });
+  };
+  const nav = (cls, label, dir, txt) => h("button", { class: "btn upnav " + cls, type: "button", "aria-label": label, onclick: () => step(dir) }, txt);
+  const wrap = h("div", { class: "upwrap" }, track);
+  const navs = h("span", { class: "upnavs" }, nav("up-prev", T("Zurück"), -1, "‹"), nav("up-next", T("Weiter"), 1, "›"));
+  fill(el, h("div", { class: "uphead" }, h("b", {}, T("Bald erscheinend")), h("span", { class: "hint", style: "margin:0" }, T("Poster vorbereiten, solange der Titel noch nicht in Plex ist")),
+    h("span", { class: "spacer" }), h("span", { class: "hint", style: "margin:0" }, TP(list.length, "Ein Titel", "{0} Titel")), navs), wrap);
+  const fits = () => track.scrollWidth <= track.clientWidth + 4;
+  requestAnimationFrame(() => navs.hidden = fits());
+  const hold = () => { paused = true; clearTimeout(resume); };
+  const free = (ms = 0) => { clearTimeout(resume); resume = setTimeout(() => { paused = false; }, ms); };
+  wrap.addEventListener("mouseenter", hold); wrap.addEventListener("mouseleave", () => free());
+  wrap.addEventListener("focusin", hold); wrap.addEventListener("focusout", () => free());
+  wrap.addEventListener("touchstart", hold, { passive: true }); wrap.addEventListener("touchend", () => free(8000), { passive: true });
+  if (!reduced()) S.upTimer = setInterval(() => {
+    if (paused || document.hidden || S.view !== "dash" || document.querySelector(".scrim, .modalwrap") || fits() || !el.isConnected) return;
+    step(1);
+  }, 6000);
 }
 
 /** Source filter in the statistic block: all / all movie / all series sources (combined, every title counted once) /
@@ -2649,6 +2690,10 @@ function wLibs(nav, c) {
     h("label", { class: "f" }, T("Automatischer Scan")),
     h("select", { onchange: e => savePatch({ scan_interval_minutes: +e.target.value }) },
       intervals.map(([v, l]) => h("option", { value: v, selected: c.scan_interval_minutes === v }, l))),
+    h("label", { class: "opt", style: "margin-top:14px" }, h("input", { type: "checkbox", checked: c.upcoming.enabled !== false, onchange: e => savePatch({ upcoming: { enabled: e.target.checked } }).then(loadUpcoming) }),
+      h("div", {}, T("„Bald erscheinend“ über der Liste zeigen"), h("small", {}, T("Titel aus Sonarr/Radarr, die bald erscheinen und noch kein Poster haben, mit Vorschau und Terminen")))),
+    h("label", { class: "f" }, T("Wie viele Tage im Voraus")),
+    h("input", { type: "number", min: 1, max: 365, value: c.upcoming.days || 60, style: "width:120px", onchange: e => savePatch({ upcoming: { days: +e.target.value || 60 } }).then(loadUpcoming) }),
     hiddenCollections(),
     h("p", { class: "hint" }, T("p5assets gleicht Plex, Sonarr/Radarr und die Assets-Ordner im Hintergrund ab und aktualisiert die Liste der fehlenden Poster. Dabei wird nichts heruntergeladen oder verändert.")),
     nav());

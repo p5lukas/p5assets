@@ -58,3 +58,29 @@ def test_dates_texts_exist_in_english():
     en = json.loads((Path(main.__file__).parent / "i18n" / "en.json").read_text("utf-8"))
     for key in ("ab {0}", "{0} ab {1}", "Staffel {0}", "Termin unbekannt", "Kino", "Digital", "Disc", "Ausstrahlung", "Erscheint"):
         assert en.get(key), key
+
+
+def _soon(i, title, days, in_plex=False, poster=False, seasons=None, typ="movie"):
+    import datetime
+    d = (datetime.datetime.now().astimezone().date() + datetime.timedelta(days=days)).isoformat()
+    it = _item(i, title, False, in_plex=in_plex, missing=0 if poster else 1, release={"from": d, "seasons": seasons or {}})
+    it["type"] = typ
+    return it, d
+
+
+def test_upcoming_strip_lists_soon_and_just_released_titles_without_poster(monkeypatch):
+    import datetime
+    a, _ = _soon(1, "Soon", 10)
+    b, _ = _soon(2, "Far", 200)
+    c, _ = _soon(3, "Just Out", -5)
+    d, _ = _soon(4, "Long Ago", -90)
+    e, _ = _soon(5, "Has Poster", 5, poster=True)
+    day = (datetime.datetime.now().astimezone().date() + datetime.timedelta(days=20)).isoformat()
+    show, _ = _soon(6, "Show In Plex", 400, in_plex=True, typ="show", seasons={2: day})
+    show["slots"]["season-2"] = {"exists": False}
+    monkeypatch.setitem(scanner.STATE, "items", [a, b, c, d, e, show])
+    monkeypatch.setattr(main, "_world", lambda w=None: {"id": "w"})
+    r = TestClient(main.app).get("/api/upcoming", params={"world": "w"}).json()
+    assert [(x["item"]["title"], x["slot"]) for x in r["entries"]] == [("Just Out", "poster"), ("Soon", "poster"), ("Show In Plex", "season-2")]
+    assert r["entries"][0]["in_days"] == -5 and r["entries"][2]["in_days"] == 20
+    assert TestClient(main.app).get("/api/upcoming", params={"world": "w", "days": 365}).json()["entries"][-1]["item"]["title"] == "Far"

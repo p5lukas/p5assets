@@ -36,7 +36,9 @@ p5assets matches Plex, Sonarr and Radarr titles by their TMDb, TVDB and IMDb IDs
 - “All missing”: also includes titles that only Sonarr/Radarr know about, marked “Not in Plex yet”. Titles that are not released yet show their date under the poster (“from 14/03/2027”) and can be hidden or sorted by release date
 - “Weak posters”
 
-You also get a source filter, a search next to the tabs (it always searches all titles in the current world), an A–Z bar and a coverage indicator with a small history graph (one point per scan).
+You also get a source filter and a search next to the tabs (it always searches all titles in the current world), and an A–Z bar. Scan progress, errors and warnings show up in a slim line above the list, only when there is something to say.
+
+**Coming soon:** above the list, a strip shows titles and seasons that Sonarr/Radarr know, that are not in Plex yet (or have a season still to come) and that come out within the next days (60 by default, adjustable) or just did and still have no poster. Three at a time on a desktop, two on a tablet, one on a phone; it moves on by itself and stops while you point at it. Each card shows a dimmed TMDb preview (clearly “not set yet”), the dates with the Radarr symbols, and the usual bar to upload, search, build or open ThePosterDB and MediUX, so you can prepare posters before the title arrives.
 Large libraries are no problem: with more than 6000 titles, the lists respond in about 30 ms, and scripts, styles and lists are compressed and cached by the browser.
 
 ### Replace by drag & drop

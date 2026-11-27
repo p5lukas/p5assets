@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.3 – 2026-11-27
+
+**New**
+- “Coming soon” above the list: titles and seasons from Sonarr/Radarr without a poster that come out within the next days (60 by default, setting under Libraries) or came out in the last 14 days. Three cards side by side (two on a tablet, one on a phone), a dimmed TMDb preview with “Preview” label and a soft shimmer so it is clear the poster is not set, the release dates with the Radarr symbols, the usual icon bar (upload, search online, build, “⋯”) and links to ThePosterDB and MediUX. It moves on by itself every 6 seconds and stops while you point at it, touch it or when windows are open. A series in Plex with a coming season is shown by that season (“Build” opens the series builder with it selected)
+
+**Changed**
+- The statistic block (ring, four numbers, coverage graph) is gone. Scan progress, errors and warnings appear in a slim line above the list only when there is something to say; the source choice sits next to the search; “Last scanned” is in the footer (and the tooltip of the scan button)
+
 ## 0.10.2 – 2026-11-27
 
 **New**

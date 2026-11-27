@@ -30,7 +30,9 @@ Die Oberfläche gibt es auf Englisch und Deutsch (Sprachumschalter in der Kopfze
 ### Lücken finden
 p5assets führt Plex, Sonarr und Radarr zusammen (über TMDb-, TVDB- und IMDb-IDs). Die Reiter zeigen sofort, was zu tun ist:
 **In Plex, Poster fehlt** (die Startansicht: alles, was in Plex ohne Bild erscheint), **Coming Soon**, **Alle**, **Alle fehlenden** (Titel, die noch nicht erschienen sind, zeigen ihr Datum unter dem Poster, z. B. „ab 14.03.2027“, und lassen sich ausblenden oder nach Erscheinungsdatum sortieren; auch Titel, die nur Sonarr oder Radarr kennen und die noch nicht in Plex sind; sie tragen das Etikett „Noch nicht in Plex“) und **Schwache Poster**.
-Dazu kommen eine Quellenauswahl, eine Schnellsuche (rechts neben den Reitern; sie durchsucht immer alle Titel der Welt), eine A–Z-Leiste und eine Abdeckungsanzeige mit kleinem Verlauf pro Scan.
+Dazu kommen eine Quellenauswahl und eine Schnellsuche (rechts neben den Reitern; sie durchsucht immer alle Titel der Welt) und eine A–Z-Leiste. Scan-Fortschritt, Fehler und Warnungen erscheinen in einer schmalen Zeile über der Liste, nur wenn es etwas zu melden gibt.
+
+**Bald erscheinend:** Über der Liste zeigt eine Leiste Titel und Staffeln, die Sonarr/Radarr kennen, die noch nicht in Plex sind (oder eine kommende Staffel haben) und in den nächsten Tagen erscheinen (standardmäßig 60, einstellbar) oder gerade erschienen sind und noch kein Poster haben. Auf dem Desktop drei nebeneinander, auf dem Tablet zwei, auf dem Handy eine; sie wandert von selbst weiter und hält an, solange du darauf zeigst. Jede Karte zeigt eine abgedunkelte TMDb-Vorschau (klar „noch nicht gesetzt“), die Termine mit den Radarr-Symbolen und die bekannte Leiste zum Hochladen, Suchen, Bauen oder zum Öffnen von ThePosterDB und MediUX: So bereitest du Poster vor, bevor der Titel da ist.
 Große Bibliotheken sind kein Problem: Bei über 6000 Titeln antworten die Listen in rund 30 ms, und Skripte, Stile und Listen werden komprimiert und vom Browser zwischengespeichert.
 
 ### Ersetzen per Drag & Drop

@@ -1071,5 +1071,20 @@
 "{0} ab {1}": "{0} from {1}",
 "Staffel {0}": "Season {0}",
 "Staffeltermine bei Serien": "Season dates for series",
-"Kommende Staffeln zeigen ihr Datum in der Serien-Ansicht, im Builder, im Vergleich und in der Vorschau; Serien in Plex mit einer kommenden Staffel zeigen sie unter dem Poster. Die Logs nennen, bei wie vielen Titeln Sonarr und Radarr Termine geliefert haben.": "Seasons still to come show their date in the series view, the builder, the comparison and the preview; series in Plex with a coming season show it under the poster. The logs say for how many titles Sonarr and Radarr delivered dates."
+"Kommende Staffeln zeigen ihr Datum in der Serien-Ansicht, im Builder, im Vergleich und in der Vorschau; Serien in Plex mit einer kommenden Staffel zeigen sie unter dem Poster. Die Logs nennen, bei wie vielen Titeln Sonarr und Radarr Termine geliefert haben.": "Seasons still to come show their date in the series view, the builder, the comparison and the preview; series in Plex with a coming season show it under the poster. The logs say for how many titles Sonarr and Radarr delivered dates.",
+"Poster vorbereiten, solange der Titel noch nicht in Plex ist": "Prepare posters while the title is not in Plex yet",
+"Vorschau von TMDb: das Poster ist noch nicht gesetzt": "Preview from TMDb: the poster is not set yet",
+"Zuletzt gescannt: {0}": "Last scanned: {0}",
+"in {0} Tag": "in {0} day",
+"in {0} Tagen": "in {0} days",
+"seit {0} Tag erschienen": "released {0} day ago",
+"seit {0} Tagen erschienen": "released {0} days ago",
+"{0} Titel": "{0} titles",
+"Ein Titel": "One title",
+"heute": "today",
+"Bald erscheinend": "Coming soon",
+"„Bald erscheinend“ über der Liste zeigen": "Show “Coming soon” above the list",
+"Titel aus Sonarr/Radarr, die bald erscheinen und noch kein Poster haben, mit Vorschau und Terminen": "Titles from Sonarr/Radarr that come out soon and have no poster yet, with a preview and dates",
+"Wie viele Tage im Voraus": "How many days ahead",
+"Über der Liste zeigt eine Leiste Titel und Staffeln, die bald erscheinen und noch kein Poster haben, mit Vorschau, Terminen und den bekannten Knöpfen, damit du Poster vorbereiten kannst. Der Statistikblock ist dafür entfallen.": "Above the list a strip shows titles and seasons that come out soon and have no poster yet, with a preview, dates and the usual buttons, so you can prepare posters. The statistic block is gone for it."
 }

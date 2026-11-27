@@ -124,6 +124,19 @@ async def tmdb_collection_id(apis: dict, movies: list[dict]) -> str | None:
     return None
 
 
+async def tmdb_preview(key: str, kind: str, ids: dict, title: str, year: int | None, season: int | None) -> str | None:
+    """A small poster of TMDb for a title (or season) that has no poster of its own yet: only a preview to see what it will look like."""
+    tid = await tmdb_find_id(key, ids, kind, title, year)
+    if not tid:
+        return None
+    path = None
+    if kind != "movie" and season is not None:
+        path = (await _tmdb_images(key, f"/tv/{tid}/season/{season}")).get("poster_path")
+    if not path:
+        path = (await _tmdb_images(key, f"/{'movie' if kind == 'movie' else 'tv'}/{tid}")).get("poster_path")
+    return f"{TMDB_IMG}w185{path}" if path else None
+
+
 async def search_collection(apis: dict, movies: list[dict], order: list[str] | None = None) -> dict:
     """Posters of a Plex collection from TMDb (same shape as ``search``); movies = [{ids, title, year}] of its films, the first one TMDb knows is used."""
     order = order or langs.DEFAULT_ORDER

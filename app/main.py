@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 import hashlib
 import json
 import os
@@ -277,6 +278,11 @@ async def set_config(body: ConfigPatch):
         for w in worlds:
             w["name"] = (w.get("name") or "").strip()
             w["assets_path"] = (w.get("assets_path") or "").strip()
+    if isinstance(patch.get("upcoming"), dict) and "days" in patch["upcoming"]:
+        try:
+            patch["upcoming"]["days"] = min(max(int(patch["upcoming"]["days"]), 1), 365)
+        except (TypeError, ValueError):
+            patch["upcoming"].pop("days")
     log.info("Settings changed: %s", ", ".join(sorted(patch)) or "-")
     return config.public(config.update(patch))
 
@@ -1766,6 +1772,75 @@ class _RevalidatingStatic(StaticFiles):
 
 
 app.mount("/static", _RevalidatingStatic(directory=STATIC), name="static")
+
+
+# ------------------------------------------------------ Bald erscheinend ---
+
+RECENT_DAYS = 14             # released a short while ago and still without poster: stays in the strip
+
+
+@app.get("/api/upcoming")
+async def upcoming(world: str = "", days: int = 0, limit: int = 12):
+    """Titles (and seasons) of Sonarr / Radarr that come out soon or just did and have no poster yet: the strip above the list."""
+    cfg = config.get()["upcoming"]
+    if not cfg.get("enabled", True):
+        return {"enabled": False, "entries": []}
+    wid = _world(world)["id"]
+    window = min(max(days or int(cfg.get("days") or 60), 1), 365)
+    today = datetime.datetime.now().astimezone().date()
+    entries = []
+
+    def span(iso):
+        try:
+            return (datetime.date.fromisoformat(iso) - today).days
+        except (TypeError, ValueError):
+            return None
+    for it in scanner.STATE["items"]:
+        if it["world"] != wid or not it.get("release"):
+            continue
+        rel = it["release"]
+        if it["type"] == "movie" or not it.get("in_plex"):
+            d = span(rel.get("from"))
+            if not it.get("in_plex") and d is not None and -RECENT_DAYS <= d <= window and not it["slots"].get("poster", {}).get("exists"):
+                entries.append((d, it, "poster", rel.get("from")))
+        for n, iso in (rel.get("seasons") or {}).items() if it.get("in_plex") else ():      # a series that is not in Plex at all is one entry (its poster)
+            d, slot = span(iso), kometa.slot_key(int(n))
+            if d is not None and -RECENT_DAYS <= d <= window and slot in it["slots"] and not it["slots"][slot].get("exists"):
+                entries.append((d, it, slot, iso))
+    entries.sort(key=lambda e: (e[0], e[1]["title"].casefold()))
+    seen, out = set(), []
+    for d, it, slot, iso in entries:
+        if (it["id"], slot) in seen:
+            continue
+        seen.add((it["id"], slot))
+        out.append({"in_days": d, "date": iso, "slot": slot, "item": _public_item(it, True)})
+        if len(out) >= min(max(limit, 1), 24):
+            break
+    return {"enabled": True, "days": window, "entries": out}
+
+
+_PREVIEWS: dict = {}
+
+
+@app.get("/api/upcoming-poster")
+async def upcoming_poster(item_id: str, slot: str = "poster"):
+    """The TMDb preview picture for a strip entry (kept for a day); url null when there is none."""
+    it = _item(item_id)
+    key = config.get()["apis"]["tmdb"]
+    hit = _PREVIEWS.get((item_id, slot))
+    if hit and time.monotonic() - hit[0] < 86400:
+        return {"url": hit[1]}
+    url = None
+    if key:
+        season = None if slot == "poster" else kometa.parse_slot_key(slot)
+        try:
+            url = await providers.tmdb_preview(key, it["type"], it.get("ids") or {}, it["title"], it["year"], season)
+        except Exception as e:  # noqa: BLE001
+            log.warning("TMDb preview of %s: %s", it["title"], short(e))
+    if len(_PREVIEWS) > 300:
+        _PREVIEWS.clear()
+    _PREVIEWS[(item_id, slot)] = (time.monotonic(), url)
+    return {"url": url}
 
 
 # ------------------------------------------------------- Später suchen ---
