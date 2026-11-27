@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.10.0 – 2026-11-27
+
+The poster builder release: everything of 0.9.x in one version, checked once more and made faster.
+
+**New (since 0.9.4, details in the entries below)**
+- Collections: tab with fan tiles, filter “Missing”, A–Z bar, collection poster (upload, drop, online search, Plex, build), collection builder
+- History with restore, “Search later” for textless posters, Plex posters as a source, presets export / import / default look, sets (ZIP, folders) in the builder, compare built / current
+- One slim icon bar on every poster, clear drop targets, layouts that follow iPad and phone screens
+- “Upload to Plex” is gone: p5assets writes the Kometa assets, Kometa applies them
+
+**Faster and smoother**
+- The lists no longer read the marks file for every title (4000 titles: 70 ms → 15 ms per list request), the statistic block and the collection overview are worked out once per change of the data, the collections folder is read once for all collections
+- Scripts, styles and the big lists are compressed (the files of the page start: 472 KB → 143 KB), versioned files are cached for a year, `i18n.js` is checked with an ETag
+- Pictures decode off the main thread; touch devices react at once (no double-tap delay, no scroll chaining out of windows), shorter Matrix transitions
+
+**Checked**
+- A review of everything since 0.9.4 found and fixed: “Search later” could be switched on without a working search (every textless poster would later count as new), pictures were compressed pointlessly, a race in the marks list, imported collection posters missing in the history, look-alike collection folders, failing marks holding up others
+
 ## 0.9.17 – 2026-11-26
 
 **Changed**

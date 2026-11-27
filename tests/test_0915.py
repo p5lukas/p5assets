@@ -163,3 +163,17 @@ def test_folder_with_look_alike_names_is_not_guessed(tmp_path):
     assert collection_assets.folder_of(tmp_path, "Fast & Furious") == tmp_path / "Fast Furious"            # one clear match
     (tmp_path / "Fast-Furious").mkdir()
     assert collection_assets.folder_of(tmp_path, "Fast & Furious") is None                                 # two look alike: no guess
+
+
+def test_states_for_many_collections_equal_the_single_lookups(tmp_path):
+    from app import collection_assets
+    root = tmp_path / "A" / "Collections"
+    (root / "Vaiana Filmreihe").mkdir(parents=True)
+    (root / "28 DaysWeeks Later Filmreihe").mkdir()
+    (root / "Vaiana Filmreihe" / "poster.jpg").write_bytes(b"x")
+    world = {"id": "w", "assets_path": str(tmp_path / "A"), "collections_dir": ""}
+    names = ["Vaiana Filmreihe", "28 Days/Weeks Later Filmreihe", "Not There"]
+    many = collection_assets.states(world, names)
+    assert many == {n: collection_assets.state(world, n) for n in names}
+    assert many["Vaiana Filmreihe"]["exists"] and many["28 Days/Weeks Later Filmreihe"]["folder"] and not many["Not There"]["folder"]
+    assert collection_assets.states({"id": "w", "assets_path": str(tmp_path / "none"), "collections_dir": ""}, names) == dict.fromkeys(names)

@@ -21,6 +21,8 @@ Ein schlanker Docker-Container im Matrix-Look. Er vergleicht deine Bibliotheken 
 
 </div>
 
+> **Neu in 0.10:** ein **Verlauf** mit Wiederherstellen, **Später suchen** für Textless-Poster, **Plex-Poster** als Quelle, ganze **Sets (ZIP, Ordner) im Poster-Builder**, eine schmale **Symbolleiste** auf jedem Poster, klare **Ablege-Ziele** und ein schnellerer, leichterer Start (komprimierte Seiten und Listen, zwischengespeicherte Statistik).
+
 ## Funktionen
 
 Die Oberfläche gibt es auf Englisch und Deutsch (Sprachumschalter in der Kopfzeile, Standard ist Englisch).
@@ -29,10 +31,10 @@ Die Oberfläche gibt es auf Englisch und Deutsch (Sprachumschalter in der Kopfze
 p5assets führt Plex, Sonarr und Radarr zusammen (über TMDb-, TVDB- und IMDb-IDs). Die Reiter zeigen sofort, was zu tun ist:
 **In Plex, Poster fehlt** (die Startansicht: alles, was in Plex ohne Bild erscheint), **Coming Soon**, **Alle**, **Alle fehlenden** (auch Titel, die nur Sonarr oder Radarr kennen und die noch nicht in Plex sind; sie tragen das Etikett „Noch nicht in Plex“) und **Schwache Poster**.
 Dazu kommen eine Quellenauswahl, eine Schnellsuche (rechts neben den Reitern; sie durchsucht immer alle Titel der Welt), eine A–Z-Leiste und eine Abdeckungsanzeige mit kleinem Verlauf pro Scan.
-Große Bibliotheken sind kein Problem: Bei über 6000 Titeln antworten die Listen in rund 30 ms.
+Große Bibliotheken sind kein Problem: Bei über 6000 Titeln antworten die Listen in rund 30 ms, und Skripte, Stile und Listen werden komprimiert und vom Browser zwischengespeichert.
 
 ### Ersetzen per Drag & Drop
-Zieh ein Bild auf eine Kachel oder mehrere Dateien, ganze Ordner oder ZIPs irgendwo ins Fenster – oder wähl sie über „Poster hochladen:“ in der Kopfzeile aus (Datei-/ZIP-Symbol oder Ordner-Symbol; auf iPhone und iPad gibt es eine einzige Schaltfläche, Ordner lädst du dort als ZIP hoch). p5assets erkennt Titel,
+Zieh ein Bild auf eine Kachel oder mehrere Dateien, ganze Ordner oder ZIPs irgendwo ins Fenster (beim Ziehen zeigt jede Kachel, die das Bild annimmt, einen gestrichelten Rahmen, und die unter dem Zeiger nennt, was passiert; auch ein Bild von einer TMDb-, TVDB- oder fanart.tv-Seite funktioniert) – oder wähl sie über „Poster hochladen:“ in der Kopfzeile aus (Datei-/ZIP-Symbol oder Ordner-Symbol; auf iPhone und iPad gibt es eine einzige Schaltfläche, Ordner lädst du dort als ZIP hoch). p5assets erkennt Titel,
 Jahr und Staffel an den Datei- und Ordnernamen, zeigt dir die Zuordnung zur Kontrolle und benennt alles Kometa-konform
 (`<Medienordner>/poster.jpg`, `Season01.jpg` …). Neue Ordner landen dort, wo deine anderen Titel schon liegen.
 
@@ -52,14 +54,16 @@ und welche vorhandenen Bilder ersetzt würden.
 ### Filme und Serien
 <table>
 <tr>
-<td width="50%"><img src="docs/images/movie-actions.png" alt="Film-Aktionen"><br><sub>Filme direkt am Poster bearbeiten (am Touchscreen per Tippen)</sub></td>
+<td width="50%"><img src="docs/images/movie-actions.png" alt="Film-Aktionen"><br><sub>Filme direkt am Poster bearbeiten: drei Symbole (ersetzen, suchen, bauen) und „⋯“ für den Rest; am Touchscreen per Tippen</sub></td>
 <td width="50%"><img src="docs/images/detail.png" alt="Serien-Detailansicht"><br><sub>Serien: Poster und Staffeln, <b>Set hochladen</b>, ThePosterDB-Link, ZIP-Download</sub></td>
 </tr>
 </table>
 
 - Kacheln für das Poster und **Season00 – Season50**, auch für Staffeln, die es noch nicht gibt
+- **Eine schmale Leiste auf jedem Poster** (Hover, am Touchscreen Tippen): ersetzen oder hochladen, online suchen, bauen, und „⋯“ für Herunterladen, Auf alle, Löschen, Später suchen und mehr. Ein Klick aufs Poster öffnet die Vorschau. Die Leiste liegt immer ganz im Poster, vom Handy bis zum iPad Pro.
+- **Plex-Poster übernehmen:** Der Tab „Plex“ in der Online-Suche listet alle Poster, die Plex für Titel, Staffel oder Collection kennt; leere Kacheln bieten „Plex-Poster übernehmen“. Zu Plex wird nichts zurückgeschickt.
 - Poster per Drag & Drop auf eine andere Kachel **kopieren** oder mit **„Auf alle …“** auf mehrere Kacheln übertragen
-- **Plex-Collections:** Der Reiter **Collections** zeigt jede Collection als Fächer ihrer Poster (fehlende als gestrichelte Karten). Filme zeigen in der Vorschau ihre Collection; ein Klick öffnet deren Detailansicht mit allen Postern (ersetzen, hochladen, Set-Upload). Beim Import gruppiert p5assets die Filme nach Plex-Collection und sagt dir, welche Filme der Collection danach noch kein Poster haben. Die Online-Suche nach einem Collection-Poster durchsucht auch die Poster der Filme und hat wie bei Filmen die Tabs ThePosterDB und MediUX. Jede Collection-Kachel zeigt vorn ihr eigenes Poster: hochladen oder ein Bild direkt auf die Kachel ziehen (es landet als Kometa-Asset im Collection-Ordner); im Import-Dialog lassen sich Dateien einer Collection zuordnen, Dateien wie „… Collection“ werden ihr per Namen zugeordnet, nie einem einzelnen Film. Große Sammel-Collections, die keine Filmreihen sind, kannst du ausblenden (unter Einstellungen → Bibliotheken siehst du sie und holst sie zurück)
+- **Plex-Collections:** Der Reiter **Collections** zeigt jede Collection als Fächer ihrer Poster (fehlende als gestrichelte Karten). Filme zeigen in der Vorschau ihre Collection; ein Klick öffnet deren Detailansicht mit allen Postern (ersetzen, hochladen, Set-Upload). Beim Import gruppiert p5assets die Filme nach Plex-Collection und sagt dir, welche Filme der Collection danach noch kein Poster haben. Die Online-Suche nach einem Collection-Poster durchsucht auch die Poster der Filme und hat wie bei Filmen die Tabs ThePosterDB und MediUX. Jede Collection-Kachel zeigt vorn ihr eigenes Poster: hochladen oder ein Bild direkt auf die Kachel ziehen (es landet als Kometa-Asset im Collection-Ordner); im Import-Dialog lassen sich Dateien einer Collection zuordnen, Dateien wie „… Collection“ werden ihr per Namen zugeordnet, nie einem einzelnen Film. Der Reiter lässt sich filtern („Fehlend“: Collection-Poster und/oder Filmposter) und hat eine A–Z-Leiste. Große Sammel-Collections, die keine Filmreihen sind, kannst du ausblenden (unter Einstellungen → Bibliotheken siehst du sie und holst sie zurück)
 
 <table>
 <tr>
@@ -76,8 +80,9 @@ Kein passendes Poster? Dann baust du eins direkt in p5assets. Es wird wie jedes 
 - **Hintergrund:** online suchen (Poster, Backdrops, Episodenbilder, Staffelbilder) oder eigene Datei. Bildausschnitt, Wegzoomen mit gefülltem freiem Bereich, optionaler Farbfilter und Überblendung von unten.
 - **Titel:** Clear-Logo von TMDb, fanart.tv oder TheTVDB (oder eigenes PNG/WebP) oder der Titel als Text. Größe, Höhe, Farbe, acht mitgelieferte Schriften.
 - **Serien:** ein Look für alle Poster, mit Staffelzeile („Season One“, „Specials“) in einer Farbe aus dem Bild. Einstellungen gelten für alle Poster, mit Ausnahmen pro Poster.
-- **Prüfen:** alle Poster nebeneinander vergleichen, jedes groß ansehen, zwischen Entwurf und vorhandenem Poster umschalten.
-- **Gemerkt:** der Look jeder Serie bleibt erhalten. Später tauschst du zum Beispiel nur das Logo für alle Poster oder baust eine neue Staffel passend nach. Looks lassen sich auch als Vorlagen speichern.
+- **Prüfen:** alle Poster nebeneinander vergleichen (gebaut, aktuell oder beides), jedes groß ansehen, zwischen Entwurf und vorhandenem Poster umschalten.
+- **Sets:** „Set laden“ (oder eine ZIP, einen Ordner oder mehrere Bilder auf den Builder ziehen) ordnet die Dateien anhand der Namen den Kacheln zu; sie werden die Hintergründe, gespeichert wird erst mit „Poster speichern“. Serien und Collections.
+- **Gemerkt:** der Look jeder Serie bleibt erhalten. Später tauschst du zum Beispiel nur das Logo für alle Poster oder baust eine neue Staffel passend nach. Looks lassen sich auch als Vorlagen speichern, in eine Datei exportieren, wieder importieren, und eine Vorlage kann der Standard für neue Looks sein.
 - **Wo:** Filme: **Bauen** im Hover-Menü. Serien: **Bauen** in der Detailansicht. Collections: **Bauen** baut alle Filme einer Collection in einem Look und das Poster der Collection selbst, gespeichert als Kometa-Asset (`<Collection-Ordner>/<Name der Collection>/poster.jpg`). Oder **Selbst bauen** in der Online-Suche.
 
 <img src="docs/images/poster-builder.png" alt="Poster-Builder für eine Serie" width="640">
@@ -117,7 +122,10 @@ die Bildgrößen liest p5assets im Hintergrund.
 <img src="docs/images/weak.png" alt="Schwache Poster" width="560">
 
 ### Verlauf und „Später suchen“
-Der Reiter **Verlauf** neben dem Papierkorb listet jede Änderung eines Posters mit kleinem Vorher/Nachher-Bild, der Art der Änderung und „Wiederherstellen“ (solange der Papierkorb die alte Version hat).
+Der Reiter **Verlauf** neben dem Papierkorb listet jede Änderung eines Posters mit kleinem Vorher/Nachher-Bild, der Art der Änderung (Upload, Builder, Online-Wahl, Plex, Import …) und „Wiederherstellen“ (solange der Papierkorb die alte Version hat).
+
+<img src="docs/images/history.png" alt="Verlauf mit Vorher- und Nachher-Bildern" width="560">
+
 **Später suchen** merkt eine Kachel, für die du ein besseres Poster erwartest (z. B. ein Textless-Poster): p5assets schaut einmal am Tag nach, zeigt „Neu“ und benachrichtigt dich. Nichts wird von selbst übernommen.
 
 ### Papierkorb & Aufräumen
@@ -142,7 +150,7 @@ Ausgangsstand fest. Du richtest die Benachrichtigungen bei der Einrichtung ein (
 <img src="docs/images/settings-notifications.png" alt="Benachrichtigungen" width="560">
 
 ### Logs, Neuigkeiten, Mobil
-- **Log-Seite** (Symbol `>_`): Live-Log mit Suche, Level-Filter und Download. Bei neuen Warnungen oder Fehlern leuchtet das Symbol auf und zeigt die Anzahl. Tokens und API-Keys landen nie im Log.
+- **Log-Seite** (Symbol `>_`): Live-Log mit Suche, Level-Filter und Download; die Gruppe „Probleme“ fasst wiederholte Warnungen und Fehler zusammen. Bei neuen Warnungen oder Fehlern leuchtet das Symbol auf und zeigt die Anzahl. Tokens und API-Keys landen nie im Log.
 - **Neu in diesem Update**: Nach einem Update zeigt dir p5assets, was neu ist, und bietet an, neue Funktionen gleich einzurichten (später jederzeit über „Neuigkeiten“ in der Fußzeile).
 - **Als App** auf iPhone und iPad (Teilen → Zum Home-Bildschirm), mit kompakter Kopfleiste und großen Tippflächen; die Einstellungen sind dort eine gruppierte Liste (am Desktop eine Seitenleiste).
 - **Tastaturkürzel:** `/` springt ins Suchfeld, `Esc` leert es, in der Poster-Vorschau blätterst du mit `←`/`→` durch die Filme. Ein Klick aufs Logo führt immer zur Startseite.
@@ -209,7 +217,9 @@ Updates: Container in Unraid per *Force Update* aktualisieren.
 | `cache/thumbs-v3` | Vorschaubilder für schnelle Listen | höchstens 600 MB, wird automatisch bereinigt |
 | `trash` | Papierkorb mit Rückgängig-Funktion | höchstens 2 GB, 30 Tage |
 | `builder` | Poster-Builder: Look jeder Serie, Bilder vom eigenen Rechner | einige MB pro Serie, 30 Tage nach Wegfall des Titels aufgeräumt |
-| `styles.json` | Vorlagen des Poster-Builders | klein |
+| `styles.json` | Vorlagen des Poster-Builders und Standard-Look | klein |
+| `changes.jsonl`, `changes` | Verlauf der Poster-Änderungen (die neuesten 5000) mit kleinen Bildern | einige MB |
+| `watch.json` | mit „Später suchen“ markierte Titel | klein |
 | `cache/dims.json`, `history.json`, `logs` | Bildgrößen, Abdeckungsverlauf, Log | klein |
 
 ## Anmeldung & Passwort zurücksetzen

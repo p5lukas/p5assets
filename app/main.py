@@ -511,6 +511,21 @@ def _is_weak(it: dict, min_w: int, ratio: bool) -> bool:
 
 
 _STATS_CACHE: dict = {}
+_OVERVIEW_CACHE: dict = {}
+
+
+def _overview_cached(wid: str, q: str = "") -> list[dict]:
+    """collection_overview() of a world, worked out once per change of the data (or after 3 s); every call gets its own list of shallow copies."""
+    all_items = scanner.STATE["items"]
+    key = (wid, id(all_items), len(all_items), scanner.STATE.get("rev", 0), tuple(sorted(_hidden_collections())))
+    hit = _OVERVIEW_CACHE.get(key)
+    if not hit or time.monotonic() - hit[0] >= 3:
+        groups = collection_overview([i for i in all_items if i["world"] == wid and i["type"] == "movie"], "", _hidden_collections())
+        if len(_OVERVIEW_CACHE) > 12:
+            _OVERVIEW_CACHE.clear()
+        hit = _OVERVIEW_CACHE[key] = (time.monotonic(), groups)
+    nq = kometa.normalize(q) if q else ""
+    return [dict(g) for g in hit[1] if not nq or nq in kometa.normalize(g["title"])]
 
 
 def _cached_stats(items: list[dict], *scope) -> dict:
@@ -641,9 +656,10 @@ async def collection_detail(id: str):
 async def collections(world: str = "", q: str = ""):
     wid = _world(world)["id"]
     world = _world(world)
-    groups = collection_overview([i for i in scanner.STATE["items"] if i["world"] == wid and i["type"] == "movie"], q, _hidden_collections())
+    groups = _overview_cached(wid, q)
+    posters = collection_assets.states(world, [g["title"] for g in groups])      # None = no collections folder for this world
     for g in groups:
-        g["poster"] = collection_assets.state(world, g["title"])      # None = no collections folder for this world
+        g["poster"] = posters[g["title"]]
     return {"collections": groups}
 
 

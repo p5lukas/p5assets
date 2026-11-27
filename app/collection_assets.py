@@ -47,22 +47,33 @@ def _norm(name: str) -> str:
     return re.sub(r"[\W_]+", "", name.casefold())
 
 
-def folder_of(root: Path, name: str) -> Path | None:
-    """The folder of a collection: the name like in Plex (case does not matter; characters Kometa leaves out of folder names, spaces and punctuation are ignored)."""
-    exact, loose = {name.casefold(), safe_name(name).casefold()}, _norm(name)
-    fuzzy: list[Path] = []
+def _folders(root: Path) -> tuple[dict[str, Path], dict[str, list[Path]]]:
+    """The folders of the collections folder, once: by lower-case name, and by the name without spaces and punctuation."""
+    exact: dict[str, Path] = {}
+    loose: dict[str, list[Path]] = {}
     try:
         with os.scandir(root) as it:
             for e in it:
-                if not e.is_dir():
-                    continue
-                if e.name.casefold() in exact:
-                    return Path(e.path)
-                if loose and _norm(e.name) == loose:
-                    fuzzy.append(Path(e.path))
+                if e.is_dir():
+                    exact.setdefault(e.name.casefold(), Path(e.path))
+                    loose.setdefault(_norm(e.name), []).append(Path(e.path))
     except OSError:
         pass
-    return fuzzy[0] if len(fuzzy) == 1 else None          # only a clear match: two folders that look alike are not guessed between
+    return exact, loose
+
+
+def _pick(folders: tuple[dict[str, Path], dict[str, list[Path]]], name: str) -> Path | None:
+    exact, loose = folders
+    for key in (name.casefold(), safe_name(name).casefold()):
+        if key in exact:
+            return exact[key]
+    near = loose.get(_norm(name)) if _norm(name) else None
+    return near[0] if near and len(near) == 1 else None          # only a clear match: two folders that look alike are not guessed between
+
+
+def folder_of(root: Path, name: str) -> Path | None:
+    """The folder of a collection: the name like in Plex (case does not matter; characters Kometa leaves out of folder names, spaces and punctuation are ignored)."""
+    return _pick(_folders(root), name)
 
 
 def poster_of(folder: Path) -> Path | None:
@@ -75,12 +86,24 @@ def poster_of(folder: Path) -> Path | None:
     return None
 
 
+def states(world: dict, names: list[str]) -> dict[str, dict | None]:
+    """state() for many collections at once: the collections folder is read once, not once per collection."""
+    root = root_for(world)
+    if root is None:
+        return dict.fromkeys(names)
+    folders = _folders(root)
+    return {n: _state_of(_pick(folders, n), n) for n in names}
+
+
 def state(world: dict, name: str) -> dict | None:
     """None = this world has no collections folder; else whether the folder and the poster exist ("v" = file date for the picture's address)."""
     root = root_for(world)
     if root is None:
         return None
-    folder = folder_of(root, name)
+    return _state_of(folder_of(root, name), name)
+
+
+def _state_of(folder: Path | None, name: str) -> dict:
     poster = poster_of(folder) if folder else None
     st = poster.stat() if poster else None
     return {"folder": bool(folder), "exists": bool(poster), "v": str(st.st_mtime_ns) if st else 0, "mtime": int(st.st_mtime) if st else 0, "dir": folder.name if folder else name,

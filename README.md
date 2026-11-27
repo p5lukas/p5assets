@@ -21,6 +21,8 @@ A small Docker container with a Matrix look. It compares your libraries with you
 
 </div>
 
+> **New in 0.10:** a **history** with restore, **Search later** for textless posters, **Plex posters** as a source, whole **sets (ZIP, folders) in the poster builder**, a slim **icon bar** on every poster, clear **drop targets**, and a faster, lighter start (compressed pages and lists, cached statistics).
+
 ## Features
 
 The interface is available in English and German. English is the default; use the `$ EN/DE` switch in the header to change it.
@@ -35,10 +37,10 @@ p5assets matches Plex, Sonarr and Radarr titles by their TMDb, TVDB and IMDb IDs
 - “Weak posters”
 
 You also get a source filter, a search next to the tabs (it always searches all titles in the current world), an A–Z bar and a coverage indicator with a small history graph (one point per scan).
-Large libraries are no problem: with more than 6000 titles, the lists respond in about 30 ms.
+Large libraries are no problem: with more than 6000 titles, the lists respond in about 30 ms, and scripts, styles and lists are compressed and cached by the browser.
 
 ### Replace by drag & drop
-Drop an image onto a tile, or drop several files, whole folders or ZIPs anywhere in the window. You can also use “Upload posters:” in the header (file/ZIP icon or folder icon; on iPhone and iPad there is a single button, and folders have to be zipped first).
+Drop an image onto a tile, or drop several files, whole folders or ZIPs anywhere in the window. While you drag, every tile that takes the file shows a dashed frame, and the one under the pointer says what happens (“Release: replace poster”). A picture dragged out of a TMDb, TVDB or fanart.tv page works too. You can also use “Upload posters:” in the header (file/ZIP icon or folder icon; on iPhone and iPad there is a single button, and folders have to be zipped first).
 p5assets reads the title, year and season from file and folder names, shows you the matches to confirm, and renames everything the way Kometa expects (`<media folder>/poster.jpg`, `Season01.jpg` …). New folders are created next to your existing titles.
 
 **Set check on import:** When an upload contains a series set (or several series in one ZIP, grouped by series), p5assets checks for each series how many seasons Plex and Sonarr know, whether the set covers all of them, whether the series poster and specials are included, and which existing images would be replaced.
@@ -55,14 +57,16 @@ p5assets reads the title, year and season from file and folder names, shows you 
 ### Movies and series
 <table>
 <tr>
-<td width="50%"><img src="docs/images/movie-actions.png" alt="Actions on a movie poster"><br><sub>Edit movies directly on the poster (tap it on a touchscreen)</sub></td>
+<td width="50%"><img src="docs/images/movie-actions.png" alt="Actions on a movie poster"><br><sub>Edit movies directly on the poster: three icons (replace, search, build) and “⋯” for the rest; tap it on a touchscreen</sub></td>
 <td width="50%"><img src="docs/images/detail.png" alt="Series detail view"><br><sub>Series: poster and seasons, “Upload set”, ThePosterDB link, ZIP download</sub></td>
 </tr>
 </table>
 
 - Tiles for the poster and **Season00 to Season50**, including seasons that do not exist yet.
+- **One slim bar on every poster** (hover, or tap on a touchscreen): replace or upload, search online, build, and “⋯” for preview download, apply to all, delete, search later and more. A click on the poster opens the preview. The bar always lies inside the poster, from phones to iPad Pro.
+- **Take the Plex poster:** the tab “Plex” in the online search lists every poster Plex holds for a title, season or collection; empty tiles get “Take Plex poster”. Nothing is sent back to Plex.
 - **Copy** a poster to another tile by dragging it there, or to several tiles at once with “Apply to all …”.
-- **Plex collections:** The tab **Collections** shows every collection as a fan of its posters (missing ones as dashed cards). The movie preview lists the movie's collections. One click opens the collection's detail view with all its posters (replace, upload, upload a set). On import, movies are grouped by Plex collection, and p5assets tells you which movies in the collection will still have no poster. The online search for a collection poster also covers the posters of its films and has the ThePosterDB and MediUX tabs like for films. Each collection tile shows its own poster in front: upload it or drop a picture right onto the tile (it lands as a Kometa asset in the collections folder); in the import review files can be assigned to a collection, and files named “… Collection” are matched to it by name, never to a single movie. Large catch-all collections that are not movie series can be hidden; “Settings → Libraries” lists them and lets you show them again.
+- **Plex collections:** The tab **Collections** shows every collection as a fan of its posters (missing ones as dashed cards). The movie preview lists the movie's collections. One click opens the collection's detail view with all its posters (replace, upload, upload a set). On import, movies are grouped by Plex collection, and p5assets tells you which movies in the collection will still have no poster. The online search for a collection poster also covers the posters of its films and has the ThePosterDB and MediUX tabs like for films. Each collection tile shows its own poster in front: upload it or drop a picture right onto the tile (it lands as a Kometa asset in the collections folder); in the import review files can be assigned to a collection, and files named “… Collection” are matched to it by name, never to a single movie. The tab can be filtered (“Missing”: collection poster and/or film posters) and has an A–Z bar. Large catch-all collections that are not movie series can be hidden; “Settings → Libraries” lists them and lets you show them again.
 
 <table>
 <tr>
@@ -79,8 +83,9 @@ No suitable poster? Build one right in p5assets. It is saved like any other post
 - **Background:** search online (posters, backdrops, episode pictures, season pictures) or use your own file. Crop and zoom out with a filled free area, optional colour filter and a fade from the bottom.
 - **Title:** a clear logo from TMDb, fanart.tv or TheTVDB (or your own PNG/WebP), or the title as text. Size, height, colour, eight bundled fonts.
 - **Series:** one look for all posters, with a season line (“Season One”, “Specials”) in a colour taken from the picture. Settings apply to all posters, with exceptions per poster.
-- **Check:** compare all posters side by side, view each one large, switch between draft and existing poster.
-- **Remembered:** the look of each series is kept, so later you can swap only the logo on all posters or add a season in the same style. Looks can also be saved as presets.
+- **Check:** compare all posters side by side (built, current or both), view each one large, switch between draft and existing poster.
+- **Sets:** “Load set” (or drop a ZIP, folder or several pictures on the builder) assigns the files to the tiles by their names; they become the backgrounds, and nothing is saved until you press save. Series and collections.
+- **Remembered:** the look of each series is kept, so later you can swap only the logo on all posters or add a season in the same style. Looks can also be saved as presets, exported to a file, imported again, and one preset can be the default for new looks.
 - **Where:** movies: “Build” in the hover menu. Series: “Build” in the detail view. Collections: “Build” builds all films of a collection in one look, and the poster of the collection itself, saved as a Kometa asset (`<collections folder>/<name of the collection>/poster.jpg`). Or “Build it myself” in the online search.
 
 <img src="docs/images/poster-builder.png" alt="Poster builder for a series: all posters in one look" width="640">
@@ -115,7 +120,10 @@ This tab finds images that are too small or not 2:3. You set the thresholds (min
 <img src="docs/images/weak.png" alt="Weak posters tab" width="560">
 
 ### History and “Search later”
-The tab **History** next to the trash lists every change of a poster with a small before/after picture, how it was made, and “Restore” (as long as the trash still has the old one).
+The tab **History** next to the trash lists every change of a poster with a small before/after picture, how it was made (upload, builder, online, Plex, import …), and “Restore” (as long as the trash still has the old one).
+
+<img src="docs/images/history.png" alt="History tab with before and after pictures" width="560">
+
 **Search later** marks a tile you wait for a better poster for (e.g. a textless one): p5assets looks once a day, shows “New” and notifies you. Nothing is taken over by itself.
 
 ### Trash and cleanup
@@ -137,7 +145,7 @@ The first scan only records the starting point. Set this up during onboarding (o
 <img src="docs/images/settings-notifications.png" alt="Notification settings" width="560">
 
 ### Logs, updates, mobile
-- **Logs** (`>_` icon): live log with search, level filter and download. When there are new warnings or errors, the icon lights up and shows how many. Tokens and API keys are never logged.
+- **Logs** (`>_` icon): live log with search, level filter and download; a group “Problems” sums up repeated warnings and errors. When there are new warnings or errors, the icon lights up and shows how many. Tokens and API keys are never logged.
 - **Updates:** After an update, a short “New in version …” notice lists the highlights. The full list, grouped by version, is under “What's new” in the footer, with buttons to set up new features right away.
 - **Home screen app** on iPhone/iPad (Share → Add to Home Screen) with a compact top bar and large tap targets. On mobile the settings are a grouped list; on desktop they have a sidebar.
 - **Keyboard shortcuts:** `/` jumps to the search field, `Esc` clears it, and `←`/`→` page through movies in the poster preview. Clicking the logo always takes you back to the start view.
@@ -201,7 +209,9 @@ Images are built by a GitHub Action (`.github/workflows/docker.yml`) on every pu
 | `cache/thumbs-v3` | thumbnails for fast lists | up to 600 MB, cleaned up automatically |
 | `trash` | trash for undo | up to 2 GB, 30 days |
 | `builder` | poster builder: look of each series, pictures from your computer | a few MB per series, cleaned up 30 days after a title is gone |
-| `styles.json` | poster builder presets | small |
+| `styles.json` | poster builder presets and the default look | small |
+| `changes.jsonl`, `changes` | history of poster changes (newest 5000) with small pictures | a few MB |
+| `watch.json` | titles marked “Search later” | small |
 | `cache/dims.json`, `history.json`, `logs` | image sizes, coverage history, logs | small |
 
 ## Login and password reset
